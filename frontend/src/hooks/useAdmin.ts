@@ -1,0 +1,209 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import type { Tab } from "@/types";
+import { supabase } from "@/lib/supabase";
+import { apiUrl } from "@/lib/constants";
+
+export function useAdmin(
+  session: User | null,
+  role: string,
+  tab: Tab,
+  toast: (msg: string, type?: "success" | "error" | "info") => void,
+  insertAudit: (accion: string, tabla?: string, detalle?: object) => Promise<void>
+) {
+  const [dbUsers, setDbUsers] = useState<{
+    id: string;
+    email: string;
+    nombre: string | null;
+    rol: string;
+    activo: boolean;
+  }[]>([]);
+  const [dbAudit, setDbAudit] = useState<{
+    id: string;
+    accion: string;
+    created_at: string;
+    ip?: string | null;
+    usuario_nombre?: string | null;
+    usuario_email?: string | null;
+  }[]>([]);
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserNombre, setNewUserNombre] = useState("");
+  const [newUserPwd, setNewUserPwd] = useState("");
+  const [newUserRol, setNewUserRol] = useState<"admin" | "director">("director");
+  const [newUserDistrito, setNewUserDistrito] = useState("");
+
+  const [uploadResult, setUploadResult] = useState("Sin archivo cargado.");
+  const [csvValidation, setCsvValidation] = useState<{
+    total_filas: number;
+    filas_validas: number;
+    errores: { fila: number; campo: string; error: string }[];
+    columnas_faltantes: string[];
+  } | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+
+  const [scheduleFreq, setScheduleFreq] = useState("semanal");
+  const [scheduleMsg, setScheduleMsg] = useState("");
+  const [nextUpdate, setNextUpdate] = useState<string | null>(null);
+
+  const [apiConnected, setApiConnected] = useState<boolean | null>(null);
+  const [modelMessage, setModelMessage] = useState("Conectando con el servicio del modelo...");
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function loadDbUsers() {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, email, nombre, rol, activo")
+      .order("created_at");
+    if (data) setDbUsers(data);
+  }
+
+  async function loadDbAudit() {
+    const { data } = await supabase
+      .from("audit_log")
+      .select("id, accion, created_at, ip, profiles(nombre, email)")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (data) {
+      setDbAudit(data.map((e: Record<string, unknown>) => {
+        const p = e.profiles as { nombre?: string; email?: string } | null;
+        return {
+          id:              e.id as string,
+          accion:          e.accion as string,
+          created_at:      e.created_at as string,
+          ip:              e.ip as string | null,
+          usuario_nombre:  p?.nombre ?? null,
+          usuario_email:   p?.email  ?? null,
+        };
+      }));
+    }
+  }
+
+  async function handleCreateUser(
+    translateAuthError: (msg: string) => string,
+    authBusy: boolean,
+    setAuthBusy: (v: boolean) => void
+  ) {
+    setAuthBusy(true);
+    const { data: signUpData, error } = await supabase.auth.signUp({
+      email: newUserEmail,
+      password: newUserPwd,
+      options: { data: { nombre: newUserNombre, rol: newUserRol } },
+    });
+    if (!error && signUpData.user) {
+      if (newUserDistrito) {
+        setTimeout(async () => {
+          await supabase.from("profiles").update({ distrito: newUserDistrito })
+            .eq("id", signUpData.user!.id);
+        }, 1200);
+      }
+      await insertAudit("Crear usuario", "profiles", { email: newUserEmail, rol: newUserRol, distrito: newUserDistrito });
+      setShowCreateUser(false);
+      setNewUserEmail(""); setNewUserNombre(""); setNewUserPwd(""); setNewUserRol("director"); setNewUserDistrito("");
+      toast(`Usuario ${newUserEmail} creado como ${newUserRol}.`);
+      setTimeout(() => void loadDbUsers(), 1500);
+    } else if (error) {
+      toast(translateAuthError(error.message), "error");
+    }
+    setAuthBusy(false);
+  }
+
+  async function validateCsv(file: File) {
+    setIsValidating(true);
+    setCsvValidation(null);
+    setUploadResult(`Validando "${file.name}"...`);
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await fetch(`${apiUrl}/v1/datos/validar-csv`, { method: "POST", body: form });
+      if (res.ok) {
+        const data = await res.json();
+        setCsvValidation(data);
+        setUploadResult(
+          data.columnas_faltantes.length > 0
+            ? `Columnas faltantes: ${data.columnas_faltantes.join(", ")}`
+            : `${data.total_filas} filas — ${data.filas_validas} validas — ${data.errores.length} errores`
+        );
+      } else {
+        setUploadResult("Error del servidor al validar el archivo.");
+      }
+    } catch {
+      setUploadResult("No se pudo conectar con el backend para validar. Revisa que FastAPI este activo.");
+    } finally {
+      setIsValidating(false);
+    }
+  }
+
+  async function saveSchedule() {
+    if (!session) return;
+    const days = scheduleFreq === "semanal" ? 7 : scheduleFreq === "mensual" ? 30 : 180;
+    const proxima = new Date(Date.now() + days * 86_400_000).toLocaleDateString("es-PE");
+    await supabase.from("audit_log").insert({
+      usuario_id: session.id,
+      accion: "Configurar actualizacion periodica",
+      tabla: "configuracion",
+      detalle: { frecuencia: scheduleFreq, proxima_actualizacion: proxima },
+    });
+    setNextUpdate(proxima);
+    setScheduleMsg(`Proxima actualizacion: ${proxima}`);
+    toast(`Programacion ${scheduleFreq} guardada. Proxima: ${proxima}`);
+  }
+
+  async function desactivarUsuario(id: string) {
+    await supabase.from("profiles").update({ activo: false }).eq("id", id);
+    await insertAudit("Desactivar usuario", "profiles", { usuario_id: id });
+    toast("Usuario desactivado correctamente.");
+    void loadDbUsers();
+  }
+
+  async function activarUsuario(id: string) {
+    await supabase.from("profiles").update({ activo: true }).eq("id", id);
+    await insertAudit("Activar usuario", "profiles", { usuario_id: id });
+    toast("Usuario activado correctamente.", "success");
+    void loadDbUsers();
+  }
+
+  async function updateEstadoIntervencion(
+    id: string,
+    nuevoEstado: string,
+    setInterventions: (fn: (prev: { id: string; codigo_estudiante: string | null; tipo: string; descripcion: string; estado: string; fecha: string }[]) => { id: string; codigo_estudiante: string | null; tipo: string; descripcion: string; estado: string; fecha: string }[]) => void
+  ) {
+    const { error } = await supabase.from("intervenciones").update({ estado: nuevoEstado }).eq("id", id);
+    if (!error) {
+      setInterventions((prev) => prev.map((i) => i.id === id ? { ...i, estado: nuevoEstado } : i));
+      await insertAudit("Actualizar estado intervencion", "intervenciones", { id, estado: nuevoEstado });
+      toast(`Estado actualizado: ${nuevoEstado}`);
+    }
+  }
+
+  // Load DB users/audit when admin opens the tab
+  useEffect(() => {
+    if (role === "admin" && tab === "usuarios" && session) {
+      void loadDbUsers();
+      void loadDbAudit();
+    }
+  }, [role, tab, session]);
+
+  return {
+    dbUsers, dbAudit,
+    showCreateUser, setShowCreateUser,
+    newUserEmail, setNewUserEmail,
+    newUserNombre, setNewUserNombre,
+    newUserPwd, setNewUserPwd,
+    newUserRol, setNewUserRol,
+    newUserDistrito, setNewUserDistrito,
+    uploadResult, setUploadResult,
+    csvValidation, isValidating,
+    scheduleFreq, setScheduleFreq,
+    scheduleMsg, nextUpdate,
+    apiConnected, setApiConnected,
+    modelMessage, setModelMessage,
+    fileInputRef,
+    loadDbUsers, loadDbAudit,
+    handleCreateUser, validateCsv, saveSchedule,
+    desactivarUsuario, activarUsuario, updateEstadoIntervencion,
+  };
+}
