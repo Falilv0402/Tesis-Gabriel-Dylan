@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,7 +12,9 @@ from app.services.model_service import model_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    model_service.load()
+    # Cargar el modelo en background para no bloquear el startup.
+    # Los endpoints lo cargan lazy si aún no terminó.
+    asyncio.create_task(asyncio.to_thread(model_service.load))
     yield
 
 
@@ -23,9 +26,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS — permitir desde localhost (desarrollo) y Vercel (producción)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
