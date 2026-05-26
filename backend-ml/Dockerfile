@@ -24,7 +24,7 @@ ENV METRICS_PATH=./modelo/model/metricas_em.pkl
 ENV DATASET_PATH=./modelo/data/em_2022_lima_privado.csv
 ENV PYTHONUNBUFFERED=1
 
-# Railway asigna el puerto vía $PORT
+# Puerto fijo 8000 — Railway lo enruta desde el dominio público
 EXPOSE 8000
 
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
