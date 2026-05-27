@@ -1,4 +1,4 @@
-# P20261012 — SARA · Sistema de Alerta Temprana de Riesgo Académico
+# P20261012 — SATRA · Sistema de Alerta Temprana de Riesgo Académico
 
 > Proyecto de tesis — UPC · Ingeniería de Sistemas de Información  
 > Dataset: Evaluación Muestral 2022 MINEDU — Lima Metropolitana, gestión privada, 2.° de secundaria  
