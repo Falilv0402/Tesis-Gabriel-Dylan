@@ -271,16 +271,14 @@ export function useAuth(
   }, [regDistrito]);
 
   // Verificar si el colegio seleccionado ya tiene un director
+  // Usamos un RPC con SECURITY DEFINER porque al registrarse el usuario aún no está
+  // autenticado, así que las políticas RLS le bloquearían el SELECT directo a profiles.
   useEffect(() => {
     if (!regColegioIe) { setIeHasDirector(false); return; }
     supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .eq("codigo_ie", regColegioIe)
-      .eq("rol", "director")
-      .eq("activo", true)
-      .then(({ count }) => {
-        setIeHasDirector((count ?? 0) > 0);
+      .rpc("ie_has_director", { p_codigo_ie: regColegioIe })
+      .then(({ data, error }) => {
+        if (!error) setIeHasDirector(data === true);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regColegioIe]);
