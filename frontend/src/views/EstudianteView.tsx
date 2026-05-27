@@ -10,6 +10,7 @@ import { ShapBar } from "@/components/ui/ShapBar";
 import { shortId, pct, riskClass, recommendation, recommendationFromShap } from "@/lib/format";
 
 interface EstudianteViewProps {
+  role: string;
   selected: Student | undefined;
   shapData: ShapData | null;
   shapLoading: boolean;
@@ -41,7 +42,7 @@ interface EstudianteViewProps {
 }
 
 export function EstudianteView({
-  selected, shapData, shapLoading,
+  role, selected, shapData, shapLoading,
   annotations, annotationText, setAnnotationText,
   isSavingAnnotation, isGeneratingStudentPdf,
   planMilestones, newMilestone, setNewMilestone,
@@ -53,6 +54,8 @@ export function EstudianteView({
   setIeProfileId, setShowIeProfile,
   addMilestone, toggleMilestone, loadMilestones, isLoadingMilestones,
 }: EstudianteViewProps) {
+  // Director puede editar anotaciones e hitos de cualquier usuario
+  const canEditAll = role === "director";
   return (
     <section className="full-col">
       <Panel title={selected ? `Estudiante ${shortId(selected.id)} — Detalle completo` : "Detalle del estudiante"}>
@@ -206,17 +209,18 @@ export function EstudianteView({
                     ) : (
                       annotations.filter(a => a.estudiante_id === selected.id).map((a) => {
                         const quien = a.autor_nombre ?? a.autor_email?.split("@")[0] ?? "Director";
+                        const puedeEditar = canEditAll || a.es_propia;
                         return (
                           <div key={a.id} className="annotation-item" style={{
-                            borderLeft: `3px solid ${a.es_propia ? "var(--accent)" : "#94a3b8"}`,
+                            borderLeft: `3px solid ${a.es_propia ? "var(--accent)" : canEditAll ? "#7c3aed" : "#94a3b8"}`,
                             paddingLeft: 10,
                           }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                               <span style={{
                                 fontSize: 11, fontWeight: 600,
-                                color: a.es_propia ? "var(--accent)" : "#64748b",
+                                color: a.es_propia ? "var(--accent)" : canEditAll ? "#7c3aed" : "#64748b",
                               }}>
-                                👤 {quien}{a.es_propia ? " (tú)" : ""}
+                                👤 {quien}{a.es_propia ? " (tú)" : canEditAll ? " · puedes editar" : ""}
                               </span>
                               <span className="annotation-date">
                                 {new Date(a.created_at).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" })}
@@ -260,14 +264,15 @@ export function EstudianteView({
                     <ul className="plan-list">
                       {planMilestones.map((m) => {
                         const autor = m.autor_nombre ?? m.autor_email?.split("@")[0] ?? "Director";
+                        const puedeEditarHito = canEditAll || m.es_propio;
                         return (
                           <li key={m.id} className={`plan-milestone${m.completado ? " plan-done" : ""}`}
-                            style={{ borderLeft: `3px solid ${m.es_propio ? "var(--accent)" : "#94a3b8"}`, paddingLeft: 8 }}>
+                            style={{ borderLeft: `3px solid ${m.es_propio ? "var(--accent)" : canEditAll ? "#7c3aed" : "#94a3b8"}`, paddingLeft: 8 }}>
                             <button
                               className="milestone-check"
-                              onClick={() => m.es_propio && toggleMilestone(m.id)}
-                              disabled={!m.es_propio}
-                              title={m.es_propio ? undefined : `Creado por ${autor} — solo él puede marcarlo`}
+                              onClick={() => puedeEditarHito && toggleMilestone(m.id)}
+                              disabled={!puedeEditarHito}
+                              title={puedeEditarHito ? undefined : `Creado por ${autor} — solo el director puede modificarlo`}
                               aria-label={m.completado ? "Marcar como pendiente" : "Marcar como completado"}
                               style={{ opacity: m.es_propio ? 1 : 0.4, cursor: m.es_propio ? "pointer" : "not-allowed" }}
                             >
@@ -276,7 +281,7 @@ export function EstudianteView({
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <span className="milestone-text">{m.texto}</span>
                               {!m.es_propio && (
-                                <span style={{ display: "block", fontSize: 10, color: "#94a3b8", marginTop: 2 }}>
+                                <span style={{ display: "block", fontSize: 10, color: canEditAll ? "#7c3aed" : "#94a3b8", marginTop: 2 }}>
                                   por {autor}
                                 </span>
                               )}

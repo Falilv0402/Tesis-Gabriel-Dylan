@@ -59,6 +59,7 @@ interface AuthViewProps {
   setRegColegioIe: (v: string) => void;
   regColegiosList: { distrito: string; id_ie: string; total_estudiantes: number }[];
   distritosList: string[];
+  ieHasDirector: boolean;
   handleLogin: () => void;
   handleRegister: () => void;
   handlePasswordReset: () => void;
@@ -74,7 +75,7 @@ export function AuthView({
   authError, authMsg, authBusy,
   regDistrito, setRegDistrito,
   regColegioIe, setRegColegioIe,
-  regColegiosList, distritosList,
+  regColegiosList, distritosList, ieHasDirector,
   handleLogin, handleRegister, handlePasswordReset,
 }: AuthViewProps) {
   const [showPwd, setShowPwd] = useState(false);
@@ -176,6 +177,35 @@ export function AuthView({
                   ))}
                 </select>
               </label>
+
+              {/* Aviso si el colegio ya tiene director */}
+              {regColegioIe && ieHasDirector && (
+                <div style={{
+                  display: "flex", alignItems: "flex-start", gap: 7,
+                  padding: "8px 10px", borderRadius: 8, fontSize: 12,
+                  background: "#fffbeb", border: "1px solid #fde68a", color: "#92400e",
+                }}>
+                  <span style={{ fontSize: 15, flexShrink: 0 }}>⚠️</span>
+                  <div>
+                    <strong>Este colegio ya tiene un Director registrado.</strong>
+                    <p style={{ margin: "2px 0 0", fontSize: 11, lineHeight: 1.4 }}>
+                      Tu cuenta se creará como <strong>Coordinador Académico</strong> — podrás registrar intervenciones, anotaciones y planes, pero el director tendrá autoridad sobre todos los registros del colegio.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Confirmación si el colegio no tiene director aún */}
+              {regColegioIe && !ieHasDirector && (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  padding: "6px 10px", borderRadius: 8, fontSize: 12,
+                  background: "#f0fdf4", border: "1px solid #86efac", color: "#15803d",
+                }}>
+                  <span style={{ fontSize: 13 }}>✅</span>
+                  <span>Serás el <strong>Director</strong> de este colegio en SATRA.</span>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -257,7 +287,12 @@ export function AuthView({
         {authMode === "registro" && (
           <button className="primary" disabled={!canSubmit} onClick={() => void handleRegister()}
             title={!pwdOk ? "Completa los requisitos de contraseña" : !emailOk ? "Usa un correo institucional" : ""}>
-            <KeyRound size={18} /> {authBusy ? "Registrando..." : "Crear cuenta"}
+            <KeyRound size={18} />
+            {authBusy
+              ? "Registrando..."
+              : ieHasDirector
+                ? "Crear cuenta como Coordinador"
+                : "Crear cuenta como Director"}
           </button>
         )}
         {authMode === "reset" && (

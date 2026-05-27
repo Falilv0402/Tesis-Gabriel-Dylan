@@ -26,6 +26,7 @@ export function useAuth(
   const [regDistrito,      setRegDistrito]      = useState("");
   const [regColegioIe,     setRegColegioIe]     = useState("");
   const [regColegiosList,  setRegColegiosList]  = useState<{ distrito: string; id_ie: string; total_estudiantes: number }[]>([]);
+  const [ieHasDirector,    setIeHasDirector]    = useState(false);  // true si el IE ya tiene director
 
   // ── Profile state (shared with useProfile) ────────────────────────────────
   const [profileDistrito,     setProfileDistrito]     = useState<string | null>(null);
@@ -163,10 +164,12 @@ export function useAuth(
     }
     setAuthBusy(true); setAuthError(""); setAuthMsg("");
     skipOnboardingRef.current = true;
+    // Si el colegio ya tiene director, se registra como coordinador
+    const rolNuevoUsuario = ieHasDirector ? "coordinador" : "director";
     const { data: signUpData, error } = await supabase.auth.signUp({
       email:    authEmail,
       password: authPassword,
-      options:  { data: { nombre: authNombre, rol: "director" } },
+      options:  { data: { nombre: authNombre, rol: rolNuevoUsuario } },
     });
     if (error) {
       skipOnboardingRef.current = false;
@@ -267,6 +270,21 @@ export function useAuth(
       .catch(() => {});
   }, [regDistrito]);
 
+  // Verificar si el colegio seleccionado ya tiene un director
+  useEffect(() => {
+    if (!regColegioIe) { setIeHasDirector(false); return; }
+    supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("codigo_ie", regColegioIe)
+      .eq("rol", "director")
+      .eq("activo", true)
+      .then(({ count }) => {
+        setIeHasDirector((count ?? 0) > 0);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regColegioIe]);
+
 
   // ── Public API ────────────────────────────────────────────────────────────
   return {
@@ -279,7 +297,7 @@ export function useAuth(
     role, setRole,
     regDistrito, setRegDistrito,
     regColegioIe, setRegColegioIe,
-    regColegiosList,
+    regColegiosList, ieHasDirector,
     profileDistrito, setProfileDistrito,
     profileCodigoIe, setProfileCodigoIe,
     profileNombre, profileApellidos,

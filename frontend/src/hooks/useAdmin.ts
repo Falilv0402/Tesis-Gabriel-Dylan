@@ -11,7 +11,8 @@ export function useAdmin(
   role: string,
   tab: Tab,
   toast: (msg: string, type?: "success" | "error" | "info") => void,
-  insertAudit: (accion: string, tabla?: string, detalle?: object) => Promise<void>
+  insertAudit: (accion: string, tabla?: string, detalle?: object) => Promise<void>,
+  profileCodigoIe: string | null = null,
 ) {
   const [dbUsers, setDbUsers] = useState<{
     id: string;
@@ -32,7 +33,7 @@ export function useAdmin(
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserNombre, setNewUserNombre] = useState("");
   const [newUserPwd, setNewUserPwd] = useState("");
-  const [newUserRol, setNewUserRol] = useState<"admin" | "director">("director");
+  const [newUserRol, setNewUserRol] = useState<"admin" | "director" | "coordinador">("director");
   const [newUserDistrito, setNewUserDistrito] = useState("");
 
   const [uploadResult, setUploadResult] = useState("Sin archivo cargado.");
@@ -54,19 +55,39 @@ export function useAdmin(
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function loadDbUsers() {
-    const { data } = await supabase
+    let query = supabase
       .from("profiles")
-      .select("id, email, nombre, rol, activo")
+      .select("id, email, nombre, rol, activo, codigo_ie")
       .order("created_at");
+
+    // Admin de colegio solo ve usuarios de su IE
+    if (role === "admin" && profileCodigoIe) {
+      query = query.eq("codigo_ie", profileCodigoIe);
+    }
+
+    const { data } = await query;
     if (data) setDbUsers(data);
   }
 
   async function loadDbAudit() {
-    const { data } = await supabase
+    let query = supabase
       .from("audit_log")
-      .select("id, accion, created_at, ip, profiles(nombre, email)")
+      .select("id, accion, created_at, ip, profiles(nombre, email, codigo_ie)")
       .order("created_at", { ascending: false })
       .limit(50);
+
+    // Admin de colegio: solo ve auditoría de usuarios de su IE
+    if (role === "admin" && profileCodigoIe) {
+      // Filtrar vía relación: solo eventos de usuarios que pertenecen a su IE
+      query = supabase
+        .from("audit_log")
+        .select("id, accion, created_at, ip, profiles!inner(nombre, email, codigo_ie)")
+        .eq("profiles.codigo_ie", profileCodigoIe)
+        .order("created_at", { ascending: false })
+        .limit(50);
+    }
+
+    const { data } = await query;
     if (data) {
       setDbAudit(data.map((e: Record<string, unknown>) => {
         const p = e.profiles as { nombre?: string; email?: string } | null;
@@ -88,19 +109,27 @@ export function useAdmin(
     setAuthBusy: (v: boolean) => void
   ) {
     setAuthBusy(true);
+
+    const rolEfectivo  = newUserRol; // admin de IE y superadmin ambos usan el rol elegido
+    const ieEfectiva   = role === "admin" ? (profileCodigoIe ?? "") : newUserDistrito;
+
     const { data: signUpData, error } = await supabase.auth.signUp({
       email: newUserEmail,
       password: newUserPwd,
-      options: { data: { nombre: newUserNombre, rol: newUserRol } },
+      options: { data: { nombre: newUserNombre, rol: rolEfectivo } },
     });
     if (!error && signUpData.user) {
-      if (newUserDistrito) {
+      if (ieEfectiva) {
+        // Para director → guarda como distrito+codigo_ie; para admin → solo codigo_ie
+        const updateField = rolEfectivo === "admin"
+          ? { codigo_ie: ieEfectiva }
+          : { codigo_ie: ieEfectiva };
         setTimeout(async () => {
-          await supabase.from("profiles").update({ distrito: newUserDistrito })
+          await supabase.from("profiles").update(updateField)
             .eq("id", signUpData.user!.id);
         }, 1200);
       }
-      await insertAudit("Crear usuario", "profiles", { email: newUserEmail, rol: newUserRol, distrito: newUserDistrito });
+      await insertAudit("Crear usuario", "profiles", { email: newUserEmail, rol: newUserRol, asignacion: newUserDistrito });
       setShowCreateUser(false);
       setNewUserEmail(""); setNewUserNombre(""); setNewUserPwd(""); setNewUserRol("director"); setNewUserDistrito("");
       toast(`Usuario ${newUserEmail} creado como ${newUserRol}.`);

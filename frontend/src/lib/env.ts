@@ -42,3 +42,12 @@ export const env = {
   supabaseAnonKey:process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
   mlApiUrl:       process.env.NEXT_PUBLIC_ML_API_URL        ?? "http://127.0.0.1:8000",
 } as const;
+
+/**
+ * Devuelve true si el backend ML apunta a localhost.
+ * Se usa para ocultar acciones pesadas (como reentrenar) en producción.
+ */
+export function isLocalBackend(): boolean {
+  const url = env.mlApiUrl.toLowerCase();
+  return url.includes("localhost") || url.includes("127.0.0.1");
+}

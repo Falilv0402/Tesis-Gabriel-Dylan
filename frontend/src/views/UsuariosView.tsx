@@ -17,6 +17,8 @@ interface AuditEvent {
 
 interface UsuariosViewProps {
   session: User;
+  role: string;
+  profileCodigoIe?: string | null;
   dbUsers: DbUser[];
   dbAudit: AuditEvent[];
   showCreateUser: boolean;
@@ -27,8 +29,8 @@ interface UsuariosViewProps {
   setNewUserNombre: (v: string) => void;
   newUserPwd: string;
   setNewUserPwd: (v: string) => void;
-  newUserRol: "admin" | "director";
-  setNewUserRol: (v: "admin" | "director") => void;
+  newUserRol: "admin" | "director" | "coordinador";
+  setNewUserRol: (v: "admin" | "director" | "coordinador") => void;
   newUserDistrito: string;
   setNewUserDistrito: (v: string) => void;
   distritosList: string[];
@@ -41,7 +43,8 @@ interface UsuariosViewProps {
 }
 
 export function UsuariosView({
-  session, dbUsers, dbAudit,
+  session, role, profileCodigoIe,
+  dbUsers, dbAudit,
   showCreateUser, setShowCreateUser,
   newUserEmail, setNewUserEmail,
   newUserNombre, setNewUserNombre,
@@ -51,6 +54,7 @@ export function UsuariosView({
   distritosList, authBusy,
   onCreateUser, onDesactivar, onActivar, onRefreshUsers, onRefreshAudit,
 }: UsuariosViewProps) {
+  const isAdminIE = role === "admin"; // admin de colegio (no superadmin)
   return (
     <section className="two-col">
       <Panel title="Usuarios y roles">
@@ -60,7 +64,9 @@ export function UsuariosView({
             <tr key={u.id}>
               <td>{u.nombre ?? "—"}</td>
               <td>{u.email}</td>
-              <td><span className={`role-tag ${u.rol}`}>{u.rol}</span></td>
+              <td><span className={`role-tag ${u.rol}`}>
+                {u.rol === "superadmin" ? "Super Admin" : u.rol === "admin" ? "Admin IE" : u.rol === "director" ? "Director" : "Coordinador"}
+              </span></td>
               <td>{u.activo ? "Activo" : <span style={{ color: "#ef4444" }}>Inactivo</span>}</td>
               <td>
                 {u.id !== session.id && (
@@ -94,6 +100,13 @@ export function UsuariosView({
 
         {showCreateUser && (
           <div className="create-user-form">
+            {/* Aviso para admin de IE: solo puede crear directores de su colegio */}
+            {isAdminIE && profileCodigoIe && (
+              <div style={{ padding: "8px 12px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 8, fontSize: 12, color: "#0369a1", marginBottom: 4 }}>
+                ℹ️ Estás creando un <strong>Director</strong> para el colegio IE <strong>{profileCodigoIe}</strong>. Se asignará automáticamente.
+              </div>
+            )}
+
             <label>Email institucional
               <input type="email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} placeholder="correo@institucion.pe" />
             </label>
@@ -103,25 +116,42 @@ export function UsuariosView({
             <label>Contrasena temporal
               <input type="password" value={newUserPwd} onChange={(e) => setNewUserPwd(e.target.value)} placeholder="Min. 6 caracteres" />
             </label>
-            <label>Rol asignado
-              <select value={newUserRol} onChange={(e) => setNewUserRol(e.target.value as "admin" | "director")}>
-                <option value="director">Director</option>
-                <option value="admin">Administrador</option>
-              </select>
-            </label>
-            {newUserRol === "director" && (
-              <label>Distrito asignado
-                <select value={newUserDistrito} onChange={(e) => setNewUserDistrito(e.target.value)}>
-                  <option value="">Sin asignar</option>
-                  {distritosList.map((d) => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </label>
+
+            {/* Superadmin: puede elegir rol y asignación */}
+            {!isAdminIE && (
+              <>
+                <label>Rol asignado
+                  <select value={newUserRol} onChange={(e) => setNewUserRol(e.target.value as "admin" | "director" | "coordinador")}>
+                    <option value="director">Director</option>
+                    <option value="coordinador">Coordinador Académico</option>
+                    <option value="admin">Administrador de colegio</option>
+                  </select>
+                </label>
+                {newUserRol === "director" && (
+                  <label>Distrito asignado
+                    <select value={newUserDistrito} onChange={(e) => setNewUserDistrito(e.target.value)}>
+                      <option value="">Sin asignar</option>
+                      {distritosList.map((d) => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </label>
+                )}
+                {newUserRol === "admin" && (
+                  <>
+                    <label>Colegio asignado (código IE) <span style={{ color: "#ef4444" }}>*</span>
+                      <input
+                        value={newUserDistrito}
+                        onChange={(e) => setNewUserDistrito(e.target.value)}
+                        placeholder="Ej: 0249"
+                      />
+                    </label>
+                    <div style={{ padding: "8px 12px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 8, fontSize: 12, color: "#0369a1" }}>
+                      ℹ️ <strong>Admin de colegio</strong> — solo verá usuarios de su IE.
+                    </div>
+                  </>
+                )}
+              </>
             )}
-            {newUserRol === "admin" && (
-              <div style={{ padding: "8px 12px", background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: 8, fontSize: 12, color: "#92400e" }}>
-                ⚠️ <strong>Rol Administrador</strong> — este usuario tendrá acceso total al sistema: gestión de usuarios, modelo ML y datos. Asegúrate de que sea de confianza.
-              </div>
-            )}
+
             <button className="primary" disabled={authBusy} onClick={onCreateUser}>
               <UserCog size={16} /> {authBusy ? "Creando..." : "Confirmar creacion"}
             </button>

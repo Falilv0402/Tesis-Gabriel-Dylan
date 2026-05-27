@@ -45,7 +45,7 @@ export default function Page() {
 
   // ── Hooks ─────────────────────────────────────────────────────────
   const auth = useAuth(toast);
-  const admin = useAdmin(auth.session, auth.role, tab, toast, auth.insertAudit);
+  const admin = useAdmin(auth.session, auth.role, tab, toast, auth.insertAudit, auth.profileCodigoIe);
   const modelData = useModelData(admin.apiConnected, admin.setApiConnected, toast);
   const students = useStudents(
     auth.profileCodigoIe, auth.profileDistrito, auth.role, auth.session,
@@ -63,28 +63,32 @@ export default function Page() {
   // ── Navigation ────────────────────────────────────────────────────
   const notifCount4Nav = interventions.interventions.filter(i => i.estado === "pendiente").length;
 
-  const directorTabs = ["dashboard", "estudiante", "reportes", "intervenciones"];
-  const adminTabs    = ["usuarios", "datos", "modelo"];
+  const directorTabs   = ["dashboard", "estudiante", "reportes", "intervenciones"]; // también coordinador
+  const adminTabs      = ["usuarios", "datos"];
+  const superadminTabs = ["usuarios", "datos", "modelo"];
 
-  const visibleNav = navItems.filter((item) => {
-    if (directorTabs.includes(item.id)) return auth.role === "director";
-    if (adminTabs.includes(item.id))    return auth.role === "admin";
-    return true;
-  });
+  const isAdmin      = auth.role === "admin" || auth.role === "superadmin";
+  const isSuperadmin = auth.role === "superadmin";
+  const isDirector   = auth.role === "director";
+  const isDirectorRole = auth.role === "director" || auth.role === "coordinador";
+
+  const visibleNav = navItems.filter((item) =>
+    item.roles.includes(auth.role as "superadmin" | "admin" | "director")
+  );
 
   // Redirige al primer tab visible cuando el rol carga y el tab actual no es accesible
   useEffect(() => {
     if (!auth.role) return;
-    const allowed = auth.role === "admin" ? adminTabs : directorTabs;
+    const allowed = isSuperadmin ? superadminTabs : isAdmin ? adminTabs : directorTabs;
     if (!allowed.includes(tab)) {
       setTab(allowed[0] as Tab);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.role]);
 
-  // Recarga datos del modelo cada vez que el admin entra al tab "modelo"
+  // Recarga datos del modelo cada vez que el superadmin entra al tab "modelo"
   useEffect(() => {
-    if (auth.role === "admin" && tab === "modelo") {
+    if (isSuperadmin && tab === "modelo") {
       void modelData.loadModelMetrics();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -149,6 +153,7 @@ export default function Page() {
         regDistrito={auth.regDistrito} setRegDistrito={auth.setRegDistrito}
         regColegioIe={auth.regColegioIe} setRegColegioIe={auth.setRegColegioIe}
         regColegiosList={auth.regColegiosList}
+        ieHasDirector={auth.ieHasDirector}
         distritosList={auth.distritosList}
         handleLogin={auth.handleLogin}
         handleRegister={auth.handleRegister}
@@ -193,14 +198,14 @@ export default function Page() {
           <div>
             <h1>{navItems.find((item) => item.id === tab)?.label}</h1>
             <span>
-              {auth.role === "admin" ? "Configuracion del sistema" : "Seguimiento academico"} · {modelData.metrics.trained_at ?? "pendiente"}
+              {isAdmin ? "Configuracion del sistema" : "Seguimiento academico"} · {modelData.metrics.trained_at ?? "pendiente"}
               &nbsp;·&nbsp;
               <span className={`api-dot ${admin.apiConnected === true ? "connected" : admin.apiConnected === false ? "disconnected" : "pending"}`} />
               {admin.apiConnected === true ? "Backend conectado" : admin.apiConnected === false ? "Backend desconectado" : "Verificando..."}
             </span>
           </div>
           <div className="top-actions">
-            {auth.role === "director" && (
+            {isDirectorRole && (
               auth.profileDistrito ? (
                 <span className="district-badge">
                   <ShieldCheck size={13} />
@@ -278,7 +283,7 @@ export default function Page() {
 
         {/* Tab content */}
         <section className="content-area">
-          {auth.role === "director" && tab === "dashboard" && (
+          {isDirectorRole && tab === "dashboard" && (
             <DashboardView
               filtered={students.filtered} selected={students.selected}
               displayTotal={students.displayTotal} high={students.high} medium={students.medium} low={students.low}
@@ -301,8 +306,9 @@ export default function Page() {
             />
           )}
 
-          {auth.role === "director" && tab === "estudiante" && (
+          {isDirectorRole && tab === "estudiante" && (
             <EstudianteView
+              role={auth.role}
               selected={students.selected} shapData={students.shapData} shapLoading={students.shapLoading}
               annotations={interventions.annotations}
               annotationText={interventions.annotationText} setAnnotationText={interventions.setAnnotationText}
@@ -327,8 +333,9 @@ export default function Page() {
             />
           )}
 
-          {auth.role === "director" && tab === "intervenciones" && (
+          {isDirectorRole && tab === "intervenciones" && (
             <IntervencionesView
+              role={auth.role}
               selected={students.selected} filtered={students.filtered}
               tipoIntervencion={interventions.tipoIntervencion} setTipoIntervencion={interventions.setTipoIntervencion}
               descIntervencion={interventions.descIntervencion} setDescIntervencion={interventions.setDescIntervencion}
@@ -344,15 +351,22 @@ export default function Page() {
             />
           )}
 
-          {auth.role === "director" && tab === "reportes" && (
+          {isDirectorRole && tab === "reportes" && (
             <ReportesView
-              diagnostico={modelData.diagnostico} summary={students.summary}
-              globalSummary={modelData.globalSummary} high={students.high} displayTotal={students.displayTotal}
-              exportCsv={handleExportCsv} exportXlsx={handleExportXlsx} exportPdf={handleExportPdf}
+              summary={students.summary}
+              globalSummary={modelData.globalSummary}
+              filtered={students.filtered}
+              high={students.high}
+              medium={students.medium}
+              low={students.low}
+              displayTotal={students.displayTotal}
+              exportCsv={handleExportCsv}
+              exportXlsx={handleExportXlsx}
+              exportPdf={handleExportPdf}
             />
           )}
 
-          {auth.role === "admin" && tab === "datos" && (
+          {isAdmin && tab === "datos" && (
             <DatosView
               fileInputRef={admin.fileInputRef}
               uploadResult={admin.uploadResult} setUploadResult={admin.setUploadResult}
@@ -364,7 +378,7 @@ export default function Page() {
             />
           )}
 
-          {auth.role === "admin" && tab === "modelo" && (
+          {isSuperadmin && tab === "modelo" && (
             <ModeloView
               metrics={modelData.metrics} evaluation={modelData.evaluation}
               diagnostico={modelData.diagnostico} globalSummary={modelData.globalSummary}
@@ -380,9 +394,11 @@ export default function Page() {
             />
           )}
 
-          {auth.role === "admin" && tab === "usuarios" && (
+          {isAdmin && tab === "usuarios" && (
             <UsuariosView
               session={auth.session}
+              role={auth.role}
+              profileCodigoIe={auth.profileCodigoIe}
               dbUsers={admin.dbUsers} dbAudit={admin.dbAudit}
               showCreateUser={admin.showCreateUser} setShowCreateUser={admin.setShowCreateUser}
               newUserEmail={admin.newUserEmail} setNewUserEmail={admin.setNewUserEmail}

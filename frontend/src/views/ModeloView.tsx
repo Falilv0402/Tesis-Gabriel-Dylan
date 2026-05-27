@@ -1,6 +1,7 @@
 "use client";
 
-import { Play, Save } from "lucide-react";
+import { Play, Save, Info } from "lucide-react";
+import { isLocalBackend } from "@/lib/env";
 import {
   CartesianGrid, Cell, Legend, Line, LineChart,
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -115,7 +116,31 @@ export function ModeloView({
               </div>
             </div>
           )}
-          <button className="primary" onClick={onRetrain}><Play size={17} /> Reentrenar</button>
+          {isLocalBackend() ? (
+            <button className="primary" onClick={onRetrain}>
+              <Play size={17} /> Reentrenar
+            </button>
+          ) : (
+            <div style={{
+              display: "flex", alignItems: "flex-start", gap: 8,
+              padding: "10px 12px", marginTop: 4,
+              background: "#fffbeb", border: "1px solid #fde68a",
+              borderRadius: 8, fontSize: 12, color: "#92400e",
+            }}>
+              <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <strong>Reentrenamiento desactivado en producción.</strong>
+                <p style={{ margin: "3px 0 0", fontSize: 11, lineHeight: 1.4 }}>
+                  Para reentrenar con nuevos datos, ejecuta{" "}
+                  <code style={{ background: "#fef3c7", padding: "1px 4px", borderRadius: 3 }}>
+                    python modelo/train_em_model.py
+                  </code>{" "}
+                  localmente y haz commit de los nuevos artefactos <code style={{ background: "#fef3c7", padding: "1px 4px", borderRadius: 3 }}>.pkl</code>.
+                  El despliegue actualizará el modelo automáticamente.
+                </p>
+              </div>
+            </div>
+          )}
           <p className="audit-line">{modelMessage}</p>
         </Panel>
         <Panel title="Importancia global — SHAP">

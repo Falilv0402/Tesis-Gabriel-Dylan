@@ -27,6 +27,7 @@ interface InterventionStats {
 }
 
 interface IntervencionesViewProps {
+  role: string;
   selected: Student | undefined;
   filtered: Student[];
   tipoIntervencion: "tutoria" | "reunion" | "derivacion" | "seguimiento";
@@ -49,7 +50,7 @@ interface IntervencionesViewProps {
 }
 
 export function IntervencionesView({
-  selected, filtered,
+  role, selected, filtered,
   tipoIntervencion, setTipoIntervencion,
   descIntervencion, setDescIntervencion,
   notifScope, setNotifScope,
@@ -121,9 +122,11 @@ export function IntervencionesView({
         <Panel title="Bitacora de intervenciones">
           {interventions.map((item) => {
             const autor = item.autor_nombre ?? item.autor_email?.split("@")[0] ?? "Director";
+            const canEditAll = role === "director";
+            const puedeEditar = canEditAll || item.es_propia;
             return (
               <div className="intervencion-card" key={item.id}
-                style={{ borderLeft: `3px solid ${item.es_propia ? "var(--accent)" : "#94a3b8"}` }}>
+                style={{ borderLeft: `3px solid ${item.es_propia ? "var(--accent)" : canEditAll ? "#7c3aed" : "#94a3b8"}` }}>
                 <div className="intervencion-header">
                   <strong>Est. {item.codigo_estudiante ? shortId(item.codigo_estudiante) : "—"}</strong>
                   <span className={`estado-tag ${item.estado}`}>{item.estado.replace("_", " ")}</span>
@@ -148,10 +151,10 @@ export function IntervencionesView({
                   <select
                     className={`estado-select estado-${item.estado}`}
                     value={item.estado}
-                    onChange={(e) => item.es_propia && onUpdateEstado(item.id, e.target.value)}
-                    disabled={!item.es_propia}
-                    title={!item.es_propia ? `Registrado por ${autor}` : undefined}
-                    style={{ opacity: item.es_propia ? 1 : 0.5, cursor: item.es_propia ? "pointer" : "not-allowed" }}
+                    onChange={(e) => puedeEditar && onUpdateEstado(item.id, e.target.value)}
+                    disabled={!puedeEditar}
+                    title={!puedeEditar ? `Registrado por ${autor} — solo el director puede modificarlo` : undefined}
+                    style={{ opacity: puedeEditar ? 1 : 0.5, cursor: puedeEditar ? "pointer" : "not-allowed" }}
                   >
                     <option value="pendiente">Pendiente</option>
                     <option value="en_proceso">En proceso</option>

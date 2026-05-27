@@ -1,6 +1,6 @@
 // ── Core domain types ────────────────────────────────────────────────────────
 export type RiskLevel = "ALTO" | "MEDIO" | "BAJO";
-export type UserRole  = "admin" | "director";
+export type UserRole  = "superadmin" | "admin" | "director" | "coordinador";
 
 export type Student = {
   id: string;

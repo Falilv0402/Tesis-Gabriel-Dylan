@@ -12,13 +12,13 @@ import {
 export const apiUrl = process.env.NEXT_PUBLIC_ML_API_URL ?? "http://127.0.0.1:8000";
 
 export const navItems: { id: Tab; label: string; icon: typeof Activity; roles: UserRole[] }[] = [
-  { id: "dashboard",      label: "Dashboard",     icon: BarChart3,     roles: ["director"] },
-  { id: "estudiante",     label: "Estudiante",    icon: UserCog,       roles: ["director"] },
-  { id: "intervenciones", label: "Intervenciones",icon: AlertTriangle,  roles: ["director"] },
-  { id: "reportes",       label: "Reportes",      icon: FileText,      roles: ["director"] },
-  { id: "usuarios",       label: "Usuarios",      icon: Users,         roles: ["admin"] },
-  { id: "datos",          label: "Datos",          icon: Database,      roles: ["admin"] },
-  { id: "modelo",         label: "Modelo ML",     icon: Activity,      roles: ["admin"] },
+  { id: "dashboard",      label: "Dashboard",     icon: BarChart3,     roles: ["director", "coordinador"] },
+  { id: "estudiante",     label: "Estudiante",    icon: UserCog,       roles: ["director", "coordinador"] },
+  { id: "intervenciones", label: "Intervenciones",icon: AlertTriangle,  roles: ["director", "coordinador"] },
+  { id: "reportes",       label: "Reportes",      icon: FileText,      roles: ["director", "coordinador"] },
+  { id: "usuarios",       label: "Usuarios",      icon: Users,         roles: ["superadmin", "admin"] },
+  { id: "datos",          label: "Datos",          icon: Database,      roles: ["superadmin", "admin"] },
+  { id: "modelo",         label: "Modelo ML",     icon: Activity,      roles: ["superadmin"] },
 ];
 
 export const featureLabels: Record<string, string> = {
