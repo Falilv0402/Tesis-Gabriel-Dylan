@@ -25,14 +25,20 @@ COLEGIO_SCRIPTS = Path(__file__).resolve().parents[3] / "modelo" / "colegio"
 
 
 def _load_artefacto(codigo_ie: str) -> dict:
-    path = MODEL_DIR / f"colegio_{codigo_ie}.pkl"
-    if not path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"No hay modelo entrenado para la IE {codigo_ie}. "
-                   "El administrador debe subir los Excel del colegio primero."
-        )
-    return joblib.load(path)
+    # Intentar con el código tal cual, luego con cero inicial (0249) y sin él (249)
+    candidates = [
+        MODEL_DIR / f"colegio_{codigo_ie}.pkl",
+        MODEL_DIR / f"colegio_{codigo_ie.zfill(4)}.pkl",   # 249 → 0249
+        MODEL_DIR / f"colegio_{codigo_ie.lstrip('0')}.pkl", # 0249 → 249
+    ]
+    for path in candidates:
+        if path.exists():
+            return joblib.load(path)
+    raise HTTPException(
+        status_code=404,
+        detail=f"No hay modelo entrenado para la IE {codigo_ie}. "
+               "El administrador debe subir los Excel del colegio primero."
+    )
 
 
 # ─── GET /v1/colegio/{codigo_ie}/predicciones ─────────────────────────────────

@@ -406,6 +406,15 @@ export default function Page() {
               nextUpdate={admin.nextUpdate} scheduleMsg={admin.scheduleMsg}
               onValidateCsv={(file) => void admin.validateCsv(file)}
               onSaveSchedule={() => void admin.saveSchedule()}
+              colegioFileRef={admin.colegioFileRef}
+              colegioUploadIe={admin.colegioUploadIe}
+              setColegioUploadIe={admin.setColegioUploadIe}
+              colegioUploadStatus={admin.colegioUploadStatus}
+              colegioUploadMsg={admin.colegioUploadMsg}
+              colegioUploadResult={admin.colegioUploadResult}
+              onUploadColegioExcels={(files, ie) => void admin.uploadColegioExcels(files, ie)}
+              role={auth.role}
+              profileCodigoIe={auth.profileCodigoIe}
             />
           )}
 

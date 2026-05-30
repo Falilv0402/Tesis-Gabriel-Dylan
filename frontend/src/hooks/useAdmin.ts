@@ -45,6 +45,18 @@ export function useAdmin(
   } | null>(null);
   const [isValidating, setIsValidating] = useState(false);
 
+  // ── Carga de Excel del colegio ─────────────────────────────────────────────
+  const [colegioUploadIe,     setColegioUploadIe]     = useState("");
+  const [colegioUploadStatus, setColegioUploadStatus] = useState<
+    "idle" | "uploading" | "success" | "error"
+  >("idle");
+  const [colegioUploadMsg,    setColegioUploadMsg]    = useState("");
+  const [colegioUploadResult, setColegioUploadResult] = useState<{
+    n_alumnos: number; n_riesgo: number; pct_riesgo: number;
+    nombre_colegio: string; salones: string[];
+  } | null>(null);
+  const colegioFileRef = useRef<HTMLInputElement>(null);
+
   const [scheduleFreq, setScheduleFreq] = useState("semanal");
   const [scheduleMsg, setScheduleMsg] = useState("");
   const [nextUpdate, setNextUpdate] = useState<string | null>(null);
@@ -152,6 +164,64 @@ export function useAdmin(
     setAuthBusy(false);
   }
 
+  async function uploadColegioExcels(files: FileList, ieCode: string) {
+    if (!files.length || !ieCode) return;
+    setColegioUploadStatus("uploading");
+    setColegioUploadMsg(`Procesando ${files.length} archivo(s) para IE ${ieCode}...`);
+    setColegioUploadResult(null);
+
+    const form = new FormData();
+    const notasFiles:    File[] = [];
+    const conductaFiles: File[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      if (f.name.toLowerCase().includes("nota"))    notasFiles.push(f);
+      else if (f.name.toLowerCase().includes("conducta")) conductaFiles.push(f);
+      else notasFiles.push(f); // si no se puede determinar, lo trata como notas
+    }
+
+    if (!notasFiles.length) {
+      setColegioUploadStatus("error");
+      setColegioUploadMsg("Ningún archivo fue identificado como notas. Asegúrate de que los nombres incluyan 'Notas' o 'Conducta'.");
+      return;
+    }
+
+    notasFiles.forEach(f    => form.append("notas_files",    f, f.name));
+    conductaFiles.forEach(f => form.append("conducta_files", f, f.name));
+
+    try {
+      const res = await fetch(`${apiUrl}/v1/colegio/${ieCode}/procesar`, {
+        method: "POST",
+        body: form,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const m = data.metricas ?? {};
+        setColegioUploadResult({
+          n_alumnos:      m.n_alumnos     ?? 0,
+          n_riesgo:       m.n_riesgo      ?? 0,
+          pct_riesgo:     m.pct_riesgo    ?? 0,
+          nombre_colegio: m.nombre_colegio ?? ieCode,
+          salones:        m.salones        ?? [],
+        });
+        setColegioUploadStatus("success");
+        setColegioUploadMsg(`Modelo entrenado correctamente para ${m.nombre_colegio ?? ieCode}.`);
+        await insertAudit("Cargar Excel del colegio", "colegio", { ie: ieCode, n_alumnos: m.n_alumnos });
+        toast(`Datos de ${m.nombre_colegio ?? ieCode} cargados. ${m.n_alumnos} alumnos procesados.`, "success");
+      } else {
+        const err = await res.json().catch(() => ({ detail: "Error desconocido" }));
+        setColegioUploadStatus("error");
+        setColegioUploadMsg(err.detail ?? "Error al procesar los archivos.");
+        toast("Error al procesar los Excel del colegio.", "error");
+      }
+    } catch {
+      setColegioUploadStatus("error");
+      setColegioUploadMsg("No se pudo conectar con el backend. Verifica que esté activo.");
+      toast("Error de conexión con el backend.", "error");
+    }
+  }
+
   async function validateCsv(file: File) {
     setIsValidating(true);
     setCsvValidation(null);
@@ -248,6 +318,10 @@ export function useAdmin(
     apiConnected, setApiConnected,
     modelMessage, setModelMessage,
     fileInputRef,
+    // Carga de Excel del colegio
+    colegioUploadIe, setColegioUploadIe,
+    colegioUploadStatus, colegioUploadMsg, colegioUploadResult,
+    colegioFileRef, uploadColegioExcels,
     loadDbUsers, loadDbAudit,
     handleCreateUser, validateCsv, saveSchedule,
     desactivarUsuario, activarUsuario, updateEstadoIntervencion,
