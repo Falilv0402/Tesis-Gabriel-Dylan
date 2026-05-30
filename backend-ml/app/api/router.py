@@ -1,10 +1,11 @@
 """Registro central de sub-routers del API v1."""
 from fastapi import APIRouter
 from app.services.model_service import model_service
-from app.api.predicciones import router as predicciones_router
-from app.api.modelo       import router as modelo_router
-from app.api.datos        import router as datos_router
-from app.api.colegios     import router as colegios_router
+from app.api.predicciones    import router as predicciones_router
+from app.api.modelo          import router as modelo_router
+from app.api.datos           import router as datos_router
+from app.api.colegios        import router as colegios_router
+from app.api.colegio_propio  import router as colegio_propio_router
 
 router = APIRouter()
 
@@ -16,3 +17,4 @@ router.include_router(predicciones_router)
 router.include_router(modelo_router)
 router.include_router(datos_router)
 router.include_router(colegios_router)
+router.include_router(colegio_propio_router)

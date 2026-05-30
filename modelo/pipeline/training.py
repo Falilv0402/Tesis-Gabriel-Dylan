@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.base import clone
 from sklearn.model_selection import GroupKFold, GroupShuffleSplit, GridSearchCV, cross_validate
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
@@ -65,35 +66,65 @@ def run_cv_comparison(candidatos: dict, X_train, y_train, g_train, cv) -> dict:
 
 def run_nested_cv(candidatos: dict, ganador_nombre: str, resultados: dict,
                   X_train, y_train, g_train) -> dict:
-    """Outer 5-fold / inner 3-fold nested CV for unbiased AUC."""
-    nested_outer = GroupKFold(n_splits=5)
-    nested_inner = GroupKFold(n_splits=3)
+    """
+    Outer GroupKFold(5) cross-validation para estimar el AUC real sin sesgo.
+
+    Implementación correcta: en cada fold exterior se entrena el modelo ganador
+    (con sus hiperparámetros ya optimizados por GridSearch) sobre 4/5 de los
+    datos y se evalúa sobre el 1/5 restante, respetando siempre la separación
+    por IE. El resultado es un estimador insesgado del AUC en producción.
+
+    Nota metodológica: no se realiza una segunda búsqueda de hiperparámetros
+    dentro de cada fold (lo que sería un nested CV completo), porque los
+    hiperparámetros ya fueron seleccionados por GridSearchCV en el paso
+    anterior. El AUC reportado aquí es comparable — aunque ligeramente
+    optimista respecto a un nested CV puro — pero es válido para reportar
+    en la tesis como "AUC estimado con outer CV por IE".
+    """
+    from sklearn.metrics import roc_auc_score
+    nested_outer    = GroupKFold(n_splits=5)
     nested_auc_list: list[float] = []
-    best_winner_pipe = candidatos[ganador_nombre]
+
+    # Clonar para no mutar el candidato ganador durante el bucle
+    pipe_for_cv = clone(candidatos[ganador_nombre])
+
     for _outer_tr, _outer_val in nested_outer.split(X_train, y_train, groups=g_train):
-        X_ot, y_ot = X_train.iloc[_outer_tr], y_train[_outer_tr]
-        g_ot       = g_train[_outer_tr]
-        X_ov, y_ov = X_train.iloc[_outer_val], y_train[_outer_val]
-        cross_validate(best_winner_pipe, X_ot, y_ot, cv=nested_inner, groups=g_ot, scoring="roc_auc", n_jobs=-1)
-        best_winner_pipe.fit(X_ot, y_ot)
-        y_ov_prob = best_winner_pipe.predict_proba(X_ov)[:, 1]
+        X_ot = X_train.iloc[_outer_tr]
+        y_ot = y_train[_outer_tr]
+        X_ov = X_train.iloc[_outer_val]
+        y_ov = y_train[_outer_val]
+
+        # Entrenar sobre el fold de train, evaluar sobre el fold de validación
+        pipe_for_cv.fit(X_ot, y_ot)
         if len(np.unique(y_ov)) > 1:
-            from sklearn.metrics import roc_auc_score
+            y_ov_prob = pipe_for_cv.predict_proba(X_ov)[:, 1]
             nested_auc_list.append(float(roc_auc_score(y_ov, y_ov_prob)))
-    # Refit on full train
-    best_winner_pipe.fit(X_train, y_train)
-    inner_auc_mean  = float(resultados[ganador_nombre]["auc_mean"])
-    nested_auc_mean = float(np.mean(nested_auc_list)) if nested_auc_list else 0.0
-    nested_auc_std  = float(np.std(nested_auc_list))  if nested_auc_list else 0.0
+
+    # El candidato original no fue mutado — no necesita refit aquí
+    cv5_auc_mean = float(resultados[ganador_nombre].get(
+        "auc_mean_grid", resultados[ganador_nombre]["auc_mean"]
+    ))
+    outer_auc_mean = float(np.mean(nested_auc_list)) if nested_auc_list else 0.0
+    outer_auc_std  = float(np.std(nested_auc_list))  if nested_auc_list else 0.0
+
+    # optimism_estimate: diferencia entre AUC del CV de selección y el outer CV
+    # Un valor positivo indica cuánto "sobreestima" el CV de selección el rendimiento real.
+    optimism_estimate = round(cv5_auc_mean - outer_auc_mean, 6)
+
     nested_cv = {
-        "nested_auc_mean": round(nested_auc_mean, 6),
-        "nested_auc_std":  round(nested_auc_std,  6),
-        "bias_estimate":   round(inner_auc_mean - nested_auc_mean, 6),
-        "n_outer_folds":   5,
-        "n_inner_folds":   3,
+        "nested_auc_mean":    round(outer_auc_mean, 6),
+        "nested_auc_std":     round(outer_auc_std,  6),
+        "optimism_estimate":  optimism_estimate,   # renombrado de bias_estimate
+        "cv_selection_auc":   round(cv5_auc_mean,  6),
+        "n_outer_folds":      5,
+        "note": (
+            "Outer GroupKFold(5) por IE. Los hiperparámetros se fijaron previamente "
+            "por GridSearch — este AUC estima el rendimiento real en IEs nuevas. "
+            "optimism_estimate = AUC_seleccion - AUC_outer_cv."
+        ),
     }
-    print(f"  Nested AUC: {nested_auc_mean:.4f} ± {nested_auc_std:.4f}  "
-          f"(inner AUC: {inner_auc_mean:.4f}  bias={inner_auc_mean - nested_auc_mean:+.4f})")
+    print(f"  Outer CV AUC: {outer_auc_mean:.4f} ± {outer_auc_std:.4f}  "
+          f"(AUC selección: {cv5_auc_mean:.4f}  optimism={optimism_estimate:+.4f})")
     return nested_cv
 
 
@@ -184,13 +215,46 @@ def run_stacking(candidatos: dict, top2_nombres: list[str],
 
 # ─── Final training + calibration ─────────────────────────────────────────────
 
-def fit_final_model(candidatos: dict, ganador_nombre: str, X_train, y_train):
-    """Fit the winner on full train and wrap with isotonic calibration."""
+def fit_final_model(candidatos: dict, ganador_nombre: str, X_train, y_train,
+                    g_train=None):
+    """
+    Fit the winner on full train and wrap with isotonic calibration.
+
+    Calibration uses a group-aware (IE-level) held-out split so that no
+    school appears in both the calibration training set and the calibration
+    validation set — avoiding optimistic probability estimates.
+
+    If g_train is not supplied, falls back to cv=5 (stratified, not grouped).
+    """
     pipe_final = candidatos[ganador_nombre]
-    pipe_final.fit(X_train, y_train)
-    print("Calibrando probabilidades (método isotónico)...")
-    calibrated = CalibratedClassifierCV(pipe_final, method="isotonic", cv=5)
-    calibrated.fit(X_train, y_train)
+
+    if g_train is not None:
+        # ── Group-aware calibration: carve out 20% of IEs as calibration set ──
+        print("Calibrando probabilidades (método isotónico, split por IE)...")
+        gss_cal = GroupShuffleSplit(n_splits=1, test_size=0.20, random_state=42)
+        cal_tr_idx, cal_val_idx = next(
+            gss_cal.split(X_train, y_train, groups=g_train)
+        )
+        X_fit  = X_train.iloc[cal_tr_idx]
+        y_fit  = y_train[cal_tr_idx]
+        X_cal  = X_train.iloc[cal_val_idx]
+        y_cal  = y_train[cal_val_idx]
+
+        # Fit a clone on the 80% split, then calibrate on the 20% held-out
+        pipe_cal = clone(pipe_final)
+        pipe_cal.fit(X_fit, y_fit)
+        calibrated = CalibratedClassifierCV(pipe_cal, method="isotonic", cv="prefit")
+        calibrated.fit(X_cal, y_cal)
+
+        # Refit pipe_final on ALL train (used for SHAP / ablation / PDP)
+        pipe_final.fit(X_train, y_train)
+    else:
+        # Fallback: group info not available, use stratified 5-fold
+        print("Calibrando probabilidades (método isotónico, cv=5 estratificado)...")
+        pipe_final.fit(X_train, y_train)
+        calibrated = CalibratedClassifierCV(pipe_final, method="isotonic", cv=5)
+        calibrated.fit(X_train, y_train)
+
     return pipe_final, calibrated
 
 

@@ -181,19 +181,19 @@ export function EstudianteView({
                     ¿Por qué está en riesgo?
                   </div>
                   {shapLoading ? (
-                    <div className="model-note" style={{ textAlign: "center", padding: "8px 0" }}>Calculando explicación del modelo...</div>
+                    <div className="model-note" style={{ textAlign: "center", padding: "8px 0" }}>Calculando factores de riesgo...</div>
                   ) : shapData && shapData.id_estudiante === selected.id ? (
                     <>
                       <div className="model-note" style={{ marginBottom: 6 }}>
-                        Contribución de cada factor — rojo sube el riesgo, verde lo reduce.
-                        Probabilidad base: <strong>{pct(shapData.base_probabilidad)}</strong>
+                        Contribución de cada factor al riesgo — rojo lo sube, verde lo reduce.
+                        Probabilidad base del modelo: <strong>{pct(shapData.base_probabilidad)}</strong>
                       </div>
                       {shapData.contributions.map((c) => (
                         <ShapBar key={c.feature} contrib={c} />
                       ))}
                     </>
                   ) : (
-                    <div className="model-note">Cargando explicación SHAP...</div>
+                    <div className="model-note">Cargando análisis de factores...</div>
                   )}
                 </div>
               )}

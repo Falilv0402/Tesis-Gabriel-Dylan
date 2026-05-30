@@ -89,21 +89,30 @@ export function useStudents(
     };
   }
 
+  // El EM 2022 almacena IE como entero (249), pero el perfil lo guarda
+  // con cero a la izquierda ("0249"). Normalizamos quitando ceros iniciales.
+  const ieParaFiltro = profileCodigoIe
+    ? String(parseInt(profileCodigoIe, 10))  // "0249" → "249"
+    : null;
+
+  // Tanto director como coordinador deben ver solo su IE
+  const isDirectorRole = role === "director" || role === "coordinador";
+
   function buildDatasetQuery(offset = 0) {
     const params = new URLSearchParams({ limit: "1000", offset: String(offset) });
-    if (risk    !== "Todos") params.set("nivel",    risk);
+    if (risk     !== "Todos") params.set("nivel",    risk);
     if (distrito !== "Todos") params.set("distrito", distrito);
-    if (sexo    !== "Todos") params.set("sexo",     sexo);
-    if (role === "director" && profileCodigoIe) params.set("id_ie", profileCodigoIe);
+    if (sexo     !== "Todos") params.set("sexo",     sexo);
+    if (isDirectorRole && ieParaFiltro) params.set("id_ie", ieParaFiltro);
     return params;
   }
 
   function buildSummaryQuery() {
     const params = new URLSearchParams();
-    if (risk    !== "Todos") params.set("nivel",    risk);
+    if (risk     !== "Todos") params.set("nivel",    risk);
     if (distrito !== "Todos") params.set("distrito", distrito);
-    if (sexo    !== "Todos") params.set("sexo",     sexo);
-    if (role === "director" && profileCodigoIe) params.set("id_ie", profileCodigoIe);
+    if (sexo     !== "Todos") params.set("sexo",     sexo);
+    if (isDirectorRole && ieParaFiltro) params.set("id_ie", ieParaFiltro);
     return params;
   }
 
@@ -200,11 +209,12 @@ export function useStudents(
   async function loadMilestones(studentId: string) {
     if (!session) return;
     setIsLoadingMilestones(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("plan_hitos")
       .select("id, texto, fecha_objetivo, completado, autor_id, profiles(nombre, email)")
       .eq("estudiante_id", studentId)
       .order("created_at", { ascending: true });
+    if (error) { toast("Error al cargar el plan de hitos.", "error"); setIsLoadingMilestones(false); return; }
     if (data) {
       setPlanMilestones(
         data.map((m) => {
@@ -306,6 +316,10 @@ export function useStudents(
     [students, thresholdHigh, thresholdMedium]
   );
 
+  // Fix #8: `segment` y `search` se aplican en cliente sobre el dataset ya cargado.
+  // Los filtros `risk`, `distrito`, `sexo` se envían al backend (loadStudents).
+  // Esto es intencional: segment/search son exploración rápida sin re-fetch;
+  // risk/distrito/sexo reducen el volumen descargado cuando el dataset es grande.
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return classifiedStudents
@@ -357,9 +371,10 @@ export function useStudents(
     return { bySex };
   }, [classifiedStudents]);
 
-  // Auto-filter by district for directors
+  // Auto-filter by district for directors AND coordinators
   useEffect(() => {
-    if (role === "director" && profileDistrito) setDistrito(profileDistrito);
+    const isDir = role === "director" || role === "coordinador";
+    if (isDir && profileDistrito) setDistrito(profileDistrito);
   }, [role, profileDistrito]);
 
   // Reload students when filters change

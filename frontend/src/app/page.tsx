@@ -29,8 +29,10 @@ import { DatosView } from "@/views/DatosView";
 import { ModeloView } from "@/views/ModeloView";
 import { ReportesView } from "@/views/ReportesView";
 import { UsuariosView } from "@/views/UsuariosView";
+import { MiColegioView } from "@/views/MiColegioView";
+import { useMiColegio } from "@/hooks/useMiColegio";
 
-import type { Tab } from "@/types";
+import type { Tab, UserRole } from "@/types";
 
 export default function Page() {
   // ── Core UI state ─────────────────────────────────────────────────
@@ -54,6 +56,8 @@ export default function Page() {
     admin.apiConnected, admin.setApiConnected,
     toast, auth.insertAudit
   );
+  const miColegio = useMiColegio(auth.profileCodigoIe);
+
   const interventions = useInterventions(
     auth.session, students.selected,
     auth.profileCodigoIe, auth.profileDistrito,
@@ -63,7 +67,7 @@ export default function Page() {
   // ── Navigation ────────────────────────────────────────────────────
   const notifCount4Nav = interventions.interventions.filter(i => i.estado === "pendiente").length;
 
-  const directorTabs   = ["dashboard", "estudiante", "reportes", "intervenciones"]; // también coordinador
+  const directorTabs   = ["dashboard", "estudiante", "reportes", "intervenciones", "micolegio"]; // también coordinador
   const adminTabs      = ["usuarios", "datos"];
   const superadminTabs = ["usuarios", "datos", "modelo"];
 
@@ -72,8 +76,9 @@ export default function Page() {
   const isDirector   = auth.role === "director";
   const isDirectorRole = auth.role === "director" || auth.role === "coordinador";
 
+  // Fix #7: incluir "coordinador" en el cast — antes era excluido silenciosamente
   const visibleNav = navItems.filter((item) =>
-    item.roles.includes(auth.role as "superadmin" | "admin" | "director")
+    item.roles.includes(auth.role as UserRole)
   );
 
   // Redirige al primer tab visible cuando el rol carga y el tab actual no es accesible
@@ -120,9 +125,17 @@ export default function Page() {
     try {
       const response = await fetch(`${apiUrl}/v1/modelo/reentrenamiento`, { method: "POST" });
       const payload = await response.json();
-      modelData.setModelMessage(response.ok ? "Modelo reentrenado correctamente." : payload.detail);
-      await modelData.loadModelMetrics();
-      await students.loadStudents();
+      if (response.ok) {
+        modelData.setModelMessage("Modelo reentrenado correctamente.");
+        await modelData.loadModelMetrics();
+        await students.loadStudents();
+        // Fix #11: resetear umbrales a defaults — el modelo nuevo puede tener distribución diferente
+        modelData.setThresholdHigh(70);
+        modelData.setThresholdMedium(45);
+        toast("Modelo actualizado. Umbrales restablecidos a 70% / 45%.", "success");
+      } else {
+        modelData.setModelMessage(payload.detail ?? "Error al reentrenar.");
+      }
     } catch {
       modelData.setModelMessage("No se pudo reentrenar. Revisa que FastAPI este activo.");
     }
@@ -351,6 +364,22 @@ export default function Page() {
             />
           )}
 
+          {isDirectorRole && tab === "micolegio" && (
+            <MiColegioView
+              codigoIe={auth.profileCodigoIe}
+              alumnos={miColegio.alumnos}
+              resumen={miColegio.resumen}
+              isLoading={miColegio.isLoading}
+              error={miColegio.error}
+              salonFilter={miColegio.salonFilter}
+              setSalonFilter={miColegio.setSalonFilter}
+              nivelFilter={miColegio.nivelFilter}
+              setNivelFilter={miColegio.setNivelFilter}
+              salones={miColegio.salones}
+              onRefresh={() => void miColegio.loadAlumnos()}
+            />
+          )}
+
           {isDirectorRole && tab === "reportes" && (
             <ReportesView
               summary={students.summary}
@@ -363,6 +392,8 @@ export default function Page() {
               exportCsv={handleExportCsv}
               exportXlsx={handleExportXlsx}
               exportPdf={handleExportPdf}
+              miColegioAlumnos={miColegio.alumnos}
+              miColegioResumen={miColegio.resumen}
             />
           )}
 

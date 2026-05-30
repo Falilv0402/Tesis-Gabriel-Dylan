@@ -28,11 +28,12 @@ export function useAnnotations(
 
   async function loadAnnotations(studentId: string) {
     if (!session) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("anotaciones")
       .select("id, estudiante_id, contenido, created_at, autor_id, profiles(nombre, email)")
       .eq("estudiante_id", studentId)
       .order("created_at", { ascending: false });
+    if (error) { toast("Error al cargar anotaciones.", "error"); return; }
     if (data) {
       setAnnotations(
         data.map((a: Record<string, unknown>) => {

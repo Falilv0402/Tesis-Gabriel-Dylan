@@ -164,7 +164,8 @@ def main() -> None:
     print("\n" + "=" * 65)
     print(f"  ENTRENAMIENTO FINAL — {ganador_nombre}")
     print("=" * 65)
-    pipe_final, calibrated = fit_final_model(candidatos, ganador_nombre, X_train, y_train)
+    pipe_final, calibrated = fit_final_model(candidatos, ganador_nombre, X_train, y_train,
+                                              g_train=g_train)
     prep_fitted = pipe_final.named_steps["prep"]
 
     # ── 11. Stability analysis (10 seeds) ────────────────────────────────────

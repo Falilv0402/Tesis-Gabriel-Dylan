@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { Tab } from "@/types";
 import { supabase } from "@/lib/supabase";
@@ -119,21 +119,33 @@ export function useAdmin(
       options: { data: { nombre: newUserNombre, rol: rolEfectivo } },
     });
     if (!error && signUpData.user) {
+      const uid = signUpData.user.id;
+
       if (ieEfectiva) {
-        // Para director → guarda como distrito+codigo_ie; para admin → solo codigo_ie
-        const updateField = rolEfectivo === "admin"
-          ? { codigo_ie: ieEfectiva }
+        // Fix #4a: campo correcto por rol (director necesita codigo_ie Y distrito)
+        const updateField = rolEfectivo === "director" || rolEfectivo === "coordinador"
+          ? { codigo_ie: ieEfectiva, distrito: newUserDistrito || null }
           : { codigo_ie: ieEfectiva };
-        setTimeout(async () => {
-          await supabase.from("profiles").update(updateField)
-            .eq("id", signUpData.user!.id);
-        }, 1200);
+
+        // Fix #4b: polling hasta que el trigger cree el perfil (máx ~5s)
+        let actualizado = false;
+        for (let i = 0; i < 12; i++) {
+          await new Promise((r) => setTimeout(r, 400));
+          const { data: rows, error: upErr } = await supabase
+            .from("profiles")
+            .update(updateField)
+            .eq("id", uid)
+            .select("id");
+          if (!upErr && rows && rows.length > 0) { actualizado = true; break; }
+        }
+        if (!actualizado) toast("El perfil se creó pero no se pudo asignar el colegio.", "error");
       }
+
       await insertAudit("Crear usuario", "profiles", { email: newUserEmail, rol: newUserRol, asignacion: newUserDistrito });
       setShowCreateUser(false);
       setNewUserEmail(""); setNewUserNombre(""); setNewUserPwd(""); setNewUserRol("director"); setNewUserDistrito("");
       toast(`Usuario ${newUserEmail} creado como ${newUserRol}.`);
-      setTimeout(() => void loadDbUsers(), 1500);
+      void loadDbUsers();
     } else if (error) {
       toast(translateAuthError(error.message), "error");
     }
@@ -208,13 +220,18 @@ export function useAdmin(
     }
   }
 
-  // Load DB users/audit when admin opens the tab
+  // Fix #15: useCallback estabiliza referencias para evitar stale closures
+  const stableLoadUsers = useCallback(() => void loadDbUsers(), [role, profileCodigoIe]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stableLoadAudit = useCallback(() => void loadDbAudit(), [role, profileCodigoIe]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load DB users/audit when superadmin or admin opens the tab
   useEffect(() => {
-    if (role === "admin" && tab === "usuarios" && session) {
-      void loadDbUsers();
-      void loadDbAudit();
+    const isAdminRole = role === "admin" || role === "superadmin";
+    if (isAdminRole && tab === "usuarios" && session) {
+      stableLoadUsers();
+      stableLoadAudit();
     }
-  }, [role, tab, session]);
+  }, [role, tab, session, stableLoadUsers, stableLoadAudit]);
 
   return {
     dbUsers, dbAudit,

@@ -59,7 +59,7 @@ export function exportXlsx(
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), "Estudiantes Riesgo");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen");
-  XLSX.writeFile(wb, `SARA_estudiantes_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  XLSX.writeFile(wb, `SATRA_estudiantes_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 // ── PDF ───────────────────────────────────────────────────────────────────────
@@ -122,5 +122,5 @@ export function exportPdf(
     pageW / 2, pageH - 4, { align: "center" }
   );
 
-  doc.save(`SARA_reporte_${new Date().toISOString().slice(0, 10)}.pdf`);
+  doc.save(`SATRA_reporte_${new Date().toISOString().slice(0, 10)}.pdf`);
 }

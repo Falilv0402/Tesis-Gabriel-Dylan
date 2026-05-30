@@ -198,4 +198,32 @@ export type ShapData = {
   contributions: ShapContribution[];
 };
 
-export type Tab = "dashboard" | "estudiante" | "intervenciones" | "datos" | "modelo" | "reportes" | "usuarios";
+export type Tab = "dashboard" | "estudiante" | "intervenciones" | "datos" | "modelo" | "reportes" | "usuarios" | "micolegio";
+
+// ── Mi Colegio ────────────────────────────────────────────────────────────────
+export type AlumnoColegio = {
+  n_alumno:        number;
+  nombre:          string;
+  salon:           string;
+  codigo_ie:       string;
+  nivel_riesgo:    "ALTO" | "MEDIO" | "BAJO";
+  prob_riesgo:     number;
+  riesgo:          number;
+  n_materias_c:    number;
+  promedio_materias?: number;
+  pp_matematica?:  number | null;
+  pp_comunicacion?: number | null;
+  pp_cta?:         number | null;
+  conducta_promedio?: number | null;
+};
+
+export type ColegioResumen = {
+  codigo_ie:       string;
+  nombre_colegio?: string;
+  n_alumnos:       number;
+  n_riesgo:        number;
+  pct_riesgo:      number;
+  por_nivel:       Record<"ALTO" | "MEDIO" | "BAJO", number>;
+  por_salon:       Record<string, Record<string, number>>;
+  trained_at?:     string;
+};
