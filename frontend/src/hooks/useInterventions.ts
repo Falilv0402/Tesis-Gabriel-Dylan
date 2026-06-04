@@ -133,6 +133,8 @@ export function useInterventions(
   async function sendTeamAlert() {
     if (!selected || !session) return;
     setIsSendingAlert(true);
+
+    // Obtener destinatarios del mismo distrito o IE
     let query = supabase
       .from("profiles")
       .select("email, nombre")
@@ -153,25 +155,76 @@ export function useInterventions(
       return;
     }
 
-    const to      = recipients.map((r) => r.email).join(",");
-    const subject = encodeURIComponent(`[SATRA] Alerta de riesgo académico — Estudiante ${shortId(selected.id)} · ${selected.distrito}`);
-    const body    = encodeURIComponent(
-      `Estimado/a equipo,\n\n` +
-      `Se ha registrado una intervención sobre el siguiente estudiante:\n\n` +
-      `  • Estudiante:       ${shortId(selected.id)}\n` +
-      `  • Nivel de riesgo:  ${selected.nivel_riesgo}\n` +
-      `  • Probabilidad:     ${(selected.probabilidad_riesgo * 100).toFixed(1)}%\n` +
-      `  • Tipo de alerta:   ${selected.tipo_riesgo}\n` +
-      `  • Distrito:         ${selected.distrito}\n` +
-      `  • Puntaje Lectura:  ${selected.M500_L.toFixed(0)}\n` +
-      `  • Puntaje Ciencias: ${selected.M500_CN.toFixed(0)}\n` +
-      `  • ISE:              ${selected.ise.toFixed(2)}\n\n` +
-      `Acción recomendada: ${recommendation(selected)}\n\n` +
-      `Por favor coordinen el seguimiento de este caso.\n\n` +
-      `— Sistema SATRA · ${new Date().toLocaleDateString("es-PE", { dateStyle: "long" })}`
-    );
-    window.open(`mailto:${to}?subject=${subject}&body=${body}`);
-    toast(`Correo preparado para ${recipients.length} destinatario${recipients.length > 1 ? "s" : ""}.`, "success");
+    const to      = recipients.map((r) => r.email);
+    const subject = `[SATRA] Alerta de riesgo académico — Estudiante ···${shortId(selected.id)} · ${selected.distrito}`;
+    const accion  = recommendation(selected);
+    const fecha   = new Date().toLocaleDateString("es-PE", { dateStyle: "long" });
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+        <div style="background:#0f1f3d;padding:20px 24px;border-radius:8px 8px 0 0">
+          <h2 style="color:#fff;margin:0;font-size:18px">⚠️ Alerta de Riesgo Académico</h2>
+          <p style="color:#94a3b8;margin:4px 0 0;font-size:13px">Sistema SATRA · UPC · P20261012</p>
+        </div>
+        <div style="background:#f8fafc;padding:24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">
+          <p style="margin:0 0 16px;color:#1e293b">Estimado/a equipo,</p>
+          <p style="margin:0 0 16px;color:#475569">
+            Se ha registrado una intervención sobre el siguiente estudiante en el sistema SATRA:
+          </p>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+            ${[
+              ["Estudiante",       `···${shortId(selected.id)}`],
+              ["Nivel de riesgo",  selected.nivel_riesgo],
+              ["Probabilidad",     `${(selected.probabilidad_riesgo * 100).toFixed(1)}%`],
+              ["Tipo de alerta",   selected.tipo_riesgo],
+              ["Distrito",         selected.distrito],
+              ["Puntaje Lectura",  selected.M500_L.toFixed(0)],
+              ["Puntaje Ciencias", selected.M500_CN.toFixed(0)],
+              ["ISE",              selected.ise.toFixed(2)],
+            ].map(([k, v]) => `
+              <tr>
+                <td style="padding:8px 12px;background:#f1f5f9;border:1px solid #e2e8f0;font-weight:600;font-size:13px;color:#374151;width:40%">${k}</td>
+                <td style="padding:8px 12px;background:#fff;border:1px solid #e2e8f0;font-size:13px;color:#1e293b">${v}</td>
+              </tr>`).join("")}
+          </table>
+          <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:12px 16px;margin-bottom:20px">
+            <strong style="color:#92400e;font-size:13px">Acción recomendada:</strong>
+            <p style="color:#78350f;margin:4px 0 0;font-size:13px">${accion}</p>
+          </div>
+          <p style="color:#64748b;font-size:12px;margin:0">
+            Por favor coordinen el seguimiento de este caso.<br>
+            — Sistema SATRA · ${fecha}
+          </p>
+        </div>
+      </div>
+    `;
+
+    try {
+      // Llamar a la Edge Function de Supabase (API key de Resend queda en el servidor)
+      const { data: fnData, error: fnError } = await supabase.functions.invoke("send-alert", {
+        body: { to, subject, html },
+      });
+
+      if (fnError || !fnData?.ok) {
+        // Fallback al mailto: si la Edge Function falla
+        console.warn("Edge Function falló, usando mailto fallback:", fnError);
+        const mailto = `mailto:${to.join(",")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(
+          `Estimado equipo,\n\nSe requiere intervención para el estudiante ···${shortId(selected.id)}.\n` +
+          `Nivel: ${selected.nivel_riesgo} (${(selected.probabilidad_riesgo * 100).toFixed(1)}%)\n\n` +
+          `Acción recomendada: ${accion}\n\n— SATRA · ${fecha}`
+        )}`;
+        window.open(mailto);
+        toast(`Correo preparado para ${recipients.length} destinatario${recipients.length > 1 ? "s" : ""}. (modo manual)`, "info");
+      } else {
+        toast(`Alerta enviada automáticamente a ${recipients.length} destinatario${recipients.length > 1 ? "s" : ""}.`, "success");
+      }
+    } catch {
+      // Si hay error de conexión, abrir mailto como fallback
+      const mailto = `mailto:${to.join(",")}?subject=${encodeURIComponent(subject)}`;
+      window.open(mailto);
+      toast("Email preparado en tu cliente de correo.", "info");
+    }
+
     await insertAudit("Enviar alerta por email", "intervenciones", {
       estudiante: selected.id, destinatarios: recipients.length, scope: notifScope,
     });
