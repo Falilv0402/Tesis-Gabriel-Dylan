@@ -5,7 +5,6 @@ import {
   BarChart3,
   Database,
   FileText,
-  School,
   UserCog,
   Users,
 } from "lucide-react";
@@ -17,7 +16,6 @@ export const navItems: { id: Tab; label: string; icon: typeof Activity; roles: U
   { id: "estudiante",     label: "Estudiante",    icon: UserCog,       roles: ["director", "coordinador"] },
   { id: "intervenciones", label: "Intervenciones",icon: AlertTriangle,  roles: ["director", "coordinador"] },
   { id: "reportes",       label: "Reportes",      icon: FileText,      roles: ["director", "coordinador"] },
-  { id: "micolegio",     label: "Mi Colegio",    icon: School,        roles: ["director", "coordinador"] },
   { id: "usuarios",       label: "Usuarios",      icon: Users,         roles: ["superadmin", "admin"] },
   { id: "datos",          label: "Datos",          icon: Database,      roles: ["superadmin", "admin"] },
   { id: "modelo",         label: "Modelo ML",     icon: Activity,      roles: ["superadmin"] },

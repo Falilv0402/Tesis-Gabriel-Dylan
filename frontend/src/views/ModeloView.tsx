@@ -143,12 +143,6 @@ export function ModeloView({
           )}
           <p className="audit-line">{modelMessage}</p>
         </Panel>
-        <Panel title="Importancia global — SHAP">
-          {topFactors.map((item) => (
-            <Bar key={item.feature} label={featureLabels[item.feature] ?? item.feature} value={item.importancia / maxImportance} />
-          ))}
-          <div className="model-note">Valores SHAP normalizados respecto al predictor dominante.</div>
-        </Panel>
       </section>
 
       {/* ── model-grid ─────────────────────────────────────────── */}
@@ -187,105 +181,6 @@ export function ModeloView({
         </Panel>
       </section>
 
-      {/* ── Calibración ─────────────────────────────────────────── */}
-      <section className="two-col">
-        <Panel title="Calibración del modelo (Reliability diagram)">
-          {evaluation.calibration_prob_pred && evaluation.calibration_prob_pred.length > 0 ? (
-            <>
-              <ResponsiveContainer width="100%" height={260}>
-                <LineChart
-                  data={evaluation.calibration_prob_pred.map((p, i) => ({
-                    predicha: +(p * 100).toFixed(1),
-                    observada: +((evaluation.calibration_prob_true?.[i] ?? 0) * 100).toFixed(1),
-                    perfecta: +(p * 100).toFixed(1),
-                    observada_unif: diagnostico?.calibration_prob_pred_uniform?.[i] !== undefined
-                      ? +((diagnostico.calibration_prob_true_uniform?.[i] ?? 0) * 100).toFixed(1)
-                      : undefined,
-                  }))}
-                  margin={{ top: 10, right: 16, left: -8, bottom: 4 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="predicha" type="number" domain={[0, 100]} unit="%"
-                    tick={{ fontSize: 11, fill: "var(--text-muted)" }}
-                    label={{ value: "Probabilidad predicha", position: "insideBottom", offset: -2, style: { fontSize: 11 } }} />
-                  <YAxis type="number" domain={[0, 100]} unit="%"
-                    tick={{ fontSize: 11, fill: "var(--text-muted)" }}
-                    label={{ value: "Frecuencia observada", angle: -90, position: "insideLeft", style: { fontSize: 11, textAnchor: "middle" } }} />
-                  <Tooltip formatter={(v) => `${Number(v).toFixed(1)}%`} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} iconType="line" />
-                  <Line type="monotone" dataKey="perfecta" name="Calibración perfecta" stroke="#94a3b8" strokeDasharray="5 5" strokeWidth={1.5} dot={false} />
-                  <Line type="monotone" dataKey="observada" name="Cuantil (modelo actual)" stroke="var(--accent)" strokeWidth={2.5} dot={{ fill: "var(--accent)", r: 4 }} activeDot={{ r: 6 }} />
-                  {diagnostico?.calibration_prob_pred_uniform && diagnostico.calibration_prob_pred_uniform.length > 0 && (
-                    <Line type="monotone" dataKey="observada_unif" name="Uniforme (bins iguales)" stroke="#7c3aed" strokeWidth={2} strokeDasharray="6 3" dot={{ fill: "#7c3aed", r: 3 }} />
-                  )}
-                </LineChart>
-              </ResponsiveContainer>
-              <div className="model-note">
-                Diagonal punteada = calibración perfecta. Azul sólido = bins por cuantil. Violeta punteado = bins uniformes.
-              </div>
-            </>
-          ) : (
-            <EmptyState message="Curva de calibración no disponible. Reentrena el modelo para generarla." />
-          )}
-        </Panel>
-
-        <Panel title="Interpretación de calibración">
-          <div className="metric-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-            <Kpi
-              label="Brier Score"
-              value={typeof metrics.brier_score === "number" ? metrics.brier_score.toFixed(4) : "—"}
-              detail="0 = perfecto · 0.25 = aleatorio"
-              tone={metrics.brier_score !== undefined ? (metrics.brier_score < 0.15 ? "low" : metrics.brier_score < 0.22 ? "medium" : "high") : undefined}
-            />
-            {typeof diagnostico?.ece === "number" && (
-              <Kpi
-                label="ECE"
-                value={diagnostico.ece.toFixed(4)}
-                detail={diagnostico.ece < 0.05 ? "✓ bien calibrado" : "⚠ recalibrar"}
-                tone={diagnostico.ece < 0.05 ? "low" : diagnostico.ece < 0.10 ? "medium" : "high"}
-              />
-            )}
-          </div>
-          {diagnostico?.hosmer_lemeshow && (
-            <div style={{
-              marginTop: 10, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)",
-              background: diagnostico.hosmer_lemeshow.p_value > 0.05 ? "var(--risk-low-bg, #f0fdf4)" : "var(--risk-high-bg, #fef2f2)",
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                <span style={{ fontWeight: 700, fontSize: 12, color: "var(--navy)" }}>Hosmer-Lemeshow test</span>
-                <span style={{
-                  fontSize: 11, fontWeight: 700, padding: "1px 8px", borderRadius: 4,
-                  background: diagnostico.hosmer_lemeshow.p_value > 0.05 ? "#22c55e" : "#dc2626", color: "#fff",
-                }}>
-                  {diagnostico.hosmer_lemeshow.p_value > 0.05 ? "✓ No evidencia de mala calibración" : "⚠ Posible mala calibración"}
-                </span>
-              </div>
-              <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--text-muted)" }}>
-                <span>χ² = <strong>{fmt(diagnostico.hosmer_lemeshow.chi2, 3)}</strong></span>
-                <span>p = <strong style={{ color: diagnostico.hosmer_lemeshow.p_value > 0.05 ? "#16a34a" : "#dc2626" }}>{fmt(diagnostico.hosmer_lemeshow.p_value, 4)}</strong></span>
-                <span>df = <strong>{diagnostico.hosmer_lemeshow.df}</strong></span>
-              </div>
-              <div className="model-note" style={{ marginTop: 4, fontSize: 10 }}>
-                H-L test: H₀ = modelo bien calibrado. p &gt; 0.05 = no rechazamos H₀ (buen ajuste).
-              </div>
-            </div>
-          )}
-          {typeof diagnostico?.mce === "number" && (
-            <div className="model-note" style={{ marginTop: 6 }}>
-              <strong>MCE (Max Calibration Error):</strong> {diagnostico.mce.toFixed(4)}
-              <span style={{ marginLeft: 8, color: diagnostico.mce < 0.10 ? "var(--green)" : "var(--amber)", fontWeight: 600 }}>
-                {diagnostico.mce < 0.10 ? "Aceptable" : "Revisar bins de alta probabilidad"}
-              </span>
-            </div>
-          )}
-          <div className="model-note" style={{ lineHeight: 1.6, marginTop: 10 }}>
-            <strong style={{ color: "var(--navy)" }}>¿Qué significa esto?</strong><br />
-            Una probabilidad del <strong>70%</strong> debe corresponder a un grupo donde efectivamente ~70 de cada 100 estudiantes están en riesgo.
-            <br /><br />
-            <strong>ECE</strong> cuantifica formalmente esta brecha. <strong>ECE &lt; 0.05</strong> se considera bien calibrado.
-          </div>
-        </Panel>
-      </section>
 
       {/* ── Paneles avanzados de diagnóstico (sólo si hay datos) ── */}
       {diagnostico && (

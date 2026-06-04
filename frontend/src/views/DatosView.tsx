@@ -42,6 +42,12 @@ interface DatosViewProps {
   onUploadColegioExcels: (files: FileList, ie: string) => void;
   role: string;
   profileCodigoIe: string | null;
+  colegioModelStats: {
+    nombre_colegio: string; n_alumnos: number; n_riesgo: number;
+    pct_riesgo: number; auc_cv: number | null; auc_train: number | null;
+    modo_prediccion: string; salones: string[]; trained_at: string | null;
+    por_nivel: Record<string, number>;
+  } | null;
 }
 
 export function DatosView({
@@ -55,6 +61,7 @@ export function DatosView({
   colegioUploadStatus, colegioUploadMsg, colegioUploadResult,
   onUploadColegioExcels,
   role, profileCodigoIe,
+  colegioModelStats,
 }: DatosViewProps) {
 
   // Si el admin tiene un colegio asignado, usarlo por defecto
@@ -69,6 +76,57 @@ export function DatosView({
 
   return (
     <section className="two-col">
+
+      {/* ── Panel 0: Estadísticas del modelo actual ─────────────────────── */}
+      {colegioModelStats && (
+        <Panel title={`Modelo activo — ${colegioModelStats.nombre_colegio}`}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+
+            {/* Métricas principales */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+              <Kpi label="Alumnos"   value={colegioModelStats.n_alumnos}           detail="en el modelo" />
+              <Kpi label="En riesgo" value={colegioModelStats.n_riesgo}            detail={`${colegioModelStats.pct_riesgo}% del total`} tone={colegioModelStats.n_riesgo > 0 ? "high" : undefined} />
+              <Kpi label="AUC CV"    value={colegioModelStats.auc_cv != null ? `${(colegioModelStats.auc_cv * 100).toFixed(1)}%` : "—"} detail="5-fold estratificado" tone={colegioModelStats.auc_cv != null && colegioModelStats.auc_cv >= 0.80 ? "low" : "medium"} />
+            </div>
+
+            {/* Distribución por nivel */}
+            {Object.keys(colegioModelStats.por_nivel).length > 0 && (
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 700, color: "var(--navy)", marginBottom: 4, textTransform: "uppercase" }}>Distribución</p>
+                <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", gap: 1 }}>
+                  {[["ALTO","#dc2626"],["MEDIO","#d97706"],["BAJO","#16a34a"]].map(([nivel, color]) =>
+                    (colegioModelStats.por_nivel[nivel] ?? 0) > 0 ? (
+                      <div key={nivel} style={{ flex: colegioModelStats.por_nivel[nivel], background: color }}
+                        title={`${nivel}: ${colegioModelStats.por_nivel[nivel]}`} />
+                    ) : null
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 12, marginTop: 4, fontSize: 11, color: "var(--text-muted)" }}>
+                  {[["ALTO","#dc2626"],["MEDIO","#d97706"],["BAJO","#16a34a"]].map(([nivel, color]) => (
+                    <span key={nivel} style={{ color }}>
+                      {nivel}: <strong>{colegioModelStats.por_nivel[nivel] ?? 0}</strong>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Modo y features */}
+            <div style={{ padding: "8px 10px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 8, fontSize: 12 }}>
+              <strong style={{ color: "#0369a1" }}>Modo:</strong>{" "}
+              <span style={{ color: "#0369a1" }}>{colegioModelStats.modo_prediccion}</span>
+            </div>
+
+            {/* Salones y fecha */}
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)" }}>
+              <span>Salones: {colegioModelStats.salones.join(" · ")}</span>
+              {colegioModelStats.trained_at && (
+                <span>Entrenado: {new Date(colegioModelStats.trained_at).toLocaleDateString("es-PE", { dateStyle: "medium" })}</span>
+              )}
+            </div>
+          </div>
+        </Panel>
+      )}
 
       {/* ── Panel 1: Carga Excel del colegio ───────────────────────────── */}
       <Panel title="Datos del colegio — Excel interno">

@@ -55,6 +55,47 @@ export function useAdmin(
     n_alumnos: number; n_riesgo: number; pct_riesgo: number;
     nombre_colegio: string; salones: string[];
   } | null>(null);
+
+  // Estadísticas del modelo actual del colegio (se cargan al abrir Datos)
+  const [colegioModelStats, setColegioModelStats] = useState<{
+    nombre_colegio: string;
+    n_alumnos: number;
+    n_riesgo: number;
+    pct_riesgo: number;
+    auc_cv: number | null;
+    auc_train: number | null;
+    modo_prediccion: string;
+    salones: string[];
+    trained_at: string | null;
+    por_nivel: Record<string, number>;
+  } | null>(null);
+
+  async function loadColegioModelStats(ieCode: string) {
+    if (!ieCode) return;
+    try {
+      const res = await fetch(`${apiUrl}/v1/colegio/${ieCode}/resumen`);
+      if (res.ok) {
+        const data = await res.json();
+        const m = data.metricas ?? {};
+        setColegioModelStats({
+          nombre_colegio: data.nombre_colegio ?? ieCode,
+          n_alumnos:      data.n_alumnos ?? 0,
+          n_riesgo:       data.n_riesgo  ?? 0,
+          pct_riesgo:     data.pct_riesgo ?? 0,
+          auc_cv:         m.auc_cv ?? null,
+          auc_train:      m.auc_train ?? null,
+          modo_prediccion: m.modo_prediccion ?? "—",
+          salones:        m.salones ?? [],
+          trained_at:     data.trained_at ?? null,
+          por_nivel:      data.por_nivel ?? {},
+        });
+      } else {
+        setColegioModelStats(null);
+      }
+    } catch {
+      setColegioModelStats(null);
+    }
+  }
   const colegioFileRef = useRef<HTMLInputElement>(null);
 
   const [scheduleFreq, setScheduleFreq] = useState("semanal");
@@ -303,6 +344,16 @@ export function useAdmin(
     }
   }, [role, tab, session, stableLoadUsers, stableLoadAudit]);
 
+  // Cargar estadísticas del modelo del colegio cuando el admin abre la pestaña Datos
+  useEffect(() => {
+    const isAdminRole = role === "admin" || role === "superadmin";
+    if (isAdminRole && tab === "datos" && profileCodigoIe) {
+      const ie = String(parseInt(profileCodigoIe, 10));
+      void loadColegioModelStats(ie);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, tab, profileCodigoIe]);
+
   return {
     dbUsers, dbAudit,
     showCreateUser, setShowCreateUser,
@@ -322,6 +373,7 @@ export function useAdmin(
     colegioUploadIe, setColegioUploadIe,
     colegioUploadStatus, colegioUploadMsg, colegioUploadResult,
     colegioFileRef, uploadColegioExcels,
+    colegioModelStats, loadColegioModelStats,
     loadDbUsers, loadDbAudit,
     handleCreateUser, validateCsv, saveSchedule,
     desactivarUsuario, activarUsuario, updateEstadoIntervencion,

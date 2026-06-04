@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
@@ -25,12 +25,13 @@ export function useAuth(
   // ── Registration ──────────────────────────────────────────────────────────
   const [regDistrito,      setRegDistrito]      = useState("");
   const [regColegioIe,     setRegColegioIe]     = useState("");
-  const [regColegiosList,  setRegColegiosList]  = useState<{ distrito: string; id_ie: string; total_estudiantes: number }[]>([]);
+  const [regColegiosList,  setRegColegiosList]  = useState<{ distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[]>([]);
   const [ieHasDirector,    setIeHasDirector]    = useState(false);  // true si el IE ya tiene director
 
   // ── Profile state (shared with useProfile) ────────────────────────────────
   const [profileDistrito,     setProfileDistrito]     = useState<string | null>(null);
   const [profileCodigoIe,     setProfileCodigoIe]     = useState<string | null>(null);
+  const [profileNombreIe,     setProfileNombreIe]     = useState<string | null>(null);
   const [profileNombre,       setProfileNombre]       = useState<string>("");
   const [profileApellidos,    setProfileApellidos]    = useState<string>("");
   const [profileAvatarColor,  setProfileAvatarColor]  = useState<string>("");
@@ -38,7 +39,7 @@ export function useAuth(
 
   // ── Lists ─────────────────────────────────────────────────────────────────
   const [distritosList, setDistritosList] = useState<string[]>([]);
-  const [colegiosList,  setColegiosList]  = useState<{ distrito: string; id_ie: string; total_estudiantes: number }[]>([]);
+  const [colegiosList,  setColegiosList]  = useState<{ distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[]>([]);
 
   const skipOnboardingRef = useRef(false); // usado durante el registro para evitar race conditions
   const abortLoadProfile  = useRef(false); // previene setState tras logout (Fix #3)
@@ -97,6 +98,18 @@ export function useAuth(
       setProfileDistrito(distrito);
       setProfileCodigoIe(data.codigo_ie ?? null);
       setProfileNombre(data.nombre ?? "");
+
+      // Cargar nombre del colegio desde el backend si hay codigo_ie
+      if (data.codigo_ie) {
+        const ie = String(parseInt(data.codigo_ie, 10));
+        fetch(`${apiUrl}/v1/colegios`)
+          .then(r => r.ok ? r.json() : [])
+          .then((colegios: { id_ie: string; nombre_ie?: string }[]) => {
+            const match = colegios.find(c => String(parseInt(String(c.id_ie), 10)) === ie);
+            if (match?.nombre_ie) setProfileNombreIe(match.nombre_ie);
+          })
+          .catch(() => {});
+      }
       setProfileApellidos(data.apellidos ?? "");
       setProfileAvatarColor(data.avatar_color ?? "");
 
@@ -131,7 +144,7 @@ export function useAuth(
     try {
       const res = await fetch(`${apiUrl}/v1/colegios`);
       if (res.ok) {
-        const data: { distrito: string; id_ie: string; total_estudiantes: number }[] = await res.json();
+        const data: { distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[] = await res.json();
         setColegiosList(data.filter((c) => c.distrito === dist));
       }
     } catch { /* backend offline */ }
@@ -272,11 +285,22 @@ export function useAuth(
 
   useEffect(() => { void loadDistritos(); }, []);
 
+  // Precargar TODOS los colegios al inicio (necesario para el dropdown en UsuariosView)
+  useEffect(() => {
+    fetch(`${apiUrl}/v1/colegios`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: { distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[]) => {
+        setColegiosList(data);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!regDistrito) { setRegColegiosList([]); setRegColegioIe(""); return; }
     fetch(`${apiUrl}/v1/colegios`)
       .then((r) => r.ok ? r.json() : [])
-      .then((data: { distrito: string; id_ie: string; total_estudiantes: number }[]) => {
+      .then((data: { distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[]) => {
         setRegColegiosList(data.filter((c) => c.distrito === regDistrito));
         setRegColegioIe("");
       })
@@ -311,6 +335,7 @@ export function useAuth(
     regColegiosList, ieHasDirector,
     profileDistrito, setProfileDistrito,
     profileCodigoIe, setProfileCodigoIe,
+    profileNombreIe,
     profileNombre, profileApellidos,
     profileAvatarColor, setProfileAvatarColor,
     distritosList, colegiosList,

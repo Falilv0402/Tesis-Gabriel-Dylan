@@ -3,20 +3,50 @@
 Esta carpeta contiene el dataset oficial, los artefactos del modelo entrenado
 y los scripts de entrenamiento del Sistema de Alerta Temprana de Riesgo Académico.
 
-## Estructura
+## Estructura — DOS modelos independientes
 
 ```
-data/
-  em_2022_lima_privado.csv   Dataset limpio (EM 2022, Lima Metro, privado)
-  EM_2S_2022_alumnos_innominado.xlsx  Fuente original MINEDU
+modelo/
+│
+├── em2022/                        ← MODELO 1: Evaluación Muestral MINEDU
+│   ├── train.py                   Orquestador del pipeline completo
+│   ├── pipeline/
+│   │   ├── config.py              Features, SEED, restricciones monotónicas
+│   │   ├── preprocessing.py       Feature engineering (aggregates por IE)
+│   │   ├── training.py            CV, GridSearch, Stacking, calibración
+│   │   ├── evaluation.py          22 funciones: SHAP, ECE, DCA, fairness...
+│   │   ├── automl.py              FLAML + Optuna
+│   │   └── artifacts.py           Guardado de .pkl
+│   └── README.md                  Documentación del modelo EM 2022
+│
+├── colegio/                       ← MODELO 2: Datos internos del colegio
+│   ├── parse_excels.py            ETL: Excel CUBICOL → DataFrame
+│   ├── train_colegio_model.py     Entrena modelo predictivo B1-B3 → B4
+│   └── README.md                  Documentación del modelo del colegio
+│
+├── data/                          ← Datasets
+│   ├── em_2022_lima_privado.csv   Dataset EM 2022 (3,629 estudiantes)
+│   └── EM_2S_2022_...xlsx         Fuente original MINEDU
+│
+├── model/                         ← Artefactos entrenados (.pkl)
+│   ├── modelo_em.pkl              Modelo EM 2022 calibrado
+│   ├── metricas_em.pkl            Métricas completas EM 2022
+│   └── colegio_0249.pkl           Modelo Joseph And Mery (IE 249)
+│
+└── notebooks/
+    └── modelo_riesgo_academico_v2.ipynb  EDA exploratorio
+```
 
-model/
-  modelo_em.pkl              Modelo final calibrado
-  preprocessor_em.pkl        Pipeline de preprocesamiento (OrdinalEncoder + StandardScaler)
-  metricas_em.pkl            Métricas completas, SHAP, importancias, configuración
+## Diferencia entre los dos modelos
 
-notebooks/
-  modelo_riesgo_academico_v2.ipynb  EDA y análisis exploratorio
+| | Modelo EM 2022 | Modelo Colegio |
+|---|---|---|
+| **Carpeta** | `em2022/` | `colegio/` |
+| **Datos** | MINEDU, 3,629 alumnos | Notas internas, 95 alumnos |
+| **Variables** | ECE 200-800, ISE, distrito | AD/A/B/C, conducta |
+| **Target** | Nivel en examen nacional | C en 4.° bimestre |
+| **AUC** | 0.843 (test en IEs nuevas) | 0.90 (CV 5-fold) |
+| **Uso** | Benchmark poblacional | Alerta temprana del colegio |
 
 pipeline/                    Paquete modular del pipeline ML
   config.py                  Constantes: rutas, features, SEED, restricciones monotónicas

@@ -64,58 +64,8 @@ export function DiagnosticoAvanzado({
         ) : <EmptyState message="Reentrena el modelo para generar baselines." />}
       </Panel>
 
-      {/* ── Fairness + Drift ─────────────────────────────────── */}
-      <section className="two-col">
-        <Panel title="Auditoría de equidad (Fairness por subgrupo)">
-          {Object.keys(diagnostico.group_metrics).length > 0 ? (
-            <>
-              <div className="model-note" style={{ marginBottom: 8 }}>
-                <Scale size={12} style={{ verticalAlign: "middle" }} /> El modelo debe funcionar similar para todos los grupos.
-              </div>
-              <table style={{ width: "100%", fontSize: 12 }}>
-                <tbody>
-                  <tr>
-                    <th style={{ textAlign: "left" }}>Subgrupo</th>
-                    <th>n</th><th>Tasa real</th>
-                    <th>Recall <span className="ci-badge">IC95%</span></th>
-                    <th>Precisión</th>
-                    <th>AUC <span className="ci-badge">IC95%</span></th>
-                  </tr>
-                  {Object.entries(diagnostico.group_metrics).map(([k, m]) => (
-                    <tr key={k}>
-                      <td><strong>{k.replace(":", ": ")}</strong></td>
-                      <td style={{ textAlign: "center" }}>{m.n}</td>
-                      <td style={{ textAlign: "center" }}>{pct(m.tasa_real)}</td>
-                      <td style={{ textAlign: "center" }}>
-                        {pct(m.recall)}
-                        {m.recall_ci_95 && <div className="ci-range">[{pct(m.recall_ci_95[0])}–{pct(m.recall_ci_95[1])}]</div>}
-                      </td>
-                      <td style={{ textAlign: "center" }}>{pct(m.precision)}</td>
-                      <td style={{ textAlign: "center" }}>
-                        {pct(m.auc_roc)}
-                        {m.auc_ci_95 && <div className="ci-range">[{pct(m.auc_ci_95[0])}–{pct(m.auc_ci_95[1])}]</div>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {(() => {
-                const recalls = Object.values(diagnostico.group_metrics).map(m => m.recall);
-                const aucs = Object.values(diagnostico.group_metrics).map(m => m.auc_roc);
-                const recallGap = Math.max(...recalls) - Math.min(...recalls);
-                const aucGap = Math.max(...aucs) - Math.min(...aucs);
-                const status = recallGap < 0.10 && aucGap < 0.10 ? "ok" : recallGap < 0.20 && aucGap < 0.15 ? "media" : "alta";
-                return (
-                  <div className={`fairness-summary fairness-${status}`}>
-                    <strong>Gap máximo Recall:</strong> {pct(recallGap)} · <strong>Gap máximo AUC:</strong> {pct(aucGap)} →{" "}
-                    {status === "ok" ? "✓ Equidad aceptable (gaps < 10%)" : status === "media" ? "⚠ Diferencias moderadas — documentar" : "✗ Diferencias significativas — investigar sesgo"}
-                  </div>
-                );
-              })()}
-            </>
-          ) : <EmptyState message="Reentrena para generar el análisis de equidad." />}
-        </Panel>
-
+      {/* ── Drift ────────────────────────────────────────────── */}
+      <section className="one-col">
         <Panel title="Monitoreo de deriva del dataset (data drift)">
           {Object.keys(diagnostico.drift_actual).length > 0 ? (
             <>
@@ -141,7 +91,7 @@ export function DiagnosticoAvanzado({
         </Panel>
       </section>
 
-      {/* ── PR-AUC + Permutation Importance ─────────────────── */}
+      {/* ── PR-AUC + Error Analysis ──────────────────────────── */}
       <section className="two-col">
         <Panel title="Curva Precision-Recall (PR-AUC)">
           {diagnostico.pr_curve_precision && diagnostico.pr_curve_precision.length > 1 ? (
@@ -176,94 +126,6 @@ export function DiagnosticoAvanzado({
           ) : <EmptyState message="Reentrena el modelo para generar la curva PR." />}
         </Panel>
 
-        <Panel title="Permutation Importance (cross-check SHAP)">
-          {diagnostico.perm_importance && diagnostico.perm_importance.length > 0 ? (
-            <>
-              <div className="model-note" style={{ marginBottom: 8 }}>
-                Caída en AUC al barajar aleatoriamente cada feature. Confirma los resultados de SHAP.
-              </div>
-              {diagnostico.perm_importance.map((pi) => {
-                const maxMean = diagnostico.perm_importance![0].mean;
-                const width = maxMean > 0 ? Math.min(Math.abs(pi.mean) / Math.abs(maxMean) * 100, 100) : 0;
-                return (
-                  <div key={pi.feature} className="shap-bar-row" style={{ marginBottom: 6 }}>
-                    <div className="shap-bar-meta">
-                      <span className="shap-feature-label">{featureLabels[pi.feature] ?? pi.feature}</span>
-                      <span className="shap-feature-val">±{pi.std.toFixed(4)}</span>
-                    </div>
-                    <div className="shap-bar-track">
-                      <div className={`shap-bar-fill ${pi.mean > 0 ? "shap-risk" : "shap-protect"}`} style={{ width: `${width}%` }} />
-                    </div>
-                    <span className={`shap-delta ${pi.mean > 0 ? "shap-risk-text" : "shap-protect-text"}`}>
-                      {pi.mean > 0 ? "−" : "+"}{Math.abs(pi.mean).toFixed(4)}
-                    </span>
-                  </div>
-                );
-              })}
-            </>
-          ) : <EmptyState message="Reentrena el modelo para ver permutation importance." />}
-        </Panel>
-      </section>
-
-      {/* ── McNemar + DeLong ───────────────────────────────── */}
-      <section className="two-col">
-        <Panel title="Tests estadísticos formales (McNemar + DeLong)">
-          {(() => {
-            const m = diagnostico.mcnemar;
-            const d = diagnostico.delong;
-            if (!m || typeof m.chi2 !== "number" || !d || typeof d.delta_auc !== "number") {
-              return <EmptyState message="Reentrena el modelo para calcular los tests estadísticos." />;
-            }
-            return (
-              <>
-                <div className="model-note" style={{ marginBottom: 8 }}>
-                  Comparan el modelo ML calibrado contra la mejor regla heurística. p &lt; 0.05 = diferencia significativa.
-                </div>
-                <div className="metric-grid">
-                  <Kpi label="McNemar χ²" value={m.chi2.toFixed(3)} detail={`p = ${m.p_value.toFixed(4)}`} tone={m.significativo ? "low" : "high"} />
-                  <Kpi label="McNemar" value={m.significativo ? "✓ Significativo" : "No signif."} detail={`b=${m.b ?? "—"}  c=${m.c ?? "—"}`} tone={m.significativo ? "low" : "medium"} />
-                  <Kpi label="ΔAUC (DeLong)" value={`${d.delta_auc > 0 ? "+" : ""}${(d.delta_auc * 100).toFixed(2)} pp`}
-                    detail={`IC95% [${((d.ci_95[0] ?? 0)*100).toFixed(2)}, ${((d.ci_95[1] ?? 0)*100).toFixed(2)}]`} tone={d.significativo ? "low" : "medium"} />
-                  <Kpi label="DeLong p" value={d.p_value.toFixed(4)} detail={d.significativo ? "✓ AUC mejora sign." : "No significativo"} tone={d.significativo ? "low" : "high"} />
-                </div>
-                <div className="model-note" style={{ marginTop: 8 }}>
-                  ML AUC: <strong>{pct(d.ml_auc ?? 0)}</strong> vs Baseline AUC: <strong>{pct(d.baseline_auc ?? 0)}</strong>.{" "}
-                  {d.significativo ? "✓ La mejora del modelo es estadísticamente real (p < 0.05)." : "⚠ La diferencia no alcanza significancia estadística."}
-                </div>
-              </>
-            );
-          })()}
-        </Panel>
-
-        <Panel title="Análisis cualitativo de errores (FN / FP)">
-          {(() => {
-            const ea = diagnostico.error_analysis;
-            if (!ea) return <EmptyState message="Reentrena el modelo para generar el análisis de errores." />;
-            return (
-              <>
-                <div className="model-note" style={{ marginBottom: 8 }}>
-                  <strong>FN</strong>: casos reales de riesgo no detectados. <strong>FP</strong>: alarmas innecesarias.
-                </div>
-                <div className="metric-grid">
-                  <Kpi label="Total FN" value={ea.total_fn != null ? String(ea.total_fn) : "—"} detail="riesgo real no detectado" tone="high" />
-                  <Kpi label="Total FP" value={ea.total_fp != null ? String(ea.total_fp) : "—"} detail="alarmas innecesarias" tone="medium" />
-                </div>
-                <table style={{ width: "100%", fontSize: 12, marginTop: 10 }}>
-                  <tbody>
-                    <tr><th style={{ textAlign: "left" }}>Métrica</th><th>FN</th><th>FP</th></tr>
-                    <tr><td>M500_L (Lectura)</td><td style={{ textAlign: "center" }}>{fmt(ea.fn_mean_lectura, 1)}</td><td style={{ textAlign: "center" }}>{fmt(ea.fp_mean_lectura, 1)}</td></tr>
-                    <tr><td>M500_CN (Ciencias)</td><td style={{ textAlign: "center" }}>{fmt(ea.fn_mean_ciencias, 1)}</td><td style={{ textAlign: "center" }}>{fmt(ea.fp_mean_ciencias, 1)}</td></tr>
-                    <tr><td>ISE</td><td style={{ textAlign: "center" }}>{fmt(ea.fn_mean_ise, 2)}</td><td style={{ textAlign: "center" }}>{fmt(ea.fp_mean_ise, 2)}</td></tr>
-                    <tr><td>Prob. predicha media</td>
-                      <td style={{ textAlign: "center" }}>{typeof ea.fn_mean_prob === "number" ? pct(ea.fn_mean_prob) : "—"}</td>
-                      <td style={{ textAlign: "center" }}>{typeof ea.fp_mean_prob === "number" ? pct(ea.fp_mean_prob) : "—"}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </>
-            );
-          })()}
-        </Panel>
       </section>
 
       {/* ── Secciones finales (learning curve, policies, stacking, etc.) ── */}

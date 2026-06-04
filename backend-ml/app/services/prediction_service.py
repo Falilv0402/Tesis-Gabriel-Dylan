@@ -144,7 +144,25 @@ class PredictionService:
             .reset_index(name="total_estudiantes")
             .sort_values(["Distrito", "ID_IE"])
         )
-        return result.rename(columns={"Distrito": "distrito", "ID_IE": "id_ie"}).to_dict(orient="records")
+        records = result.rename(columns={"Distrito": "distrito", "ID_IE": "id_ie"}).to_dict(orient="records")
+
+        # Enriquecer con nombre del colegio si existe modelo entrenado (pkl)
+        model_dir = self._loader.model_path.parent
+        for rec in records:
+            ie_code = str(int(rec["id_ie"]))
+            # Buscar pkl con y sin cero inicial
+            for code in [ie_code, ie_code.zfill(4)]:
+                pkl_path = model_dir / f"colegio_{code}.pkl"
+                if pkl_path.exists():
+                    try:
+                        import joblib as _jl
+                        art = _jl.load(pkl_path)
+                        rec["nombre_ie"] = art.get("nombre_colegio", "")
+                    except Exception:
+                        pass
+                    break
+
+        return records
 
     def get_distritos(self):
         if not self._loader.dataset_path.exists():

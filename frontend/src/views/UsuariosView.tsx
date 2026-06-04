@@ -34,6 +34,7 @@ interface UsuariosViewProps {
   newUserDistrito: string;
   setNewUserDistrito: (v: string) => void;
   distritosList: string[];
+  colegiosList: { distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[];
   authBusy: boolean;
   onCreateUser: () => void;
   onDesactivar: (id: string) => void;
@@ -52,6 +53,7 @@ export function UsuariosView({
   newUserRol, setNewUserRol,
   newUserDistrito, setNewUserDistrito,
   distritosList, authBusy,
+  colegiosList,
   onCreateUser, onDesactivar, onActivar, onRefreshUsers, onRefreshAudit,
 }: UsuariosViewProps) {
   const isAdminIE = role === "admin"; // admin de colegio (no superadmin)
@@ -103,7 +105,11 @@ export function UsuariosView({
             {/* Aviso para admin de IE: solo puede crear directores de su colegio */}
             {isAdminIE && profileCodigoIe && (
               <div style={{ padding: "8px 12px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 8, fontSize: 12, color: "#0369a1", marginBottom: 4 }}>
-                ℹ️ Estás creando un <strong>Director</strong> para el colegio IE <strong>{profileCodigoIe}</strong>. Se asignará automáticamente.
+                ℹ️ Estás creando un usuario para{" "}
+                <strong>
+                  {colegiosList.find(c => String(parseInt(String(c.id_ie), 10)) === String(parseInt(profileCodigoIe, 10)))?.nombre_ie
+                    ?? `IE ${profileCodigoIe}`}
+                </strong>. Se asignará automáticamente.
               </div>
             )}
 
@@ -137,16 +143,24 @@ export function UsuariosView({
                 )}
                 {newUserRol === "admin" && (
                   <>
-                    <label>Colegio asignado (código IE) <span style={{ color: "#ef4444" }}>*</span>
-                      <input
+                    <label>Colegio asignado <span style={{ color: "#ef4444" }}>*</span>
+                      <select
                         value={newUserDistrito}
                         onChange={(e) => setNewUserDistrito(e.target.value)}
-                        placeholder="Ej: 0249"
-                      />
+                      >
+                        <option value="">Selecciona un colegio...</option>
+                        {colegiosList.map((c) => (
+                          <option key={c.id_ie} value={c.id_ie}>
+                            {c.nombre_ie ? `${c.nombre_ie} — ${c.distrito}` : `IE ${c.id_ie} — ${c.distrito}`}
+                          </option>
+                        ))}
+                      </select>
                     </label>
-                    <div style={{ padding: "8px 12px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 8, fontSize: 12, color: "#0369a1" }}>
-                      ℹ️ <strong>Admin de colegio</strong> — solo verá usuarios de su IE.
-                    </div>
+                    {newUserDistrito && (
+                      <div style={{ padding: "8px 12px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, fontSize: 12, color: "#15803d" }}>
+                        ✅ <strong>Admin de colegio</strong> — solo verá y gestionará usuarios de este colegio.
+                      </div>
+                    )}
                   </>
                 )}
               </>

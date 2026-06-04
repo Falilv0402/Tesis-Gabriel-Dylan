@@ -57,7 +57,7 @@ interface AuthViewProps {
   setRegDistrito: (v: string) => void;
   regColegioIe: string;
   setRegColegioIe: (v: string) => void;
-  regColegiosList: { distrito: string; id_ie: string; total_estudiantes: number }[];
+  regColegiosList: { distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[];
   distritosList: string[];
   ieHasDirector: boolean;
   handleLogin: () => void;
@@ -173,7 +173,9 @@ export function AuthView({
                 <select value={regColegioIe} onChange={(e) => setRegColegioIe(e.target.value)} disabled={!regDistrito}>
                   <option value="">{regDistrito ? "Todos los colegios del distrito" : "Primero selecciona un distrito"}</option>
                   {regColegiosList.map((c) => (
-                    <option key={c.id_ie} value={c.id_ie}>{c.id_ie} · {c.total_estudiantes} estudiantes</option>
+                    <option key={c.id_ie} value={c.id_ie}>
+                      {c.nombre_ie ? `${c.nombre_ie} · ${c.total_estudiantes} alumnos` : `IE ${c.id_ie} · ${c.total_estudiantes} alumnos`}
+                    </option>
                   ))}
                 </select>
               </label>

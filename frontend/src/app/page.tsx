@@ -67,7 +67,7 @@ export default function Page() {
   // ── Navigation ────────────────────────────────────────────────────
   const notifCount4Nav = interventions.interventions.filter(i => i.estado === "pendiente").length;
 
-  const directorTabs   = ["dashboard", "estudiante", "reportes", "intervenciones", "micolegio"]; // también coordinador
+  const directorTabs   = ["dashboard", "estudiante", "reportes", "intervenciones"]; // también coordinador
   const adminTabs      = ["usuarios", "datos"];
   const superadminTabs = ["usuarios", "datos", "modelo"];
 
@@ -77,18 +77,9 @@ export default function Page() {
   const isDirectorRole = auth.role === "director" || auth.role === "coordinador";
 
   // Fix #7: incluir "coordinador" en el cast — antes era excluido silenciosamente
-  // "Mi Colegio" aparece solo para directores/coordinadores de IEs que tienen modelo entrenado.
-  // Se normaliza el código IE (ej. "0249" → 249) para comparar con independencia del formato.
-  const ieNormalizado = auth.profileCodigoIe
-    ? parseInt(auth.profileCodigoIe, 10)
-    : null;
-  const iesConModelo = new Set([249]); // IEs con modelo entrenado en el servidor
-
-  const visibleNav = navItems.filter((item) => {
-    if (!item.roles.includes(auth.role as UserRole)) return false;
-    if (item.id === "micolegio") return ieNormalizado !== null && iesConModelo.has(ieNormalizado);
-    return true;
-  });
+  const visibleNav = navItems.filter((item) =>
+    item.roles.includes(auth.role as UserRole)
+  );
 
   // Redirige al primer tab visible cuando el rol carga y el tab actual no es accesible
   useEffect(() => {
@@ -232,8 +223,12 @@ export default function Page() {
                 <span className="district-badge">
                   <ShieldCheck size={13} />
                   <span>
-                    <strong>{auth.profileDistrito}</strong>
-                    {auth.profileCodigoIe && <em>IE {auth.profileCodigoIe}</em>}
+                    <strong>
+                      {auth.profileNombreIe ?? auth.profileDistrito}
+                    </strong>
+                    {auth.profileNombreIe
+                      ? <em>{auth.profileDistrito}</em>
+                      : auth.profileCodigoIe && <em>IE {auth.profileCodigoIe}</em>}
                   </span>
                 </span>
               ) : (
@@ -424,6 +419,7 @@ export default function Page() {
               onUploadColegioExcels={(files, ie) => void admin.uploadColegioExcels(files, ie)}
               role={auth.role}
               profileCodigoIe={auth.profileCodigoIe}
+              colegioModelStats={admin.colegioModelStats}
             />
           )}
 
@@ -455,7 +451,9 @@ export default function Page() {
               newUserPwd={admin.newUserPwd} setNewUserPwd={admin.setNewUserPwd}
               newUserRol={admin.newUserRol} setNewUserRol={admin.setNewUserRol}
               newUserDistrito={admin.newUserDistrito} setNewUserDistrito={admin.setNewUserDistrito}
-              distritosList={auth.distritosList} authBusy={actionBusy}
+              distritosList={auth.distritosList}
+              colegiosList={auth.colegiosList}
+              authBusy={actionBusy}
               onCreateUser={() => void admin.handleCreateUser(auth.translateAuthError, actionBusy, setActionBusy)}
               onDesactivar={(id) => void admin.desactivarUsuario(id)}
               onActivar={(id) => void admin.activarUsuario(id)}

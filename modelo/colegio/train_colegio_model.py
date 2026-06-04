@@ -26,17 +26,25 @@ from sklearn.metrics import roc_auc_score, f1_score
 
 from parse_excels import procesar_colegio
 
-# ─── Features que usa el modelo ──────────────────────────────────────────────
-FEATURES = [
+# ─── Enfoque predictivo: B1-B3 como features, B4/PP como target ──────────────
+#
+# El modelo usa los primeros 3 bimestres para predecir quién tendrá C
+# en el 4.° bimestre (todavía hay tiempo de intervenir).
+# Esto convierte el sistema en alerta TEMPRANA real, no descripción del pasado.
+#
+# Features disponibles (bimestres 1-3):
+FEATURES_EARLY = [
+    "b1_matematica",   "b2_matematica",   "b3_matematica",
+    "b1_comunicacion", "b2_comunicacion", "b3_comunicacion",
+    "b1_cta",          "b2_cta",          "b3_cta",
+    "conducta_promedio",
+]
+
+# Si no hay suficientes bimestres, fallback al PP (modo descriptivo)
+FEATURES_PP = [
     "pp_matematica", "pp_comunicacion", "pp_cta",
     "conducta_promedio", "n_materias_c", "promedio_materias",
     "tendencia_matematica", "tendencia_comunicacion",
-]
-
-FEATURES_PRIM = [
-    "pp_mat_prim", "pp_lenguaje", "pp_cta",
-    "conducta_promedio", "n_materias_c", "promedio_materias",
-    "tendencia_mat_prim", "tendencia_lenguaje",
 ]
 
 
@@ -58,21 +66,59 @@ def train(carpeta: str, codigo_ie: str) -> None:
     df.to_csv(csv_path, index=False)
     print(f"      Dataset guardado → {csv_path}")
 
-    # ── 2. Seleccionar features disponibles ───────────────────────────────────
-    print("\n[2/4] Preparando features...")
-    # Intentar features de secundaria, luego primaria, luego las que haya
-    for feat_list in [FEATURES, FEATURES_PRIM]:
-        available = [f for f in feat_list if f in df.columns]
-        if len(available) >= 3:
-            break
+    # ── 2. Construir features y target predictivos ────────────────────────────
+    print("\n[2/4] Preparando features (modo predictivo B1-B3 → B4)...")
+
+    # ── Target: riesgo en el 4.° bimestre (lo que queremos predecir) ──────────
+    # Usamos B4 si está disponible, sino PP como fallback
+    mat_b4  = next((c for c in ["b4_matematica","b4_mat_prim"] if c in df.columns), None)
+    com_b4  = next((c for c in ["b4_comunicacion","b4_lenguaje"] if c in df.columns), None)
+    mat_pp  = next((c for c in ["pp_matematica","pp_mat_prim"] if c in df.columns), None)
+    com_pp  = next((c for c in ["pp_comunicacion","pp_lenguaje"] if c in df.columns), None)
+
+    if mat_b4 and com_b4:
+        # Modo predictivo genuino: target = C en bimestre 4
+        df["riesgo_target"] = (
+            (df[mat_b4].fillna(99) <= 13) | (df[com_b4].fillna(99) <= 13)
+        ).astype(int)
+        modo = "predictivo (B1-B3 → B4)"
+        print("      Modo: PREDICTIVO — features B1-B3, target B4")
     else:
-        available = [f for f in df.columns
-                     if f.startswith("pp_") or f in ("conducta_promedio", "n_materias_c", "promedio_materias")]
+        # Fallback: target = PP anual
+        df["riesgo_target"] = df["riesgo"].values
+        modo = "descriptivo (PP anual)"
+        print("      Modo: DESCRIPTIVO (fallback) — sin datos de B4")
 
-    print(f"      Features usadas: {available}")
+    # ── Features: solo bimestres 1-3 (lo que se conoce ANTES del B4) ──────────
+    early_available = [f for f in FEATURES_EARLY if f in df.columns
+                       and df[f].notna().sum() >= 5]
 
-    X = df[available].copy()
-    y = df["riesgo"].values
+    # Añadir tendencia temprana calculada aquí (B3 - B1)
+    for materia in ["matematica", "comunicacion", "cta", "lenguaje", "mat_prim"]:
+        b1 = f"b1_{materia}"
+        b3 = f"b3_{materia}"
+        tend = f"tend_temprana_{materia}"
+        if b1 in df.columns and b3 in df.columns:
+            df[tend] = df[b3].fillna(df[b1]) - df[b1].fillna(df[b3])
+            if tend not in early_available:
+                early_available.append(tend)
+
+    if len(early_available) >= 3:
+        available = early_available
+    else:
+        # Fallback a PP si no hay bimestres
+        available = [f for f in FEATURES_PP if f in df.columns]
+        modo = "descriptivo (sin bimestres suficientes)"
+
+    print(f"      Features usadas ({len(available)}): {available}")
+    print(f"      Modo de predicción: {modo}")
+
+    # Filtrar solo alumnos con target conocido (tienen B4)
+    mask_target = df["riesgo_target"].notna()
+    df_model = df[mask_target].copy()
+    X = df_model[available].copy()
+    y = df_model["riesgo_target"].values
+    print(f"      Alumnos con B4 conocido: {len(df_model)} / {len(df)}")
 
     # Imputar nulos con mediana
     for col in X.columns:
@@ -161,7 +207,9 @@ def train(carpeta: str, codigo_ie: str) -> None:
         "predicciones":   predicciones,
         "metricas": {
             "nombre_colegio": nombre_colegio,
+            "modo_prediccion": modo,
             "n_alumnos":      len(df),
+            "n_alumnos_modelo": len(X),
             "n_riesgo":       int(y.sum()),
             "pct_riesgo":     round(100 * float(y.mean()), 1),
             "auc_cv":         round(auc_cv, 4)    if not np.isnan(auc_cv)    else None,
@@ -169,9 +217,15 @@ def train(carpeta: str, codigo_ie: str) -> None:
             "f1_train":       round(f1_train, 4)  if not np.isnan(f1_train)  else None,
             "n_splits_cv":    n_splits_used,
             "nota_metodologica": (
-                f"AUC CV ({n_splits_used}-fold estratificado) es el indicador principal. "
-                "AUC train se reporta solo para detectar sobreajuste."
-            ) if n_splits_used >= 3 else "Pocos positivos — sin CV disponible.",
+                f"MODO PREDICTIVO: features B1-B3, target B4. "
+                f"AUC CV {n_splits_used}-fold = {round(auc_cv,4) if not np.isnan(auc_cv) else 'N/A'}. "
+                "El modelo predice quién tendrá C en el 4° bimestre usando solo los 3 primeros, "
+                "permitiendo intervención oportuna. Validación real: comparar predicciones con "
+                "resultados finales al cierre del año académico."
+            ) if n_splits_used >= 3 else (
+                "Modo descriptivo (fallback): pocos datos de B4. "
+                "Actualizar cuando estén disponibles todos los bimestres."
+            ),
             "salones":        df["salon"].unique().tolist(),
         },
         "trained_at": pd.Timestamp.now().isoformat(timespec="seconds"),
