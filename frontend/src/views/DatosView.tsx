@@ -1,8 +1,9 @@
 "use client";
 
 import { RefObject } from "react";
-import { Upload, Database, RefreshCcw, CheckCircle2, AlertTriangle, School, Loader } from "lucide-react";
+import { Upload, Database, RefreshCcw, CheckCircle2, AlertTriangle, School, Loader, Info } from "lucide-react";
 import { Panel, Kpi } from "@/components/ui/Primitives";
+import { isLocalBackend } from "@/lib/env";
 
 interface CsvValidation {
   total_filas: number;
@@ -128,8 +129,24 @@ export function DatosView({
         </Panel>
       )}
 
-      {/* ── Panel 1: Carga Excel del colegio ───────────────────────────── */}
+      {/* ── Panel 1: Carga Excel del colegio (solo en local) ──────────── */}
       <Panel title="Datos del colegio — Excel interno">
+        {!isLocalBackend() && (
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8,
+            padding: "10px 12px", background: "#fffbeb", border: "1px solid #fde68a",
+            borderRadius: 8, fontSize: 12, color: "#92400e", marginBottom: 12 }}>
+            <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div>
+              <strong>Actualización de datos desactivada en producción.</strong>
+              <p style={{ margin: "3px 0 0", fontSize: 11, lineHeight: 1.4 }}>
+                Para actualizar los datos del colegio, entrena el modelo localmente y
+                haz <code style={{ background: "#fef3c7", padding: "1px 4px", borderRadius: 3 }}>git push</code>.
+                El despliegue actualizará automáticamente.
+              </p>
+            </div>
+          </div>
+        )}
+        {isLocalBackend() && (<>
         <p className="model-note" style={{ marginBottom: 12 }}>
           Sube los archivos Excel de notas y conducta del colegio (formato CUBICOL Académico).
           El sistema entrenará automáticamente el modelo de riesgo con las notas internas.
@@ -227,6 +244,7 @@ export function DatosView({
             </p>
           </div>
         )}
+        </>)}
       </Panel>
 
       {/* ── Panel 2: CSV EM 2022 + programación ───────────────────────── */}
