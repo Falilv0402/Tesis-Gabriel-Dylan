@@ -9,6 +9,7 @@ export function useMiColegio(codigoIe: string | null) {
   const [resumen,     setResumen]     = useState<ColegioResumen | null>(null);
   const [isLoading,   setIsLoading]   = useState(false);
   const [error,       setError]       = useState<string | null>(null);
+  const [hasData,     setHasData]     = useState(false); // true solo si el backend tiene modelo entrenado
   const [salonFilter, setSalonFilter] = useState<string>("Todos");
   const [nivelFilter, setNivelFilter] = useState<string>("Todos");
 
@@ -28,12 +29,16 @@ export function useMiColegio(codigoIe: string | null) {
 
       if (resRes.status === 404 || predRes.status === 404) {
         setError("no_data");
+        setHasData(false);
         setAlumnos([]);
         setResumen(null);
         return;
       }
 
-      if (resRes.ok)  setResumen(await resRes.json());
+      if (resRes.ok) {
+        setResumen(await resRes.json());
+        setHasData(true);
+      }
       if (predRes.ok) {
         const data = await predRes.json();
         setAlumnos(data.predicciones ?? []);
@@ -53,7 +58,7 @@ export function useMiColegio(codigoIe: string | null) {
   const salones = resumen ? Object.keys(resumen.por_salon) : [];
 
   return {
-    alumnos, resumen, isLoading, error,
+    alumnos, resumen, isLoading, error, hasData,
     salonFilter, setSalonFilter,
     nivelFilter, setNivelFilter,
     salones, loadAlumnos,

@@ -77,9 +77,18 @@ export default function Page() {
   const isDirectorRole = auth.role === "director" || auth.role === "coordinador";
 
   // Fix #7: incluir "coordinador" en el cast — antes era excluido silenciosamente
-  const visibleNav = navItems.filter((item) =>
-    item.roles.includes(auth.role as UserRole)
-  );
+  // "Mi Colegio" aparece solo para directores/coordinadores de IEs que tienen modelo entrenado.
+  // Se normaliza el código IE (ej. "0249" → 249) para comparar con independencia del formato.
+  const ieNormalizado = auth.profileCodigoIe
+    ? parseInt(auth.profileCodigoIe, 10)
+    : null;
+  const iesConModelo = new Set([249]); // IEs con modelo entrenado en el servidor
+
+  const visibleNav = navItems.filter((item) => {
+    if (!item.roles.includes(auth.role as UserRole)) return false;
+    if (item.id === "micolegio") return ieNormalizado !== null && iesConModelo.has(ieNormalizado);
+    return true;
+  });
 
   // Redirige al primer tab visible cuando el rol carga y el tab actual no es accesible
   useEffect(() => {
