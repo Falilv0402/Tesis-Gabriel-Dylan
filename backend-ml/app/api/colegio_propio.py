@@ -19,9 +19,11 @@ def _validate_ie(codigo_ie: str) -> str:
 
 router = APIRouter(prefix="/colegio", tags=["Mi Colegio"])
 
-MODEL_DIR = Path(__file__).resolve().parents[3] / "modelo" / "model"
-DATA_DIR  = Path(__file__).resolve().parents[3] / "modelo" / "data"
-COLEGIO_SCRIPTS = Path(__file__).resolve().parents[3] / "modelo" / "colegio"
+# parents[2] = /app en Docker (WORKDIR) = raíz del proyecto en desarrollo
+# Esto es consistente con model_loader.py que también usa parents[2]
+MODEL_DIR = Path(__file__).resolve().parents[2] / "modelo" / "model"
+DATA_DIR  = Path(__file__).resolve().parents[2] / "modelo" / "data"
+COLEGIO_SCRIPTS = Path(__file__).resolve().parents[2] / "modelo" / "colegio"
 
 
 def _load_artefacto(codigo_ie: str) -> dict:
