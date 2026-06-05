@@ -1,14 +1,10 @@
 "use client";
 
-/**
- * DiagnosticoFinal — compose the three advanced-diagnostics sub-views.
- * Kept thin: each section lives in its own file for maintainability.
- */
+// Secciones de diagnóstico avanzado eliminadas en la simplificación del modelo.
+// Archivo conservado para compatibilidad con DiagnosticoAvanzado.tsx.
+// Ver docs/ROADMAP_CARGA_EXCEL_COLEGIO.md para trabajo futuro.
 
 import type { Diagnostico, Metrics } from "@/types";
-import { DiagnosticoModels }      from "./DiagnosticoModels";
-import { DiagnosticoDiagnostics } from "./DiagnosticoDiagnostics";
-import { DiagnosticoStability }   from "./DiagnosticoStability";
 
 interface DiagnosticoFinalProps {
   diagnostico:    Diagnostico;
@@ -20,21 +16,7 @@ interface DiagnosticoFinalProps {
   onSaveSchedule: () => void;
 }
 
-export function DiagnosticoFinal({
-  diagnostico, metrics,
-  scheduleFreq, setScheduleFreq,
-  scheduleMsg, nextUpdate, onSaveSchedule,
-}: DiagnosticoFinalProps) {
-  return (
-    <>
-      <DiagnosticoModels diagnostico={diagnostico} metrics={metrics} />
-      <DiagnosticoDiagnostics diagnostico={diagnostico} />
-      <DiagnosticoStability
-        diagnostico={diagnostico} metrics={metrics}
-        scheduleFreq={scheduleFreq} setScheduleFreq={setScheduleFreq}
-        scheduleMsg={scheduleMsg} nextUpdate={nextUpdate}
-        onSaveSchedule={onSaveSchedule}
-      />
-    </>
-  );
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function DiagnosticoFinal(_props: DiagnosticoFinalProps) {
+  return null;
 }

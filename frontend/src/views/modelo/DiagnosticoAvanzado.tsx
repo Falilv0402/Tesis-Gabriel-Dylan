@@ -4,10 +4,10 @@ import {
   CartesianGrid, Legend, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { Scale, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import type { Diagnostico, Metrics } from "@/types";
 import { Panel, Kpi, EmptyState } from "@/components/ui/Primitives";
-import { pct, fmt } from "@/lib/format";
+import { pct } from "@/lib/format";
 import { featureLabels } from "@/lib/constants";
 import { DiagnosticoFinal } from "@/views/modelo/DiagnosticoFinal";
 

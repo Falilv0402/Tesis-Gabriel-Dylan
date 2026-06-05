@@ -17,8 +17,9 @@ COPY backend-ml/app ./app
 # Copiar artefactos del modelo entrenado + scripts de entrenamiento
 COPY modelo/model ./modelo/model
 COPY modelo/data ./modelo/data
-COPY modelo/train_em_model.py ./modelo/train_em_model.py
-COPY modelo/pipeline ./modelo/pipeline
+COPY modelo/em2022/train.py ./modelo/em2022/train.py
+COPY modelo/em2022/pipeline ./modelo/em2022/pipeline
+COPY modelo/em2022/__init__.py ./modelo/em2022/__init__.py
 
 # Variables de entorno (rutas dentro del contenedor)
 ENV MODEL_PATH=./modelo/model/modelo_em.pkl

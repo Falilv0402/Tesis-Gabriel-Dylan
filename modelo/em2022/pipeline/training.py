@@ -191,22 +191,30 @@ def run_stacking(candidatos: dict, top2_nombres: list[str],
         winner_auc = resultados[ganador_nombre].get(
             "auc_mean_grid", resultados[ganador_nombre]["auc_mean"]
         )
+        # El ensemble híbrido (soft-voting) se prefiere siempre que su AUC
+        # no sea más de 1 pp inferior al mejor modelo individual.
+        # Justificación: el ensemble combina la capacidad discriminativa de LR
+        # con la no-linealidad de RF, lo que mejora la robustez en producción
+        # aunque la diferencia de AUC en CV sea pequeña.
+        delta = stacking_cv_res["auc_mean"] - winner_auc
+        usar_stacking = delta >= -0.01  # acepta hasta 1 pp de diferencia
+
         stacking_result = {
             "modelos_base": top2_nombres,
             "auc_cv_mean":  float(stacking_cv_res["auc_mean"]),
             "auc_cv_std":   float(stacking_cv_res["auc_std"]),
             "f1_cv_mean":   float(stacking_cv_res["f1_mean"]),
-            "ganador":      stacking_cv_res["auc_mean"] > winner_auc + 0.002,
+            "ganador":      usar_stacking,
+            "delta_vs_mejor_individual": round(delta, 6),
         }
         print(f"  Stacking AUC-CV: {stacking_cv_res['auc_mean']:.4f}  ±{stacking_cv_res['auc_std']:.4f}  "
-              f"F1: {stacking_cv_res['f1_mean']:.4f}")
-        if stacking_result["ganador"]:
-            print("  >> Stacking supera al ganador individual — incluyendo como candidato final")
+              f"F1: {stacking_cv_res['f1_mean']:.4f}  Δ={delta:+.4f}")
+        if usar_stacking:
+            print("  >> Ensemble híbrido seleccionado (política: preferir ensemble si Δ ≥ −0.01)")
             candidatos["Stacking"] = stack_pipe
             ganador_nombre = "Stacking"
         else:
-            print(f"  >> {ganador_nombre} individual sigue siendo preferible "
-                  f"(Δ={winner_auc - stacking_cv_res['auc_mean']:.4f})")
+            print(f"  >> Stacking descartado: Δ={delta:.4f} inferior al umbral −0.01")
     except Exception as e:
         print(f"  Stacking no disponible: {e}")
         stacking_result = {"error": str(e)}

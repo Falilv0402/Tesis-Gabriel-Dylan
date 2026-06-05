@@ -1,10 +1,14 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
 .pytest_cache/
 .ruff_cache/
 .venv/
 venv/
+
+# Archivos generados por entrenamiento (no deben versionarse)
+colegio_*_procesado.csv
 
 # Node
 node_modules/

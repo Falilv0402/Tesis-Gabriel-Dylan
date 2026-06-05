@@ -67,7 +67,7 @@ class ModelLoader:
         }
 
     def retrain(self) -> str:
-        train_script = self.dataset_path.parents[1] / "train_em_model.py"
+        train_script = self.dataset_path.parents[1] / "em2022" / "train.py"
         if not train_script.exists():
             raise FileNotFoundError(f"Script no encontrado: {train_script}")
         env = os.environ.copy()
