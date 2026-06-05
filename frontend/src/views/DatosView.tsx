@@ -1,7 +1,7 @@
 "use client";
 
 import { RefObject } from "react";
-import { Upload, Database, RefreshCcw, CheckCircle2, AlertTriangle, School, Loader, Info } from "lucide-react";
+import { Upload, CheckCircle2, AlertTriangle, School, Loader, Info } from "lucide-react";
 import { Panel, Kpi } from "@/components/ui/Primitives";
 import { isLocalBackend } from "@/lib/env";
 
@@ -76,7 +76,7 @@ export function DatosView({
   }[colegioUploadStatus];
 
   return (
-    <section className="two-col">
+    <section className="full-col" style={{ maxWidth: 780 }}>
 
       {/* ── Panel 0: Estadísticas del modelo actual ─────────────────────── */}
       {colegioModelStats && (
@@ -247,87 +247,6 @@ export function DatosView({
         </>)}
       </Panel>
 
-      {/* ── Panel 2: CSV EM 2022 + programación ───────────────────────── */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-
-        <Panel title="Validación CSV académico (EM 2022)">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,.CSV"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) onValidateCsv(f);
-              e.target.value = "";
-            }}
-          />
-          <div className="source-grid">
-            <button onClick={() => fileInputRef.current?.click()}>
-              <Upload size={18} /> CSV académico
-            </button>
-            <button onClick={() => setUploadResult("Exporta tu planilla como CSV UTF-8 e impórtala con el botón CSV.")}>
-              <Upload size={18} /> XLSX → CSV
-            </button>
-            <button onClick={() => setUploadResult("Integración SIS: API REST pendiente de configuración con MINEDU.")}>
-              <Database size={18} /> Fuente SIS
-            </button>
-          </div>
-
-          <button
-            className="primary"
-            disabled={isValidating}
-            onClick={() => fileInputRef.current?.click()}
-            style={{ marginTop: 8, width: "100%" }}
-          >
-            <Upload size={17} /> {isValidating ? "Validando..." : "Seleccionar y validar CSV"}
-          </button>
-
-          {/* Resultados de validación CSV */}
-          {uploadResult && uploadResult !== "Sin archivo cargado." && (
-            <p className="audit-line" style={{ marginTop: 8 }}>{uploadResult}</p>
-          )}
-
-          {csvValidation && (
-            <>
-              <div className="metric-grid" style={{ margin: "10px 0 8px" }}>
-                <Kpi label="Total filas"  value={csvValidation.total_filas}    detail="en el archivo" />
-                <Kpi label="Válidas"      value={csvValidation.filas_validas}  detail="pasan validación" />
-                <Kpi label="Errores"      value={csvValidation.errores.length} detail="encontrados"
-                  tone={csvValidation.errores.length > 0 ? "high" : undefined} />
-              </div>
-              {csvValidation.columnas_faltantes.length > 0 && (
-                <p className="auth-error">Columnas faltantes: {csvValidation.columnas_faltantes.join(", ")}</p>
-              )}
-              {csvValidation.errores.length === 0 && (
-                <p style={{ color: "#16a34a", fontSize: 12, fontWeight: 600, textAlign: "center" }}>
-                  ✓ Archivo válido — listo para procesar
-                </p>
-              )}
-            </>
-          )}
-        </Panel>
-
-        <Panel title="Programación de actualizaciones">
-          <label>Frecuencia
-            <select value={scheduleFreq} onChange={(e) => setScheduleFreq(e.target.value)}>
-              <option value="minedu">Por evaluación MINEDU</option>
-              <option value="semanal">Semanal</option>
-              <option value="mensual">Mensual</option>
-            </select>
-          </label>
-          {nextUpdate && (
-            <p className="auth-success" style={{ margin: 0 }}>
-              Próxima actualización: <strong>{nextUpdate}</strong>
-            </p>
-          )}
-          <button className="primary" onClick={onSaveSchedule}>
-            <RefreshCcw size={17} /> Guardar programación
-          </button>
-          {scheduleMsg && <p className="audit-line">{scheduleMsg}</p>}
-        </Panel>
-
-      </div>
     </section>
   );
 }
