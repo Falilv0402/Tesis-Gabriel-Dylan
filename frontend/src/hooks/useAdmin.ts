@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
@@ -175,12 +175,12 @@ export function useAdmin(
       const uid = signUpData.user.id;
 
       if (ieEfectiva) {
-        // Fix #4a: campo correcto por rol (director necesita codigo_ie Y distrito)
+        // Actualizar campos según el rol asignado
         const updateField = rolEfectivo === "director" || rolEfectivo === "coordinador"
           ? { codigo_ie: ieEfectiva, distrito: newUserDistrito || null }
           : { codigo_ie: ieEfectiva };
 
-        // Fix #4b: polling hasta que el trigger cree el perfil (máx ~5s)
+        // Esperar a que el trigger de Supabase cree el perfil antes de actualizarlo
         let actualizado = false;
         for (let i = 0; i < 12; i++) {
           await new Promise((r) => setTimeout(r, 400));
@@ -331,7 +331,6 @@ export function useAdmin(
     }
   }
 
-  // Fix #15: useCallback estabiliza referencias para evitar stale closures
   const stableLoadUsers = useCallback(() => void loadDbUsers(), [role, profileCodigoIe]); // eslint-disable-line react-hooks/exhaustive-deps
   const stableLoadAudit = useCallback(() => void loadDbAudit(), [role, profileCodigoIe]);  // eslint-disable-line react-hooks/exhaustive-deps
 

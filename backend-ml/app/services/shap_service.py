@@ -1,17 +1,9 @@
 """
-Análisis de contribución de features por estudiante (Fix #6).
+Análisis de contribución de features por estudiante.
 
-NOTA METODOLÓGICA para la tesis:
-Este servicio implementa un análisis de contribución marginal (ICE — Individual
-Conditional Expectation), NO el algoritmo SHAP de Lundberg & Lee (2017).
-La diferencia:
-  - SHAP real: valores de Shapley calculados sobre todas las coaliciones de features,
-    garantizan que sum(contributions) = f(x) - E[f(x)].
-  - Este método: para cada feature, mide Δp = p(x) - p(x con feature reemplazada por baseline),
-    lo que ignora interacciones entre features.
-
-Para la defensa: referirse a esto como "Análisis de Contribución de Features (ICE-based)",
-no como "SHAP". La UI muestra "Factores de riesgo" para evitar ambigüedad técnica.
+Implementa contribución marginal por feature (ICE — Individual Conditional Expectation):
+para cada variable, mide Δp = p(x) - p(x con la variable reemplazada por su valor baseline.
+Los resultados se muestran en la UI como "Factores de riesgo".
 """
 from __future__ import annotations
 from typing import Any
@@ -36,7 +28,6 @@ class ShapService:
             raise ValueError(f"Estudiante '{id_estudiante}' no encontrado.")
 
         original_pos = match["indice"]
-        # Fix #14: usar DataFrame cacheado en lugar de releer el CSV desde disco
         df = self._pred.get_cached_df()
 
         if original_pos >= len(df):

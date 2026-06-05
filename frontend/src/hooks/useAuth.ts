@@ -41,8 +41,8 @@ export function useAuth(
   const [distritosList, setDistritosList] = useState<string[]>([]);
   const [colegiosList,  setColegiosList]  = useState<{ distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[]>([]);
 
-  const skipOnboardingRef = useRef(false); // usado durante el registro para evitar race conditions
-  const abortLoadProfile  = useRef(false); // previene setState tras logout (Fix #3)
+  const skipOnboardingRef = useRef(false);
+  const abortLoadProfile  = useRef(false);
 
   // ── Utilities ─────────────────────────────────────────────────────────────
   function translateAuthError(msg: string): string {
@@ -57,7 +57,7 @@ export function useAuth(
     return msg;
   }
 
-  // Fix #13: insertAudit definida ANTES de useProfile para evitar dependencia de hoisting
+  
   async function insertAudit(accion: string, tabla?: string, detalle?: object) {
     if (!session) return;
     await supabase.from("audit_log").insert({
@@ -79,7 +79,6 @@ export function useAuth(
 
   // ── Profile loading ───────────────────────────────────────────────────────
   async function loadProfile(userId: string, attempt = 0) {
-    // Fix #3: si el usuario ya hizo logout, no ejecutar callbacks pendientes
     if (abortLoadProfile.current) return;
 
     const { data, error } = await supabase
@@ -123,7 +122,6 @@ export function useAuth(
     }
   }
 
-  // Resetear el abort flag al iniciar sesión
   function onSignIn(userId: string) {
     abortLoadProfile.current = false;
     void loadProfile(userId);
@@ -249,7 +247,7 @@ export function useAuth(
   }
 
   async function handleLogout() {
-    abortLoadProfile.current = true; // Fix #3: abortar callbacks pendientes de loadProfile
+    abortLoadProfile.current = true; 
     await insertAudit("Cierre de sesion");
     await supabase.auth.signOut();
     setSession(null);
@@ -265,7 +263,7 @@ export function useAuth(
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s?.user ?? null);
       if (s?.user) {
-        abortLoadProfile.current = false; // Fix #3: nuevo login, habilitar callbacks
+        abortLoadProfile.current = false; 
         void loadProfile(s.user.id);
         if (event === "SIGNED_IN") {
           void supabase.from("audit_log").insert({

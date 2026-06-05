@@ -76,7 +76,7 @@ export default function Page() {
   const isDirector   = auth.role === "director";
   const isDirectorRole = auth.role === "director" || auth.role === "coordinador";
 
-  // Fix #7: incluir "coordinador" en el cast — antes era excluido silenciosamente
+  // Filtrar navegación según el rol del usuario
   const visibleNav = navItems.filter((item) =>
     item.roles.includes(auth.role as UserRole)
   );
@@ -129,7 +129,7 @@ export default function Page() {
         modelData.setModelMessage("Modelo reentrenado correctamente.");
         await modelData.loadModelMetrics();
         await students.loadStudents();
-        // Fix #11: resetear umbrales a defaults — el modelo nuevo puede tener distribución diferente
+        // Restablecer umbrales al reentrenar
         modelData.setThresholdHigh(70);
         modelData.setThresholdMedium(45);
         toast("Modelo actualizado. Umbrales restablecidos a 70% / 45%.", "success");

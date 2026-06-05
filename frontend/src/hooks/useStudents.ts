@@ -316,10 +316,8 @@ export function useStudents(
     [students, thresholdHigh, thresholdMedium]
   );
 
-  // Fix #8: `segment` y `search` se aplican en cliente sobre el dataset ya cargado.
-  // Los filtros `risk`, `distrito`, `sexo` se envían al backend (loadStudents).
-  // Esto es intencional: segment/search son exploración rápida sin re-fetch;
-  // risk/distrito/sexo reducen el volumen descargado cuando el dataset es grande.
+  // Filtros de segmento y búsqueda se aplican localmente para exploración rápida.
+  // Los filtros de nivel, distrito y sexo se envían al backend.
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return classifiedStudents

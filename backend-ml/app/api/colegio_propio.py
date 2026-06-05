@@ -131,7 +131,7 @@ async def procesar_excels(
     upload_dir = DATA_DIR / f"colegio_{codigo_ie}_upload"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    # Guardar archivos subidos — Fix #12: sanitizar nombre para prevenir path traversal
+    # Guardar archivos subidos
     saved = []
     for f in notas_files + conducta_files:
         safe_name = Path(f.filename or "archivo.xlsx").name

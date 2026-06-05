@@ -24,8 +24,8 @@ class PredictionService:
     def __init__(self, loader) -> None:  # loader: ModelLoader
         self._loader = loader
         self._cached_predictions: list[dict[str, Any]] | None = None
-        self._cached_df: "pd.DataFrame | None" = None  # Fix #14: evita releer CSV en SHAP
-        self._cache_lock = threading.Lock()  # Fix #5: previene doble-build bajo concurrencia
+        self._cached_df: "pd.DataFrame | None" = None
+        self._cache_lock = threading.Lock()
 
     def _ensure_loaded(self) -> None:
         if self._loader.model is None:
@@ -33,7 +33,7 @@ class PredictionService:
 
     def invalidate_cache(self) -> None:
         self._cached_predictions = None
-        self._cached_df = None  # Fix #14
+        self._cached_df = None
 
     def predict(self, request: PredictionRequest) -> list[dict[str, Any]]:
         self._ensure_loaded()
@@ -59,7 +59,7 @@ class PredictionService:
         return results
 
     def get_cached_df(self) -> pd.DataFrame:
-        """Fix #14: DataFrame procesado cacheado para que SHAP no relea el CSV en cada request."""
+        """Devuelve el DataFrame procesado del dataset, cacheado para evitar relectura en cada solicitud."""
         if self._cached_df is None:
             self._ensure_dataset_predictions()
         return self._cached_df  # type: ignore[return-value]
@@ -67,13 +67,13 @@ class PredictionService:
     def _ensure_dataset_predictions(self) -> list[dict[str, Any]]:
         if self._cached_predictions is not None:
             return self._cached_predictions
-        with self._cache_lock:  # Fix #5: double-checked locking
+        with self._cache_lock:
             if self._cached_predictions is not None:
                 return self._cached_predictions
             self._ensure_loaded()
         df = self._loader.load_dataset_raw()
         df = compute_ie_aggregates(df)
-        self._cached_df = df.reset_index(drop=True)  # Fix #14: guardar para SHAP
+        self._cached_df = df.reset_index(drop=True)
         probs = self._loader.model.predict_proba(df[ALL_FEATURES])[:, 1]
         preds = (probs >= 0.50).astype(int)
         results: list[dict[str, Any]] = []
