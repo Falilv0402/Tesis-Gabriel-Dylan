@@ -102,6 +102,17 @@ def get_resumen(codigo_ie: str = Depends(_validate_ie)):
         "por_nivel":      por_nivel,
         "por_salon":      por_salon,
         "trained_at":     art.get("trained_at"),
+        # Métricas completas para el panel de estadísticas del admin
+        "metricas": {
+            "auc_cv":            m.get("auc_cv"),
+            "auc_train":         m.get("auc_train"),
+            "n_splits_cv":       m.get("n_splits_cv"),
+            "modo_prediccion":   m.get("modo_prediccion"),
+            "salones":           m.get("salones", []),
+            "nombre_colegio":    m.get("nombre_colegio", art.get("nombre_colegio", codigo_ie)),
+            "nota_metodologica": m.get("nota_metodologica"),
+            "n_alumnos_modelo":  m.get("n_alumnos_modelo", m.get("n_alumnos", 0)),
+        },
     }
 
 
