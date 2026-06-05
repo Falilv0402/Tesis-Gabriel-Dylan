@@ -223,8 +223,9 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
     carpeta = Path(carpeta)
 
     # ── Detectar archivos ─────────────────────────────────────────────────────
-    notas_files    = sorted(carpeta.glob("*Notas*.xlsx"))
-    conducta_files = sorted(carpeta.glob("*Conducta*.xlsx"))
+    # Leer tanto .xlsx como .xls (formato antiguo CUBICOL)
+    notas_files    = sorted(carpeta.glob("*Notas*.xlsx")) + sorted(carpeta.glob("*Notas*.xls"))
+    conducta_files = sorted(carpeta.glob("*Conducta*.xlsx")) + sorted(carpeta.glob("*Conducta*.xls"))
 
     if not notas_files:
         raise FileNotFoundError(f"No se encontraron archivos de notas en {carpeta}")
@@ -379,13 +380,13 @@ def _inferir_salon(nombre_base: str) -> str:
     Convierte 'Quinto año A' → '5A', 'Sexto grado primaria B' → 'P6B', etc.
     """
     n = nombre_base.upper()
-    if "PRIMERO"  in n or "1ER"  in n: grado = "1"
-    elif "SEGUNDO" in n or "2DO"  in n: grado = "2"
-    elif "TERCERO" in n or "3ER"  in n: grado = "3"
-    elif "CUARTO"  in n or "4TO"  in n: grado = "4"
-    elif "QUINTO"  in n or "5TO"  in n: grado = "5"
-    elif "SEXTO"   in n or "6TO"  in n: grado = "6"
-    elif "SÉTIMO"  in n or "7MO"  in n: grado = "7"
+    if   any(w in n for w in ["PRIMERO","PRIMER","1ER","1RO"]): grado = "1"
+    elif any(w in n for w in ["SEGUNDO","2DO","2DO"]): grado = "2"
+    elif any(w in n for w in ["TERCERO","TERCER","3ER","3RO"]): grado = "3"
+    elif any(w in n for w in ["CUARTO","4TO"]): grado = "4"
+    elif any(w in n for w in ["QUINTO","5TO"]): grado = "5"
+    elif any(w in n for w in ["SEXTO","6TO"]): grado = "6"
+    elif any(w in n for w in ["SÉTIMO","SETIMO","7MO"]): grado = "7"
     else:
         m = re.search(r"\d+", nombre_base)
         grado = m.group() if m else "?"
