@@ -19,10 +19,11 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.metrics import roc_auc_score, f1_score
+from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score, accuracy_score
 
 from parse_excels import procesar_colegio
 
@@ -137,18 +138,33 @@ def train(carpeta: str, codigo_ie: str) -> None:
     if pos == 0 or neg == 0:
         print("      Sin varianza en target — usando score basado en promedio.")
         modelo    = None
-        auc_cv    = float("nan")
-        auc_train = float("nan")
-        f1_train  = float("nan")
-        n_splits_used = 0
+        auc_cv          = float("nan")
+        auc_train       = float("nan")
+        f1_train        = float("nan")
+        precision_train = float("nan")
+        recall_train    = float("nan")
+        accuracy_train  = float("nan")
+        n_splits_used   = 0
     else:
         class_weight = {0: 1.0, 1: max(1.0, neg / max(pos, 1))}
-        pipe = Pipeline([
+
+        pipe_lr = Pipeline([
             ("scaler", StandardScaler()),
             ("clf",    LogisticRegression(
-                C=0.5, max_iter=1000, class_weight=class_weight, random_state=42
+                C=1.0, max_iter=1000, class_weight=class_weight, random_state=42
             )),
         ])
+        pipe_rf = Pipeline([
+            ("scaler", StandardScaler()),
+            ("clf",    RandomForestClassifier(
+                n_estimators=300, max_depth=6,
+                class_weight=class_weight, random_state=42, n_jobs=-1
+            )),
+        ])
+        pipe = VotingClassifier(
+            estimators=[("lr", pipe_lr), ("rf", pipe_rf)],
+            voting="soft",
+        )
 
         # ── Cross-validation AUC (estimador insesgado) ────────────────────────
         # Con ~95 alumnos y ~15% positivos: 5-fold deja ~3 positivos por fold,
@@ -169,11 +185,15 @@ def train(carpeta: str, codigo_ie: str) -> None:
         pipe.fit(X, y)
         y_prob    = pipe.predict_proba(X)[:, 1]
         y_pred    = (y_prob >= 0.5).astype(int)
-        auc_train = float(roc_auc_score(y, y_prob))
-        f1_train  = float(f1_score(y, y_pred, zero_division=0))
+        auc_train       = float(roc_auc_score(y, y_prob))
+        f1_train        = float(f1_score(y, y_pred, zero_division=0))
+        precision_train = float(precision_score(y, y_pred, zero_division=0))
+        recall_train    = float(recall_score(y, y_pred, zero_division=0))
+        accuracy_train  = float(accuracy_score(y, y_pred))
         modelo    = pipe
         print(f"      AUC (train, referencia) : {auc_train:.4f}  "
-              f"F1 (train): {f1_train:.4f}")
+              f"F1 (train): {f1_train:.4f}  "
+              f"Precision: {precision_train:.4f}  Recall: {recall_train:.4f}")
         print("      NOTA: el AUC CV es el indicador válido; AUC train se reporta solo como referencia.")
 
     # ── 4. Generar predicciones y guardar ─────────────────────────────────────
@@ -212,9 +232,12 @@ def train(carpeta: str, codigo_ie: str) -> None:
             "n_alumnos_modelo": len(X),
             "n_riesgo":       int(y.sum()),
             "pct_riesgo":     round(100 * float(y.mean()), 1),
-            "auc_cv":         round(auc_cv, 4)    if not np.isnan(auc_cv)    else None,
-            "auc_train":      round(auc_train, 4) if not np.isnan(auc_train) else None,
-            "f1_train":       round(f1_train, 4)  if not np.isnan(f1_train)  else None,
+            "auc_cv":         round(auc_cv, 4)         if not np.isnan(auc_cv)         else None,
+            "auc_train":      round(auc_train, 4)      if not np.isnan(auc_train)      else None,
+            "f1_train":       round(f1_train, 4)       if not np.isnan(f1_train)       else None,
+            "precision_train": round(precision_train, 4) if not np.isnan(precision_train) else None,
+            "recall_train":   round(recall_train, 4)   if not np.isnan(recall_train)   else None,
+            "accuracy_train": round(accuracy_train, 4) if not np.isnan(accuracy_train) else None,
             "n_splits_cv":    n_splits_used,
             "nota_metodologica": (
                 f"MODO PREDICTIVO: features B1-B3, target B4. "

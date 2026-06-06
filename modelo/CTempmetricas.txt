@@ -1,0 +1,11 @@
+'nombre_colegio' : 'Joseph And Mery'
+'modo_prediccion' : 'n_alumnos' : 320
+'n_alumnos_modelo' : 320
+'n_riesgo' : 158
+'pct_riesgo' : 49.4
+'auc_cv' : 0.9039
+'auc_train' : 0.9262
+'f1_train' : 0.8208
+'n_splits_cv' : 5
+'nota_metodologica' : 'MODO PREDICTIVO: features B1-B3, target B4. AUC CV 5-fold = 0.9039. El modelo predice quién tendrá C en el 4° bimestre usando solo los 3 primeros, permitiendo intervención oportuna. Validación real: comparar predicciones con resultados finales al cierre del año académico.'
+'salones' : ['P6A', '3A', '1A', '1B', 'P6B', '2B', '4A', '2A', '3B', '5B', '5A']
