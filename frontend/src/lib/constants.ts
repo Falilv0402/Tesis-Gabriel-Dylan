@@ -33,6 +33,25 @@ export const featureLabels: Record<string, string> = {
   tamanio_ie:     "Tamanio IE",
 };
 
+/**
+ * Nombres "técnicos" guardados por el pipeline (modelo_ganador) → etiqueta
+ * legible para mostrar en el front. El modelo predictivo expuesto en la tesis
+ * — tanto para EM 2022 como para el colegio Joseph And Mary — es el Ensemble
+ * Híbrido (Regresión Logística + Random Forest, soft-voting); solo cambian
+ * las variables/datos usados para entrenarlo en cada caso.
+ */
+export const modelLabels: Record<string, string> = {
+  Stacking:                   "Ensemble Híbrido (Regresión Logística + Random Forest)",
+  "Logistic Regression":      "Regresión Logística",
+  "Random Forest":            "Random Forest",
+  "Gradient Boosting":        "Gradient Boosting",
+};
+
+export function modelLabel(nombre?: string | null): string {
+  if (!nombre) return "—";
+  return modelLabels[nombre] ?? nombre;
+}
+
 export const AVATAR_COLORS = [
   "#2563eb",
   "#7c3aed",

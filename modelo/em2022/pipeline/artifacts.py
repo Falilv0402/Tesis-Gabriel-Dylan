@@ -46,6 +46,7 @@ def build_metricas(
     hosmer_lemeshow:    dict,
     dca_curve:          dict,
     nested_cv:          dict,
+    cv_metrics:         dict,
     shap_interactions:  dict,
     pdp_data:           list,
     stability:          dict,
@@ -126,6 +127,10 @@ def build_metricas(
         "dca_curve": dca_curve,
         # nested CV
         "nested_cv": nested_cv,
+        # precision/recall/f1/accuracy/auc por CV out-of-fold — comparable
+        # entre datasets (p.ej. con el modelo del colegio) sin el optimismo
+        # de las métricas calculadas sobre el propio set de entrenamiento
+        "cv_metrics": cv_metrics,
         # SHAP advanced
         "shap_interactions": shap_interactions,
         "pdp_data":          pdp_data,

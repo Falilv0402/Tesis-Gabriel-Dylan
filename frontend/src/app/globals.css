@@ -1335,6 +1335,60 @@ tr:hover td { background: #f7f9fd; }
   text-transform: uppercase;
 }
 
+/* ── Ensemble Híbrido — bloque de métricas CV (out-of-fold) ──────────────── */
+.hybrid-cv-box {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 55%, #1d4ed8 130%);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin: 14px 0 4px;
+  box-shadow: 0 16px 40px rgba(15, 31, 61, 0.22);
+  position: relative;
+  overflow: hidden;
+}
+
+.hybrid-cv-box::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 100% 0%, rgba(255,255,255,0.14), transparent 55%);
+  pointer-events: none;
+}
+
+.hybrid-cv-box .model-note {
+  color: rgba(255, 255, 255, 0.78);
+  position: relative;
+}
+
+.hybrid-cv-title {
+  align-items: center;
+  color: #ffffff;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  font-weight: 700;
+  gap: 10px;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.hybrid-cv-badge {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 4px 12px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.hybrid-cv-box .kpi {
+  background: rgba(255, 255, 255, 0.94);
+}
+
 /* ── SHAP recommendation card ───────────────────────────────────────────── */
 .shap-recommendation {
   align-items: flex-start;

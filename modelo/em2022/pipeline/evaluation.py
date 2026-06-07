@@ -342,28 +342,71 @@ def compute_fair_thresholds(test_df, y_test, y_prob) -> dict:
 
 # ─── 8. SHAP ──────────────────────────────────────────────────────────────────
 
+def get_prep_and_base_estimators(pipe_final):
+    """
+    Return (prep_fitted, [base classifiers]) for the winning estimator,
+    supporting both a single (prep -> clf) Pipeline and a soft-voting
+    VotingClassifier ensemble whose members are each (prep -> clf) pipelines
+    built from the same recipe (build_preprocessor / make_pipeline).
+
+    In the ensemble case every member's fitted preprocessor is equivalent
+    (identical ColumnTransformer fit on the same training fold), so any one
+    of them can be used to transform X — we just take the first.
+    """
+    if isinstance(pipe_final, Pipeline):
+        return pipe_final.named_steps["prep"], [pipe_final.named_steps["clf"]]
+    members = list(pipe_final.named_estimators_.values())
+    return members[0].named_steps["prep"], [m.named_steps["clf"] for m in members]
+
+
 def compute_shap(pipe_final, X_train, feature_names, rng) -> tuple[list, dict]:
     import shap
-    prep_fitted = pipe_final.named_steps["prep"]
-    X_train_t   = prep_fitted.transform(X_train)
-    base_clf    = pipe_final.named_steps["clf"]
 
-    try:
-        explainer   = shap.TreeExplainer(base_clf)
-        shap_values = explainer.shap_values(X_train_t)
-        if isinstance(shap_values, list):
-            shap_values = shap_values[1]
-    except Exception:
-        explainer   = shap.Explainer(base_clf, X_train_t)
-        shap_values = explainer(X_train_t).values
+    prep_fitted, base_clfs = get_prep_and_base_estimators(pipe_final)
+    X_train_t = prep_fitted.transform(X_train)
 
-    shap_means = np.abs(shap_values).mean(axis=0).tolist()
+    # Modelo único: SHAP directo. Ensemble (soft-voting LR+RF): se calcula SHAP
+    # de cada miembro con el explainer adecuado a su familia (TreeExplainer
+    # para modelos de árboles, Explainer genérico para modelos lineales) y se
+    # promedian las magnitudes |SHAP| — dado que el ensemble promedia las
+    # probabilidades de sus miembros, promediar sus contribuciones de
+    # importancia es la forma estándar de explicar un voting ensemble
+    # heterogéneo y produce el mismo resultado que antes cuando hay un único
+    # modelo ganador.
+    abs_shap_per_member = []
+    tree_member = None
+    for base_clf in base_clfs:
+        try:
+            explainer   = shap.TreeExplainer(base_clf)
+            shap_values = explainer.shap_values(X_train_t)
+            if isinstance(shap_values, list):
+                shap_values = shap_values[1]
+            tree_member = tree_member or base_clf
+        except Exception:
+            explainer   = shap.Explainer(base_clf, X_train_t)
+            shap_values = explainer(X_train_t).values
+
+        # Normalizar a 2D (n_muestras, n_features): algunos explainers (p.ej.
+        # el genérico sobre LogisticRegression) devuelven un array por clase
+        # con forma (n_muestras, n_features, n_clases) — nos quedamos con la
+        # clase positiva (índice 1), igual que se hace arriba para las listas
+        # de TreeExplainer, así todos los miembros quedan en la misma forma
+        # antes de promediarlos.
+        if np.ndim(shap_values) == 3:
+            shap_values = shap_values[:, :, 1]
+
+        abs_shap_per_member.append(np.abs(shap_values))
+
+    shap_means      = np.mean(abs_shap_per_member, axis=0).mean(axis=0).tolist()
     shap_importance = sorted(zip(feature_names, shap_means), key=lambda x: x[1], reverse=True)
 
-    # Interaction values (200-sample subset)
+    # Interaction values (200-sample subset). Solo disponibles vía
+    # TreeExplainer — se usa el primer miembro basado en árboles del ensemble
+    # (o el modelo ganador si no es un ensemble).
     shap_interactions: dict = {}
+    base_clf_for_inter = tree_member or base_clfs[0]
     try:
-        tree_exp = shap.TreeExplainer(base_clf)
+        tree_exp = shap.TreeExplainer(base_clf_for_inter)
         sample_idx = rng.choice(len(X_train_t), size=min(200, len(X_train_t)), replace=False)
         X_sample   = X_train_t[sample_idx]
         shap_inter = tree_exp.shap_interaction_values(X_sample)

@@ -173,6 +173,14 @@ export type Diagnostico = {
   hosmer_lemeshow?: { chi2: number; p_value: number; df: number; bien_calibrado: boolean };
   dca_curve?: { thresholds: number[]; net_benefit_model: number[]; net_benefit_all: number[]; net_benefit_none: number[] };
   nested_cv?: { nested_auc_mean: number; nested_auc_std: number; bias_estimate: number };
+  cv_metrics?: {
+    auc_cv_mean: number; auc_cv_std: number;
+    precision_cv_mean: number; precision_cv_std: number;
+    recall_cv_mean: number; recall_cv_std: number;
+    f1_cv_mean: number; f1_cv_std: number;
+    accuracy_cv_mean: number; accuracy_cv_std: number;
+    n_splits: number;
+  };
   shap_interactions?: { matrix: number[][]; features: string[] };
   pdp_data?: { feature: string; grid: number[]; avg_pred: number[] }[];
   monotonicity_check?: Record<string, { compliance_pct: number; violations: number }>;

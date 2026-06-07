@@ -102,6 +102,7 @@ class DiagnosticoService:
             "optuna_result":         m.get("optuna_result", {}),
             # Advanced diagnostics (stored in pkl, missing from previous response)
             "nested_cv":             m.get("nested_cv", {}),
+            "cv_metrics":            m.get("cv_metrics", {}),
             "dca_curve":             m.get("dca_curve", {}),
             "pdp_data":              m.get("pdp_data", []),
             "shap_interactions":     m.get("shap_interactions", {}),

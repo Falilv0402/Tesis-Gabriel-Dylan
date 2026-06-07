@@ -10,7 +10,7 @@ import type { Metrics, Evaluation, Diagnostico, DatasetSummary, Importance } fro
 import { Panel, Kpi, Bar, EmptyState } from "@/components/ui/Primitives";
 import { ConfusionMatrix } from "@/components/charts/ConfusionMatrix";
 import { RocMiniChart } from "@/components/charts/RocMiniChart";
-import { featureLabels } from "@/lib/constants";
+import { featureLabels, modelLabel } from "@/lib/constants";
 import { pct, fmt } from "@/lib/format";
 import { DiagnosticoAvanzado } from "@/views/modelo/DiagnosticoAvanzado";
 
@@ -85,11 +85,49 @@ export function ModeloView({
             )}
           </div>
           <div className="model-note">
-            Modelo: <strong>{metrics.modelo_ganador ?? "—"}</strong> &nbsp;|&nbsp;
+            Modelo: <strong>{modelLabel(metrics.modelo_ganador)}</strong> &nbsp;|&nbsp;
             Train: <strong>{metrics.train_rows?.toLocaleString("es-PE") ?? "—"}</strong> alumnos &nbsp;|&nbsp;
             Test: <strong>{metrics.test_rows?.toLocaleString("es-PE") ?? "—"}</strong> alumnos
           </div>
           <div className="model-note">{metrics.scope ?? ""}</div>
+
+          {diagnostico?.cv_metrics && (
+            <div className="hybrid-cv-box">
+              <div className="hybrid-cv-title">
+                <span className="hybrid-cv-badge">Ensemble Híbrido · LR + RF</span>
+                Validación cruzada ({diagnostico.cv_metrics.n_splits}-fold por colegio)
+              </div>
+              <div className="metric-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))" }}>
+                <Kpi
+                  label="Precisión CV"
+                  value={pct(diagnostico.cv_metrics.precision_cv_mean)}
+                  detail={`±${(diagnostico.cv_metrics.precision_cv_std * 100).toFixed(2)} pp`}
+                  tone="low"
+                />
+                <Kpi
+                  label="Recall CV"
+                  value={pct(diagnostico.cv_metrics.recall_cv_mean)}
+                  detail={`±${(diagnostico.cv_metrics.recall_cv_std * 100).toFixed(2)} pp`}
+                />
+                <Kpi
+                  label="F1 CV"
+                  value={pct(diagnostico.cv_metrics.f1_cv_mean)}
+                  detail={`±${(diagnostico.cv_metrics.f1_cv_std * 100).toFixed(2)} pp`}
+                />
+                <Kpi
+                  label="Accuracy CV"
+                  value={pct(diagnostico.cv_metrics.accuracy_cv_mean)}
+                  detail={`±${(diagnostico.cv_metrics.accuracy_cv_std * 100).toFixed(2)} pp`}
+                />
+                <Kpi
+                  label="AUC CV"
+                  value={pct(diagnostico.cv_metrics.auc_cv_mean)}
+                  detail={`±${(diagnostico.cv_metrics.auc_cv_std * 100).toFixed(2)} pp`}
+                  tone="low"
+                />
+              </div>
+            </div>
+          )}
           <div className="slider-grid">
             <label>Umbral riesgo ALTO (actual: {thresholdHigh}%)
               <input type="range" min="30" max="90" value={thresholdHigh}

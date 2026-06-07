@@ -39,9 +39,11 @@ from em2022.pipeline.training import (
     run_stacking,
     fit_final_model,
     run_stability_analysis,
+    compute_cv_metrics,
 )
 from em2022.pipeline.automl import run_flaml, run_optuna
 from em2022.pipeline.evaluation import (
+    get_prep_and_base_estimators,
     compute_final_metrics,
     compute_monotonicity_check,
     compute_baselines,
@@ -166,13 +168,21 @@ def main() -> None:
     print("=" * 65)
     pipe_final, calibrated = fit_final_model(candidatos, ganador_nombre, X_train, y_train,
                                               g_train=g_train)
-    prep_fitted = pipe_final.named_steps["prep"]
+    # El ganador puede ser un Pipeline único (prep -> clf) o un VotingClassifier
+    # (Ensemble LR+RF); get_prep_and_base_estimators maneja ambos casos.
+    prep_fitted, _base_clfs_final = get_prep_and_base_estimators(pipe_final)
 
     # ── 11. Stability analysis (10 seeds) ────────────────────────────────────
     print("\n" + "=" * 65)
     print("  ESTABILIDAD — 10 semillas aleatorias")
     print("=" * 65)
     stability = run_stability_analysis(df, candidatos, ganador_nombre, X_train, y_train)
+
+    # ── 11b. Métricas de validación cruzada (comparables entre datasets) ──────
+    print("\n" + "=" * 65)
+    print("  MÉTRICAS CV — Precision/Recall/F1/Accuracy out-of-fold (GroupKFold por IE)")
+    print("=" * 65)
+    cv_metrics = compute_cv_metrics(candidatos[ganador_nombre], X_train, y_train, g_train, cv)
 
     # ── 12. Evaluación final ──────────────────────────────────────────────────
     print("\n" + "=" * 65)
@@ -257,6 +267,7 @@ def main() -> None:
         hosmer_lemeshow     = hosmer_lemeshow,
         dca_curve           = dca_curve,
         nested_cv           = nested_cv,
+        cv_metrics          = cv_metrics,
         shap_interactions   = shap_interactions,
         pdp_data            = pdp_data,
         stability           = stability,

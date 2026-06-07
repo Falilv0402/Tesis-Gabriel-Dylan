@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.frozen import FrozenEstimator
 from sklearn.base import clone
 from sklearn.model_selection import GroupKFold, GroupShuffleSplit, GridSearchCV, cross_validate
 from xgboost import XGBClassifier
@@ -128,6 +129,58 @@ def run_nested_cv(candidatos: dict, ganador_nombre: str, resultados: dict,
     return nested_cv
 
 
+# ─── CV metrics (comparables entre datasets) ──────────────────────────────────
+
+def compute_cv_metrics(pipe_final, X_train, y_train, g_train, cv) -> dict:
+    """
+    Precision / Recall / F1 / Accuracy / AUC del modelo final ganador,
+    estimadas por validación cruzada out-of-fold (GroupKFold(5) por IE).
+
+    A diferencia de las métricas "_train" (calculadas sobre los mismos datos
+    usados para entrenar, que tienden a ser optimistas), estas se calculan
+    siempre sobre el fold que el modelo NO vio durante ese ajuste — el mismo
+    criterio que ya se usa para auc_cv. Esto las hace directamente comparables
+    entre el modelo de EM 2022 y el del colegio (o cualquier otro dataset),
+    sin el sesgo de optimismo de una métrica de entrenamiento.
+    """
+    scores = cross_validate(
+        pipe_final, X_train, y_train,
+        cv=cv, groups=g_train,
+        scoring={
+            "auc":       "roc_auc",
+            "precision": "precision",
+            "recall":    "recall",
+            "f1":        "f1",
+            "accuracy":  "accuracy",
+        },
+        n_jobs=-1,
+    )
+    cv_metrics = {
+        "auc_cv_mean":       round(float(scores["test_auc"].mean()), 4),
+        "auc_cv_std":        round(float(scores["test_auc"].std()), 4),
+        "precision_cv_mean": round(float(scores["test_precision"].mean()), 4),
+        "precision_cv_std":  round(float(scores["test_precision"].std()), 4),
+        "recall_cv_mean":    round(float(scores["test_recall"].mean()), 4),
+        "recall_cv_std":     round(float(scores["test_recall"].std()), 4),
+        "f1_cv_mean":        round(float(scores["test_f1"].mean()), 4),
+        "f1_cv_std":         round(float(scores["test_f1"].std()), 4),
+        "accuracy_cv_mean":  round(float(scores["test_accuracy"].mean()), 4),
+        "accuracy_cv_std":   round(float(scores["test_accuracy"].std()), 4),
+        "n_splits": cv.get_n_splits(),
+        "nota": (
+            "Métricas de validación cruzada out-of-fold (GroupKFold por IE) "
+            "sobre el modelo final. Comparables entre datasets/modelos sin el "
+            "optimismo de las métricas '_train' (en muestra)."
+        ),
+    }
+    print(f"  CV (out-of-fold) — Precision: {cv_metrics['precision_cv_mean']:.4f} "
+          f"±{cv_metrics['precision_cv_std']:.4f}   "
+          f"Recall: {cv_metrics['recall_cv_mean']:.4f} ±{cv_metrics['recall_cv_std']:.4f}   "
+          f"F1: {cv_metrics['f1_cv_mean']:.4f} ±{cv_metrics['f1_cv_std']:.4f}   "
+          f"Accuracy: {cv_metrics['accuracy_cv_mean']:.4f} ±{cv_metrics['accuracy_cv_std']:.4f}")
+    return cv_metrics
+
+
 # ─── Grid search ──────────────────────────────────────────────────────────────
 
 GRID_PARAMS: dict[str, dict] = {
@@ -248,10 +301,12 @@ def fit_final_model(candidatos: dict, ganador_nombre: str, X_train, y_train,
         X_cal  = X_train.iloc[cal_val_idx]
         y_cal  = y_train[cal_val_idx]
 
-        # Fit a clone on the 80% split, then calibrate on the 20% held-out
+        # Fit a clone on the 80% split, then calibrate on the 20% held-out.
+        # NOTE: scikit-learn removed cv="prefit"; the supported replacement is
+        # to wrap the already-fitted estimator with FrozenEstimator.
         pipe_cal = clone(pipe_final)
         pipe_cal.fit(X_fit, y_fit)
-        calibrated = CalibratedClassifierCV(pipe_cal, method="isotonic", cv="prefit")
+        calibrated = CalibratedClassifierCV(FrozenEstimator(pipe_cal), method="isotonic")
         calibrated.fit(X_cal, y_cal)
 
         # Refit pipe_final on ALL train (used for SHAP / ablation / PDP)
