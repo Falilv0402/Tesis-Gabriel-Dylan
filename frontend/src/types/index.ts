@@ -206,9 +206,11 @@ export type ShapData = {
   contributions: ShapContribution[];
 };
 
-export type Tab = "dashboard" | "estudiante" | "intervenciones" | "datos" | "modelo" | "reportes" | "usuarios" | "micolegio";
+export type Tab = "dashboard" | "estudiante" | "intervenciones" | "datos" | "modelo" | "reportes" | "usuarios";
 
-// ── Mi Colegio ────────────────────────────────────────────────────────────────
+// ── Modelo interno del colegio (IE con datos propios, p.ej. Joseph And Mary) ──
+// Cada alumno trae sus notas por bimestre (b1..b4) y materia, además del
+// promedio (pp_), para poder filtrar/mostrar por bimestre en la vista del director.
 export type AlumnoColegio = {
   n_alumno:        number;
   nombre:          string;
@@ -218,11 +220,15 @@ export type AlumnoColegio = {
   prob_riesgo:     number;
   riesgo:          number;
   n_materias_c:    number;
-  promedio_materias?: number;
-  pp_matematica?:  number | null;
-  pp_comunicacion?: number | null;
-  pp_cta?:         number | null;
+  promedio_materias?: number | null;
   conducta_promedio?: number | null;
+  // promedios anuales
+  pp_matematica?:   number | null;
+  pp_comunicacion?: number | null;
+  pp_cta?:          number | null;
+  pp_lenguaje?:     number | null;
+  // notas por bimestre (índice dinámico b{1..4}_{materia})
+  [key: `b${1 | 2 | 3 | 4}_${string}`]: number | string | null | undefined;
 };
 
 export type ColegioResumen = {

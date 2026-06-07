@@ -4,7 +4,7 @@ import {
   Activity, AlertTriangle, Bell, CheckCircle2,
   LogOut, ShieldCheck, X,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 import { useAuth } from "@/hooks/useAuth";
 import { useAdmin } from "@/hooks/useAdmin";
@@ -29,8 +29,12 @@ import { DatosView } from "@/views/DatosView";
 import { ModeloView } from "@/views/ModeloView";
 import { ReportesView } from "@/views/ReportesView";
 import { UsuariosView } from "@/views/UsuariosView";
-import { MiColegioView } from "@/views/MiColegioView";
-import { useMiColegio } from "@/hooks/useMiColegio";
+import { ColegioDashboardView } from "@/views/ColegioDashboardView";
+import { ColegioReportesView } from "@/views/ColegioReportesView";
+import { ColegioEstudianteView } from "@/views/ColegioEstudianteView";
+import { ColegioIntervencionesView } from "@/views/ColegioIntervencionesView";
+import { useColegio } from "@/hooks/useColegio";
+import { colegioStudentId, colegioToStudent } from "@/lib/colegio";
 
 import type { Tab, UserRole } from "@/types";
 
@@ -38,6 +42,8 @@ export default function Page() {
   // ── Core UI state ─────────────────────────────────────────────────
   const [tab, setTab] = useState<Tab>("dashboard");
   const [actionBusy, setActionBusy] = useState(false);
+  // Alumno seleccionado dentro del modelo del colegio (vista director con IE propia)
+  const [selectedColegioId, setSelectedColegioId] = useState("");
 
   const {
     toasts, notifInbox, notifCount, setNotifCount,
@@ -49,17 +55,40 @@ export default function Page() {
   const auth = useAuth(toast);
   const admin = useAdmin(auth.session, auth.role, tab, toast, auth.insertAudit, auth.profileCodigoIe);
   const modelData = useModelData(admin.apiConnected, admin.setApiConnected, toast);
+
+  // Datos del modelo interno del colegio (solo si la IE del usuario tiene uno).
+  const colegio = useColegio(auth.profileCodigoIe);
+
+  // Alumno de colegio seleccionado (por defecto, el de mayor riesgo) y su
+  // adaptación a la forma `Student` para reutilizar los hooks compartidos.
+  const colegioSelectedAlumno = useMemo(() => {
+    if (!colegio.hasModel || colegio.alumnos.length === 0) return undefined;
+    const found = colegio.alumnos.find((a) => colegioStudentId(a) === selectedColegioId);
+    if (found) return found;
+    return [...colegio.alumnos].sort((a, b) => b.prob_riesgo - a.prob_riesgo)[0];
+  }, [colegio.hasModel, colegio.alumnos, selectedColegioId]);
+
+  const colegioSelectedStudent = useMemo(
+    () => colegioSelectedAlumno ? colegioToStudent(colegioSelectedAlumno, auth.profileDistrito) : undefined,
+    [colegioSelectedAlumno, auth.profileDistrito]
+  );
+
   const students = useStudents(
     auth.profileCodigoIe, auth.profileDistrito, auth.role, auth.session,
     modelData.thresholdHigh, modelData.thresholdMedium,
     modelData.diagnostico,
     admin.apiConnected, admin.setApiConnected,
-    toast, auth.insertAudit
+    toast, auth.insertAudit,
+    colegio.hasModel ? colegioSelectedStudent : undefined,
   );
-  const miColegio = useMiColegio(auth.profileCodigoIe);
+
+  // Estudiante "activo" para las features compartidas (anotaciones, plan,
+  // intervenciones): el alumno del colegio si la IE tiene modelo propio, o el
+  // alumno EM 2022 seleccionado en caso contrario.
+  const activeSelected = colegio.hasModel ? colegioSelectedStudent : students.selected;
 
   const interventions = useInterventions(
-    auth.session, students.selected,
+    auth.session, activeSelected,
     auth.profileCodigoIe, auth.profileDistrito,
     "distrito", auth.role, toast, auth.insertAudit
   );
@@ -300,7 +329,18 @@ export default function Page() {
 
         {/* Tab content */}
         <section className="content-area">
-          {isDirectorRole && tab === "dashboard" && (
+          {isDirectorRole && tab === "dashboard" && colegio.hasModel && (
+            <ColegioDashboardView
+              nombreColegio={colegio.resumen?.nombre_colegio ?? auth.profileNombreIe ?? "Mi colegio"}
+              alumnos={colegio.alumnos}
+              resumen={colegio.resumen}
+              isLoading={colegio.isLoading}
+              onRefresh={() => void colegio.reload()}
+              onSelect={(a) => { setSelectedColegioId(colegioStudentId(a)); setTab("estudiante"); }}
+            />
+          )}
+
+          {isDirectorRole && tab === "dashboard" && !colegio.hasModel && (
             <DashboardView
               filtered={students.filtered} selected={students.selected}
               displayTotal={students.displayTotal} high={students.high} medium={students.medium} low={students.low}
@@ -323,7 +363,28 @@ export default function Page() {
             />
           )}
 
-          {isDirectorRole && tab === "estudiante" && (
+          {isDirectorRole && tab === "estudiante" && colegio.hasModel && (
+            <ColegioEstudianteView
+              role={auth.role}
+              alumno={colegioSelectedAlumno}
+              annotations={interventions.annotations}
+              annotationText={interventions.annotationText} setAnnotationText={interventions.setAnnotationText}
+              isSavingAnnotation={interventions.isSavingAnnotation}
+              planMilestones={students.planMilestones}
+              newMilestone={students.newMilestone} setNewMilestone={students.setNewMilestone}
+              newMilestoneDate={students.newMilestoneDate} setNewMilestoneDate={students.setNewMilestoneDate}
+              studentTab={students.studentTab} setStudentTab={students.setStudentTab}
+              setTab={setTab}
+              saveAnnotation={() => void interventions.saveAnnotation()}
+              loadAnnotations={(id) => void interventions.loadAnnotations(id)}
+              addMilestone={() => void students.addMilestone()}
+              toggleMilestone={(id) => void students.toggleMilestone(id)}
+              loadMilestones={(id) => void students.loadMilestones(id)}
+              isLoadingMilestones={students.isLoadingMilestones}
+            />
+          )}
+
+          {isDirectorRole && tab === "estudiante" && !colegio.hasModel && (
             <EstudianteView
               role={auth.role}
               selected={students.selected} shapData={students.shapData} shapLoading={students.shapLoading}
@@ -350,7 +411,27 @@ export default function Page() {
             />
           )}
 
-          {isDirectorRole && tab === "intervenciones" && (
+          {isDirectorRole && tab === "intervenciones" && colegio.hasModel && (
+            <ColegioIntervencionesView
+              role={auth.role}
+              alumnos={colegio.alumnos}
+              selectedAlumno={colegioSelectedAlumno}
+              onSelectAlumno={(id) => setSelectedColegioId(id)}
+              tipoIntervencion={interventions.tipoIntervencion} setTipoIntervencion={interventions.setTipoIntervencion}
+              descIntervencion={interventions.descIntervencion} setDescIntervencion={interventions.setDescIntervencion}
+              notifScope={interventions.notifScope} setNotifScope={interventions.setNotifScope}
+              isSendingAlert={interventions.isSendingAlert}
+              profileDistrito={auth.profileDistrito} profileCodigoIe={auth.profileCodigoIe}
+              interventions={interventions.interventions} interventionStats={interventions.interventionStats}
+              authBusy={actionBusy}
+              onRegistrar={() => void interventions.handleRegistrarIntervencion(actionBusy, setActionBusy)}
+              onSendAlert={() => void interventions.sendTeamAlert()}
+              onUpdateEstado={(id, estado) => void admin.updateEstadoIntervencion(id, estado, interventions.setInterventions)}
+              onLoadInterventions={() => void interventions.loadInterventions()}
+            />
+          )}
+
+          {isDirectorRole && tab === "intervenciones" && !colegio.hasModel && (
             <IntervencionesView
               role={auth.role}
               selected={students.selected} filtered={students.filtered}
@@ -368,26 +449,18 @@ export default function Page() {
             />
           )}
 
-          {isDirectorRole && tab === "micolegio" && (
-            <MiColegioView
-              codigoIe={auth.profileCodigoIe}
-              alumnos={miColegio.alumnos}
-              resumen={miColegio.resumen}
-              isLoading={miColegio.isLoading}
-              error={miColegio.error}
-              salonFilter={miColegio.salonFilter}
-              setSalonFilter={miColegio.setSalonFilter}
-              nivelFilter={miColegio.nivelFilter}
-              setNivelFilter={miColegio.setNivelFilter}
-              salones={miColegio.salones}
-              onRefresh={() => void miColegio.loadAlumnos()}
+          {isDirectorRole && tab === "reportes" && colegio.hasModel && (
+            <ColegioReportesView
+              nombreColegio={colegio.resumen?.nombre_colegio ?? auth.profileNombreIe ?? "Mi colegio"}
+              alumnos={colegio.alumnos}
+              resumen={colegio.resumen}
+              onSelect={(a) => { setSelectedColegioId(colegioStudentId(a)); setTab("estudiante"); }}
             />
           )}
 
-          {isDirectorRole && tab === "reportes" && (
+          {isDirectorRole && tab === "reportes" && !colegio.hasModel && (
             <ReportesView
               summary={students.summary}
-              globalSummary={modelData.globalSummary}
               filtered={students.filtered}
               high={students.high}
               medium={students.medium}
@@ -396,8 +469,6 @@ export default function Page() {
               exportCsv={handleExportCsv}
               exportXlsx={handleExportXlsx}
               exportPdf={handleExportPdf}
-              miColegioAlumnos={miColegio.alumnos}
-              miColegioResumen={miColegio.resumen}
             />
           )}
 

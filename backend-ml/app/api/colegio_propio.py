@@ -19,11 +19,22 @@ def _validate_ie(codigo_ie: str) -> str:
 
 router = APIRouter(prefix="/colegio", tags=["Mi Colegio"])
 
-# parents[2] = /app en Docker (WORKDIR) = raíz del proyecto en desarrollo
-# Esto es consistente con model_loader.py que también usa parents[2]
-MODEL_DIR = Path(__file__).resolve().parents[2] / "modelo" / "model"
-DATA_DIR  = Path(__file__).resolve().parents[2] / "modelo" / "data"
-COLEGIO_SCRIPTS = Path(__file__).resolve().parents[2] / "modelo" / "colegio"
+# Resolución robusta de rutas: funciona tanto en Docker (WORKDIR=/app, código
+# en /app/app → parents[2] = /app) como en desarrollo local (código en
+# repo/backend-ml/app → la carpeta `modelo/` está un nivel más arriba, en
+# parents[3] = raíz del repo). Probamos ambos candidatos y elegimos el que
+# exista, para no depender del entorno de ejecución.
+def _resolve_repo_path(*parts: str) -> Path:
+    here = Path(__file__).resolve()
+    for base in (here.parents[2], here.parents[3]):  # /app (Docker)  |  raíz repo (dev)
+        candidate = base.joinpath(*parts)
+        if candidate.exists():
+            return candidate
+    return here.parents[2].joinpath(*parts)  # fallback al layout de Docker
+
+MODEL_DIR       = _resolve_repo_path("modelo", "model")
+DATA_DIR        = _resolve_repo_path("modelo", "data")
+COLEGIO_SCRIPTS = _resolve_repo_path("modelo", "colegio")
 
 
 def _load_artefacto(codigo_ie: str) -> dict:
@@ -93,12 +104,20 @@ def get_resumen(codigo_ie: str = Depends(_validate_ie)):
         por_salon[salon][nivel] = por_salon[salon].get(nivel, 0) + 1
         por_salon[salon]["total"] += 1
 
+    # n_riesgo / pct_riesgo se derivan de las predicciones reales mostradas
+    # (niveles ALTO + MEDIO) para que el KPI coincida con la distribución por
+    # nivel que se grafica al lado. Antes se tomaban de 'metricas', que reflejaba
+    # la prevalencia del target de entrenamiento y no cuadraba con los niveles.
+    n_alumnos = len(preds)
+    n_riesgo  = por_nivel["ALTO"] + por_nivel["MEDIO"]
+    pct_riesgo = round(100 * n_riesgo / n_alumnos, 1) if n_alumnos else 0.0
+
     return {
         "codigo_ie":      codigo_ie,
         "nombre_colegio": art.get("nombre_colegio", codigo_ie),
-        "n_alumnos":      m.get("n_alumnos", len(preds)),
-        "n_riesgo":       m.get("n_riesgo", 0),
-        "pct_riesgo":     m.get("pct_riesgo", 0.0),
+        "n_alumnos":      n_alumnos,
+        "n_riesgo":       n_riesgo,
+        "pct_riesgo":     pct_riesgo,
         "por_nivel":      por_nivel,
         "por_salon":      por_salon,
         "trained_at":     art.get("trained_at"),

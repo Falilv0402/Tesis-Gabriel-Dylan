@@ -1335,6 +1335,54 @@ tr:hover td { background: #f7f9fd; }
   text-transform: uppercase;
 }
 
+/* ── Encabezado del dashboard del colegio (vista director con modelo propio) ── */
+.colegio-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 60%, #1d4ed8 130%);
+  box-shadow: 0 14px 36px rgba(15, 31, 61, 0.20);
+  position: relative;
+  overflow: hidden;
+}
+
+.colegio-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 100% 0%, rgba(255, 255, 255, 0.14), transparent 55%);
+  pointer-events: none;
+}
+
+.colegio-hero-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.30);
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.colegio-hero h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+
+.colegio-hero span {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
 /* ── Ensemble Híbrido — bloque de métricas CV (out-of-fold) ──────────────── */
 .hybrid-cv-box {
   background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 55%, #1d4ed8 130%);

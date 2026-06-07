@@ -172,16 +172,24 @@ export function useInterventions(
             Se ha registrado una intervención sobre el siguiente estudiante en el sistema SATRA:
           </p>
           <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
-            ${[
-              ["Estudiante",       `···${shortId(selected.id)}`],
-              ["Nivel de riesgo",  selected.nivel_riesgo],
-              ["Probabilidad",     `${(selected.probabilidad_riesgo * 100).toFixed(1)}%`],
-              ["Tipo de alerta",   selected.tipo_riesgo],
-              ["Distrito",         selected.distrito],
-              ["Puntaje Lectura",  selected.M500_L.toFixed(0)],
-              ["Puntaje Ciencias", selected.M500_CN.toFixed(0)],
-              ["ISE",              selected.ise.toFixed(2)],
-            ].map(([k, v]) => `
+            ${(selected.periodo === "Colegio"
+              ? [
+                  ["Estudiante",      `···${shortId(selected.id)}`],
+                  ["Nivel de riesgo", selected.nivel_riesgo],
+                  ["Probabilidad",    `${(selected.probabilidad_riesgo * 100).toFixed(1)}%`],
+                  ["Tipo de alerta",  selected.tipo_riesgo],
+                ]
+              : [
+                  ["Estudiante",       `···${shortId(selected.id)}`],
+                  ["Nivel de riesgo",  selected.nivel_riesgo],
+                  ["Probabilidad",     `${(selected.probabilidad_riesgo * 100).toFixed(1)}%`],
+                  ["Tipo de alerta",   selected.tipo_riesgo],
+                  ["Distrito",         selected.distrito],
+                  ["Puntaje Lectura",  selected.M500_L.toFixed(0)],
+                  ["Puntaje Ciencias", selected.M500_CN.toFixed(0)],
+                  ["ISE",              selected.ise.toFixed(2)],
+                ]
+            ).map(([k, v]) => `
               <tr>
                 <td style="padding:8px 12px;background:#f1f5f9;border:1px solid #e2e8f0;font-weight:600;font-size:13px;color:#374151;width:40%">${k}</td>
                 <td style="padding:8px 12px;background:#fff;border:1px solid #e2e8f0;font-size:13px;color:#1e293b">${v}</td>

@@ -19,6 +19,10 @@ export function useStudents(
   setApiConnected: (v: boolean) => void,
   toast: (msg: string, type?: "success" | "error" | "info") => void,
   insertAudit: (accion: string, tabla?: string, detalle?: object) => Promise<void>,
+  // Cuando el director pertenece a un colegio con modelo propio, el alumno
+  // seleccionado proviene de ese modelo (no del dataset EM 2022). Se inyecta
+  // aquí para que el plan de hitos y demás features compartidas operen sobre él.
+  selectedOverride?: Student | undefined,
 ) {
   const [students,          setStudents]          = useState<Student[]>([]);
   const [totalStudents,     setTotalStudents]      = useState(0);
@@ -347,7 +351,7 @@ export function useStudents(
     );
   }, [classifiedStudents]);
 
-  const selected     = classifiedStudents.find((s) => s.id === selectedId) ?? filtered[0];
+  const selected     = selectedOverride ?? classifiedStudents.find((s) => s.id === selectedId) ?? filtered[0];
   const high         = localCounts.ALTO;
   const medium       = localCounts.MEDIO;
   const low          = localCounts.BAJO;

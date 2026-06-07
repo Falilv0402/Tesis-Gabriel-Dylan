@@ -6,13 +6,12 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
-import type { DatasetSummary, Student, AlumnoColegio, ColegioResumen } from "@/types";
+import type { DatasetSummary, Student } from "@/types";
 import { Panel } from "@/components/ui/Primitives";
 import { shortId, pct, riskClass } from "@/lib/format";
 
 interface ReportesViewProps {
   summary: DatasetSummary;
-  globalSummary: DatasetSummary;
   filtered: Student[];
   high: number;
   medium: number;
@@ -21,26 +20,19 @@ interface ReportesViewProps {
   exportCsv: () => void;
   exportXlsx: () => void;
   exportPdf: () => void;
-  miColegioAlumnos?: AlumnoColegio[];
-  miColegioResumen?: ColegioResumen | null;
 }
 
 const RISK_COLORS = { ALTO: "#dc2626", MEDIO: "#d97706", BAJO: "#16a34a" };
-const NOTA_COLORS = { AD: "#16a34a", A: "#2563eb", B: "#d97706", C: "#dc2626" };
 
 export function ReportesView({
-  summary, globalSummary, filtered,
+  summary, filtered,
   high, medium, low, displayTotal,
   exportCsv, exportXlsx, exportPdf,
-  miColegioAlumnos = [], miColegioResumen,
 }: ReportesViewProps) {
   // Filtro EM 2022 — compartido entre chips y gráficos
   const [riskFilter,    setRiskFilter]    = useState<"TODOS" | "ALTO" | "MEDIO" | "BAJO">("TODOS");
   const [tipoFilter,    setTipoFilter]    = useState<string>("TODOS");
   const [sexoFilter,    setSexoFilter]    = useState<string>("TODOS");
-  // Filtro Mi Colegio — para el donut y la mini-tabla
-  const [mcFilter,      setMcFilter]      = useState<"TODOS" | "ALTO" | "MEDIO" | "BAJO">("TODOS");
-  const [mcSalonFilter, setMcSalonFilter] = useState<string>("TODOS");
 
   // Toggle helper: si el mismo valor ya está activo, vuelve a TODOS
   const toggleFilter = useCallback(
@@ -56,13 +48,6 @@ export function ReportesView({
     if (sexoFilter !== "TODOS") r = r.filter(s => s.sexo         === sexoFilter);
     return r;
   }, [filtered, riskFilter, tipoFilter, sexoFilter]);
-
-  const mcRows = useMemo(() => {
-    let r = miColegioAlumnos;
-    if (mcFilter      !== "TODOS") r = r.filter(a => a.nivel_riesgo === mcFilter);
-    if (mcSalonFilter !== "TODOS") r = r.filter(a => a.salon        === mcSalonFilter);
-    return r;
-  }, [miColegioAlumnos, mcFilter, mcSalonFilter]);
 
   const total = high + medium + low;
 
@@ -95,47 +80,6 @@ export function ReportesView({
       .sort((a, b) => b.n - a.n)
       .slice(0, 6);
   }, [filtered]);
-
-  // ── Datos para gráficos Mi Colegio ────────────────────────────────────────
-
-  const notaLabel = (val: number | null | undefined) => {
-    if (val == null) return null;
-    if (val >= 18) return "AD";
-    if (val >= 14) return "A";
-    if (val >= 11) return "B";
-    return "C";
-  };
-
-  const notasPorMateria = useMemo(() => {
-    if (!miColegioAlumnos.length) return [];
-    const materias = [
-      { key: "pp_matematica",   label: "Matemática" },
-      { key: "pp_comunicacion", label: "Comunicación" },
-      { key: "pp_cta",          label: "CTA" },
-    ] as const;
-    return materias.map(({ key, label }) => {
-      const cnts = { AD: 0, A: 0, B: 0, C: 0 };
-      for (const a of miColegioAlumnos) {
-        const lbl = notaLabel((a as Record<string, unknown>)[key] as number | null);
-        if (lbl) cnts[lbl]++;
-      }
-      return { materia: label, ...cnts };
-    });
-  }, [miColegioAlumnos]);
-
-  const riesgoPorSalon = useMemo(() => {
-    if (!miColegioAlumnos.length) return [];
-    const acc: Record<string, { salon: string; ALTO: number; MEDIO: number; BAJO: number; total: number }> = {};
-    for (const a of miColegioAlumnos) {
-      const s = a.salon;
-      if (!acc[s]) acc[s] = { salon: s, ALTO: 0, MEDIO: 0, BAJO: 0, total: 0 };
-      acc[s][a.nivel_riesgo]++;
-      acc[s].total++;
-    }
-    return Object.values(acc).sort((a, b) => a.salon.localeCompare(b.salon));
-  }, [miColegioAlumnos]);
-
-  const hasMiColegio = miColegioAlumnos.length > 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -266,7 +210,7 @@ export function ReportesView({
               </div>
             )}
             <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 8, textAlign: "center" }}>
-              Global: {globalSummary.total.toLocaleString("es-PE")} est. · EM 2022
+              {total.toLocaleString("es-PE")} estudiantes · EM 2022
             </p>
           </Panel>
 
@@ -368,215 +312,6 @@ export function ReportesView({
               </ResponsiveContainer>
             </Panel>
           </div>
-
-          {/* ── Gráficos Mi Colegio (solo si hay datos) ─────────────────────── */}
-          {hasMiColegio && (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "4px 0 -4px" }}>
-                <div style={{ height: 1, flex: 1, background: "var(--border)" }} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--navy)", whiteSpace: "nowrap" }}>
-                  {miColegioResumen?.nombre_colegio ?? "Mi Colegio"} — datos internos
-                </span>
-                <div style={{ height: 1, flex: 1, background: "var(--border)" }} />
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-
-                {/* Gráfico 4: Notas por materia */}
-                <Panel title="Distribución de notas por materia">
-                  <div className="model-note" style={{ marginBottom: 8 }}>
-                    Cantidad de alumnos por nota (AD/A/B/C) en cada materia clave.
-                  </div>
-                  <ResponsiveContainer width="100%" height={210}>
-                    <BarChart data={notasPorMateria} margin={{ top: 8, right: 8, left: -20, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="materia" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="AD" fill={NOTA_COLORS.AD} name="AD (Dest.)" radius={[2,2,0,0]} />
-                      <Bar dataKey="A"  fill={NOTA_COLORS.A}  name="A (Logro)"  radius={[2,2,0,0]} />
-                      <Bar dataKey="B"  fill={NOTA_COLORS.B}  name="B (Proceso)"radius={[2,2,0,0]} />
-                      <Bar dataKey="C"  fill={NOTA_COLORS.C}  name="C (Inicio)" radius={[2,2,0,0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Panel>
-
-                {/* Gráfico 5: Riesgo por salón (interactivo) */}
-                <Panel title={`Riesgo por salón${mcSalonFilter !== "TODOS" ? ` · ${mcSalonFilter}` : ""}`}>
-                  <div className="model-note" style={{ marginBottom: 8 }}>
-                    Clic en un salón para filtrar la lista de abajo.
-                  </div>
-                  <ResponsiveContainer width="100%" height={210}>
-                    <BarChart data={riesgoPorSalon} margin={{ top: 8, right: 8, left: -20, bottom: 4 }}
-                      onClick={(d) => {
-                        if (d?.activeLabel) toggleFilter(mcSalonFilter, String(d.activeLabel), setMcSalonFilter, "TODOS");
-                      }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="salon" tick={{ fontSize: 11 }} cursor="pointer" />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="ALTO"  fill={RISK_COLORS.ALTO}  name="Alto"  radius={[2,2,0,0]} stackId="a" cursor="pointer" />
-                      <Bar dataKey="MEDIO" fill={RISK_COLORS.MEDIO} name="Medio" radius={[2,2,0,0]} stackId="a" cursor="pointer" />
-                      <Bar dataKey="BAJO"  fill={RISK_COLORS.BAJO}  name="Bajo"  radius={[0,0,2,2]} stackId="a" cursor="pointer" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Panel>
-
-                {/* Gráfico 6: Donut crítico/moderado/bajo */}
-                <Panel title={`Estado general${mcFilter !== "TODOS" ? ` · ${mcFilter === "ALTO" ? "Crítico" : mcFilter === "MEDIO" ? "Moderado" : "Bajo"}` : ""}`}>
-                  <div className="model-note" style={{ marginBottom: 4 }}>
-                    Clic en un segmento para filtrar la lista de abajo.
-                  </div>
-                  {(() => {
-                    const critico  = miColegioAlumnos.filter(a => a.nivel_riesgo === "ALTO").length;
-                    const moderado = miColegioAlumnos.filter(a => a.nivel_riesgo === "MEDIO").length;
-                    const bajo     = miColegioAlumnos.filter(a => a.nivel_riesgo === "BAJO").length;
-                    // Mapeo entre etiquetas del donut y valores del filtro
-                    const labelToFilter: Record<string,"ALTO"|"MEDIO"|"BAJO"> =
-                      { "Crítico": "ALTO", "Moderado": "MEDIO", "Bajo": "BAJO" };
-                    const donutData = [
-                      { name: "Crítico",  value: critico,  color: "#dc2626", nivel: "ALTO"  as const },
-                      { name: "Moderado", value: moderado, color: "#d97706", nivel: "MEDIO" as const },
-                      { name: "Bajo",     value: bajo,     color: "#16a34a", nivel: "BAJO"  as const },
-                    ].filter(d => d.value > 0);
-                    const pctCritico = miColegioAlumnos.length
-                      ? ((critico / miColegioAlumnos.length) * 100).toFixed(0)
-                      : "0";
-                    return (
-                      <>
-                        <ResponsiveContainer width="100%" height={170}>
-                          <PieChart>
-                            <Pie data={donutData} cx="50%" cy="50%"
-                              innerRadius={42} outerRadius={72}
-                              dataKey="value" paddingAngle={3}
-                              cursor="pointer"
-                              onClick={(d) => { const nv = labelToFilter[String(d.name)]; if (nv) toggleFilter(mcFilter, nv, setMcFilter, "TODOS"); }}
-                              label={({ name, percent }) =>
-                                `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-                              labelLine={false}>
-                              {donutData.map((d) => (
-                                <Cell key={d.name} fill={d.color}
-                                  opacity={mcFilter === "TODOS" || mcFilter === d.nivel ? 1 : 0.3}
-                                  stroke={mcFilter === d.nivel ? "#fff" : "none"} strokeWidth={2} />
-                              ))}
-                            </Pie>
-                            <Tooltip formatter={(v) => [`${v} alumnos`]} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                        {/* Texto central interpretativo */}
-                        <div style={{ textAlign: "center", marginTop: 6 }}>
-                          <span style={{
-                            fontSize: 22, fontWeight: 800,
-                            color: critico > 0 ? "#dc2626" : "#16a34a",
-                          }}>
-                            {pctCritico}%
-                          </span>
-                          <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 4 }}>
-                            en estado crítico
-                          </span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "center", gap: 12, marginTop: 6 }}>
-                          {[
-                            { label: "Crítico",  n: critico,  color: "#dc2626" },
-                            { label: "Moderado", n: moderado, color: "#d97706" },
-                            { label: "Bajo",     n: bajo,     color: "#16a34a" },
-                          ].map(({ label, n, color }) => (
-                            <div key={label} style={{ textAlign: "center" }}>
-                              <div style={{ fontSize: 16, fontWeight: 700, color }}>{n}</div>
-                              <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{label}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    );
-                  })()}
-                </Panel>
-
-              </div>
-
-              {/* Mini-tabla filtrada de Mi Colegio */}
-              {(mcFilter !== "TODOS" || mcSalonFilter !== "TODOS") && (
-                <Panel title={`Alumnos filtrados — ${mcRows.length} resultado${mcRows.length !== 1 ? "s" : ""}`}>
-                  <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
-                    {mcFilter !== "TODOS" && (
-                      <span onClick={() => setMcFilter("TODOS")} style={{
-                        fontSize: 11, padding: "2px 10px", borderRadius: 20, cursor: "pointer",
-                        background: mcFilter === "ALTO" ? "#fef2f2" : mcFilter === "MEDIO" ? "#fffbeb" : "#f0fdf4",
-                        border: `1px solid ${mcFilter === "ALTO" ? "#fca5a5" : mcFilter === "MEDIO" ? "#fde68a" : "#86efac"}`,
-                        color:  mcFilter === "ALTO" ? "#dc2626" : mcFilter === "MEDIO" ? "#d97706" : "#16a34a",
-                      }}>
-                        {mcFilter === "ALTO" ? "Crítico" : mcFilter === "MEDIO" ? "Moderado" : "Bajo"} ✕
-                      </span>
-                    )}
-                    {mcSalonFilter !== "TODOS" && (
-                      <span onClick={() => setMcSalonFilter("TODOS")} style={{
-                        fontSize: 11, padding: "2px 10px", borderRadius: 20, cursor: "pointer",
-                        background: "#eff6ff", border: "1px solid #bfdbfe", color: "var(--accent)",
-                      }}>
-                        Salón {mcSalonFilter} ✕
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid var(--border)" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                      <thead>
-                        <tr style={{ background: "var(--navy)", color: "#fff" }}>
-                          <th style={th}>#</th>
-                          <th style={th}>Salón</th>
-                          <th style={th}>Estado</th>
-                          <th style={{ ...th, textAlign: "right" }}>Riesgo</th>
-                          <th style={{ ...th, textAlign: "right" }}>Mat.</th>
-                          <th style={{ ...th, textAlign: "right" }}>Com.</th>
-                          <th style={{ ...th, textAlign: "right" }}>CTA</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mcRows.slice(0, 20).map((a, i) => (
-                          <tr key={`${a.salon}-${a.n_alumno}`} style={{
-                            background: i % 2 === 0 ? "var(--surface)" : "transparent",
-                            borderBottom: "1px solid var(--border)",
-                          }}>
-                            <td style={{ ...td, fontWeight: 600, color: "var(--text-muted)" }}>{a.n_alumno}</td>
-                            <td style={{ ...td, fontWeight: 600 }}>{a.salon}</td>
-                            <td style={td}>
-                              <span style={{
-                                fontSize: 10, padding: "2px 8px", borderRadius: 12, fontWeight: 600,
-                                background: a.nivel_riesgo === "ALTO" ? "#fef2f2" : a.nivel_riesgo === "MEDIO" ? "#fffbeb" : "#f0fdf4",
-                                color: a.nivel_riesgo === "ALTO" ? "#dc2626" : a.nivel_riesgo === "MEDIO" ? "#d97706" : "#16a34a",
-                              }}>
-                                {a.nivel_riesgo === "ALTO" ? "Crítico" : a.nivel_riesgo === "MEDIO" ? "Moderado" : "Bajo"}
-                              </span>
-                            </td>
-                            <td style={{ ...td, textAlign: "right", fontWeight: 700,
-                              color: a.nivel_riesgo === "ALTO" ? "#dc2626" : a.nivel_riesgo === "MEDIO" ? "#d97706" : "#16a34a" }}>
-                              {(a.prob_riesgo * 100).toFixed(0)}%
-                            </td>
-                            {(["pp_matematica","pp_comunicacion","pp_cta"] as const).map((k) => {
-                              const v = (a as Record<string,unknown>)[k] as number|null;
-                              const lbl = v == null ? "—" : v >= 18 ? "AD" : v >= 14 ? "A" : v >= 11 ? "B" : "C";
-                              return (
-                                <td key={k} style={{ ...td, textAlign: "right", fontWeight: lbl === "C" ? 700 : 400,
-                                  color: lbl === "AD" ? "#16a34a" : lbl === "A" ? "#2563eb" : lbl === "B" ? "#d97706" : lbl === "C" ? "#dc2626" : "var(--text-muted)" }}>
-                                  {lbl}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                        {mcRows.length > 20 && (
-                          <tr><td colSpan={7} style={{ textAlign: "center", padding: "8px", color: "var(--text-muted)", fontSize: 11 }}>
-                            +{mcRows.length - 20} más · usa el filtro de salón para ver todos
-                          </td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </Panel>
-              )}
-            </>
-          )}
         </>
       )}
     </div>

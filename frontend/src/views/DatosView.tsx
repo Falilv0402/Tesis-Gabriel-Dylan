@@ -80,7 +80,7 @@ export function DatosView({
 
       {/* ── Panel 0: Estadísticas del modelo actual ─────────────────────── */}
       {colegioModelStats && (
-        <Panel title={`Modelo activo — ${colegioModelStats.nombre_colegio}`}>
+        <Panel title={`Modelo del colegio — ${colegioModelStats.nombre_colegio}`}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
 
             {/* Métricas principales */}
@@ -240,7 +240,7 @@ export function DatosView({
               </p>
             )}
             <p style={{ fontSize: 11, color: "#16a34a", marginTop: 6, fontWeight: 600 }}>
-              ✓ El tab "Mi Colegio" del director ya muestra los datos actualizados.
+              ✓ El modelo del colegio quedó actualizado con estos datos.
             </p>
           </div>
         )}

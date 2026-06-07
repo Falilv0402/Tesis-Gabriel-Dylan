@@ -207,12 +207,19 @@ def train(carpeta: str, codigo_ie: str) -> None:
     else:
         df["prob_riesgo"] = df["riesgo_score"]
 
-    # Convertir a lista de dicts para el endpoint
+    # Convertir a lista de dicts para el endpoint.
+    # Incluimos las notas de TODOS los bimestres (b1..b4) por materia, además
+    # del promedio (pp_), para que el frontend pueda filtrar/mostrar por bimestre.
     cols_out = [
         "n_alumno", "nombre", "salon", "codigo_ie",
         "nivel_riesgo", "prob_riesgo", "riesgo",
-        "n_materias_c", "promedio_materias",
-    ] + [c for c in df.columns if c.startswith("pp_") or c.startswith("b1_")]
+        "n_materias_c", "promedio_materias", "conducta_promedio",
+    ] + [
+        c for c in df.columns
+        if c.startswith("pp_")
+        or c.startswith("b1_") or c.startswith("b2_")
+        or c.startswith("b3_") or c.startswith("b4_")
+    ]
 
     cols_out = [c for c in cols_out if c in df.columns]
     predicciones = df[cols_out].replace({np.nan: None}).to_dict(orient="records")

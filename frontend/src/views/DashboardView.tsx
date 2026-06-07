@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Download, Filter, RefreshCcw, Save } from "lucide-react";
+import { AlertTriangle, Download, Filter, RefreshCcw } from "lucide-react";
 import { Cell, PieChart, Pie, ResponsiveContainer, Tooltip } from "recharts";
 import dynamic from "next/dynamic";
 import type { Student, DatasetSummary, Metrics } from "@/types";
@@ -117,15 +117,6 @@ export function DashboardView({
         <button onClick={() => void loadModelData()}><RefreshCcw size={17} /> Actualizar</button>
         <button onClick={exportCsv}><Download size={17} /> CSV</button>
         <button onClick={exportXlsx}><Download size={17} /> Excel</button>
-        <button
-          className={predictionsSaved ? "btn-saved" : ""}
-          disabled={isSavingPredictions || students.length === 0}
-          onClick={() => void savePredictionsToSupabase(students, metrics.modelo_ganador ?? "desconocido")}
-          title="Guardar las predicciones actuales en la base de datos Supabase"
-        >
-          <Save size={17} />
-          {isSavingPredictions ? "Guardando..." : predictionsSaved ? "Guardado ✓" : "Guardar BD"}
-        </button>
       </section>
 
       <section className="two-col">
