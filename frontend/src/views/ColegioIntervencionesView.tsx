@@ -182,6 +182,10 @@ export function ColegioIntervencionesView({
               const tasa = st.total > 0 ? st.cerradas / st.total : 0;
               return <Bar key={tipo} label={`${tipo} (${st.cerradas}/${st.total})`} value={tasa} tone={tasa >= 0.6 ? "low" : tasa >= 0.3 ? "medium" : "high"} />;
             })}
+            <div className="model-note" style={{ marginTop: 10, fontSize: 11 }}>
+              La <strong>tasa de cierre</strong> indica qué proporción de intervenciones llegan a su resolución.
+              Una tasa baja por mucho tiempo puede indicar falta de seguimiento.
+            </div>
           </Panel>
         </section>
       )}

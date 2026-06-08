@@ -25,7 +25,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score, accuracy_score
 
-from parse_excels import procesar_colegio
+from parse_excels import procesar_colegio, AREAS_ACADEMICAS
 
 # ─── Enfoque predictivo: B1-B3 como features, B4/PP como target ──────────────
 #
@@ -33,17 +33,18 @@ from parse_excels import procesar_colegio
 # en el 4.° bimestre (todavía hay tiempo de intervenir).
 # Esto convierte el sistema en alerta TEMPRANA real, no descripción del pasado.
 #
-# Features disponibles (bimestres 1-3):
+# Features disponibles (bimestres 1-3): las 7 áreas académicas ponderadas
+# (Matemática, Comunicación, Ciencia y Tecnología, Personal Social, English,
+# Arte y Cultura, Educación Física — ver AREAS_PONDERADAS en parse_excels.py)
+# más Conducta, que el colegio también evalúa como criterio de riesgo.
 FEATURES_EARLY = [
-    "b1_matematica",   "b2_matematica",   "b3_matematica",
-    "b1_comunicacion", "b2_comunicacion", "b3_comunicacion",
-    "b1_cta",          "b2_cta",          "b3_cta",
-    "conducta_promedio",
-]
+    f"b{n}_{area}" for area in AREAS_ACADEMICAS for n in (1, 2, 3)
+] + ["conducta_promedio"]
 
 # Si no hay suficientes bimestres, fallback al PP (modo descriptivo)
 FEATURES_PP = [
-    "pp_matematica", "pp_comunicacion", "pp_cta",
+    f"pp_{area}" for area in AREAS_ACADEMICAS
+] + [
     "conducta_promedio", "n_materias_c", "promedio_materias",
     "tendencia_matematica", "tendencia_comunicacion",
 ]
@@ -94,8 +95,10 @@ def train(carpeta: str, codigo_ie: str) -> None:
     early_available = [f for f in FEATURES_EARLY if f in df.columns
                        and df[f].notna().sum() >= 5]
 
-    # Añadir tendencia temprana calculada aquí (B3 - B1)
-    for materia in ["matematica", "comunicacion", "cta", "lenguaje", "mat_prim"]:
+    # Añadir tendencia temprana calculada aquí (B3 - B1), para las 7 áreas
+    # ponderadas más las variantes de nombre propias de primaria
+    # (lenguaje/mat_prim, que el parser normaliza aparte de comunicacion/matematica).
+    for materia in AREAS_ACADEMICAS + ["lenguaje", "mat_prim"]:
         b1 = f"b1_{materia}"
         b3 = f"b3_{materia}"
         tend = f"tend_temprana_{materia}"

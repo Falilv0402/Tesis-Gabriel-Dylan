@@ -27,6 +27,19 @@ export function aniosDeSalones(alumnos: AlumnoColegio[]): string[] {
   return [...map.entries()].sort((x, y) => x[1] - y[1]).map(([label]) => label);
 }
 
+/** Deriva la sección (A/B/...) a partir del salón: "5A"→"A", "P6B"→"B". */
+export function seccionFromSalon(salon: string): string {
+  const m = salon.trim().toUpperCase().match(/([A-Z])$/);
+  return m ? m[1] : "—";
+}
+
+/** Lista ordenada de secciones presentes en un conjunto de alumnos (A, B, ...). */
+export function seccionesDeSalones(alumnos: AlumnoColegio[]): string[] {
+  const set = new Set<string>();
+  for (const a of alumnos) set.add(seccionFromSalon(a.salon));
+  return [...set].sort();
+}
+
 /** Convierte una nota numérica (0-20) a la escala literal AD/A/B/C con color. */
 export function notaInfo(v: number | string | null | undefined): { label: string; letra: string; color: string } {
   if (v == null || v === "") return { label: "—", letra: "—", color: "var(--text-muted)" };

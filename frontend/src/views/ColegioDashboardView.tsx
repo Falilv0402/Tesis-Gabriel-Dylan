@@ -8,8 +8,21 @@ import { Kpi, Panel, EmptyState } from "@/components/ui/Primitives";
 import { riskClass } from "@/lib/format";
 import {
   MATERIAS_COLEGIO as MATERIAS, anioFromSalon, aniosDeSalones,
+  seccionFromSalon, seccionesDeSalones,
   notaInfo, notaBimestre, colegioStudentId, type Bimestre,
 } from "@/lib/colegio";
+
+/**
+ * Niveles de riesgo del donut, con su color fijo. Definidos una sola vez para
+ * que el color de cada porción dependa del NIVEL (no de su posición en el
+ * arreglo): si ALTO=0 alumnos, esa porción se omite del donut sin que MEDIO
+ * y BAJO "hereden" los colores rojo/ámbar que dejó libres.
+ */
+const DONUT_NIVELES = [
+  { nivel: "ALTO" as const,  name: "Alto",  color: "#dc2626" },
+  { nivel: "MEDIO" as const, name: "Medio", color: "#d97706" },
+  { nivel: "BAJO" as const,  name: "Bajo",  color: "#16a34a" },
+];
 
 interface ColegioDashboardViewProps {
   nombreColegio: string;
@@ -25,20 +38,20 @@ export function ColegioDashboardView({
 }: ColegioDashboardViewProps) {
   const [nivel,    setNivel]    = useState<"Todos" | "ALTO" | "MEDIO" | "BAJO">("Todos");
   const [anio,     setAnio]     = useState<string>("Todos");
+  const [seccion,  setSeccion]  = useState<string>("Todas");
   const [bimestre, setBimestre] = useState<Bimestre>("1");
-  const [search,   setSearch]   = useState("");
 
-  // Opciones de "Año de secundaria" derivadas de los salones presentes
-  const anios = useMemo(() => aniosDeSalones(alumnos), [alumnos]);
+  // Opciones de "Año de secundaria" y "Sección" derivadas de los salones presentes
+  const anios     = useMemo(() => aniosDeSalones(alumnos), [alumnos]);
+  const secciones = useMemo(() => seccionesDeSalones(alumnos), [alumnos]);
 
   const filtrados = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return alumnos
       .filter((a) => nivel === "Todos" || a.nivel_riesgo === nivel)
       .filter((a) => anio === "Todos" || anioFromSalon(a.salon).label === anio)
-      .filter((a) => !q || a.nombre.toLowerCase().includes(q) || a.salon.toLowerCase().includes(q))
+      .filter((a) => seccion === "Todas" || seccionFromSalon(a.salon) === seccion)
       .sort((a, b) => b.prob_riesgo - a.prob_riesgo);
-  }, [alumnos, nivel, anio, search]);
+  }, [alumnos, nivel, anio, seccion]);
 
   const counts = useMemo(() => {
     const c = { ALTO: 0, MEDIO: 0, BAJO: 0 };
@@ -50,6 +63,31 @@ export function ColegioDashboardView({
   const enRiesgo = counts.ALTO + counts.MEDIO;
 
   const grade = (a: AlumnoColegio, materia: string) => notaInfo(notaBimestre(a, materia, bimestre));
+
+  // ── Riesgo agrupado por salón (sustituto del mapa geográfico) ─────────────
+  // Un colegio propio no tiene distritos: el agrupamiento natural del riesgo
+  // es por salón. Replicamos la misma lógica de "semáforo" que usa el mapa de
+  // calor por distrito de los colegios EM 2022 (ver DashboardView), pero sobre
+  // el % de alumnos en riesgo (ALTO+MEDIO) de cada salón.
+  const salonRiesgoRows = useMemo(() => {
+    const acc = new Map<string, { total: number; alto: number; medio: number; bajo: number }>();
+    for (const a of filtrados) {
+      const e = acc.get(a.salon) ?? { total: 0, alto: 0, medio: 0, bajo: 0 };
+      e.total++;
+      if (a.nivel_riesgo === "ALTO") e.alto++;
+      else if (a.nivel_riesgo === "MEDIO") e.medio++;
+      else e.bajo++;
+      acc.set(a.salon, e);
+    }
+    return [...acc.entries()]
+      .map(([salon, e]) => {
+        const pctRiesgo = (e.alto + e.medio) / Math.max(e.total, 1);
+        const color = pctRiesgo >= 0.65 ? "#ef4444" : pctRiesgo >= 0.50 ? "#f97316" : pctRiesgo >= 0.35 ? "#eab308" : pctRiesgo >= 0.20 ? "#84cc16" : "#22c55e";
+        const label = pctRiesgo >= 0.65 ? "Crítico" : pctRiesgo >= 0.50 ? "Alto" : pctRiesgo >= 0.35 ? "Medio" : pctRiesgo >= 0.20 ? "Moderado" : "Bajo";
+        return { salon, ...e, pctRiesgo, color, label };
+      })
+      .sort((x, y) => y.pctRiesgo - x.pctRiesgo);
+  }, [filtrados]);
 
   return (
     <>
@@ -91,6 +129,12 @@ export function ColegioDashboardView({
             {anios.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </label>
+        <label className="filter-field">Sección
+          <select value={seccion} onChange={(e) => setSeccion(e.target.value)}>
+            <option value="Todas">Todas</option>
+            {secciones.map((s) => <option key={s} value={s}>Sección {s}</option>)}
+          </select>
+        </label>
         <label className="filter-field">Bimestre
           <select value={bimestre} onChange={(e) => setBimestre(e.target.value as typeof bimestre)}>
             <option value="1">Bimestre 1</option>
@@ -98,15 +142,6 @@ export function ColegioDashboardView({
             <option value="3">Bimestre 3</option>
             <option value="4">Bimestre 4</option>
           </select>
-        </label>
-        <label className="filter-field">Buscar
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Nombre o salón..."
-            style={{ minWidth: "150px" }}
-          />
         </label>
         <button onClick={onRefresh}><RefreshCcw size={17} /> Actualizar</button>
       </section>
@@ -130,6 +165,7 @@ export function ColegioDashboardView({
                     {MATERIAS.map((m) => (
                       <th key={m.key} style={{ ...th, textAlign: "center" }}>{m.label}</th>
                     ))}
+                    <th style={{ ...th, textAlign: "center" }} title="Promedio anual de conducta — también ponderado en el modelo de riesgo">Conducta</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -163,6 +199,14 @@ export function ColegioDashboardView({
                           </td>
                         );
                       })}
+                      {(() => {
+                        const c = notaInfo(a.conducta_promedio);
+                        return (
+                          <td style={{ ...td, textAlign: "center", fontWeight: 600, color: c.color }}>
+                            {c.label}
+                          </td>
+                        );
+                      })()}
                     </tr>
                   ))}
                 </tbody>
@@ -170,7 +214,7 @@ export function ColegioDashboardView({
             </div>
           )}
           <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, textAlign: "right" }}>
-            {totalFiltrado.toLocaleString("es-PE")} de {alumnos.length.toLocaleString("es-PE")} alumnos · notas del Bimestre {bimestre} (escala AD/A/B/C)
+            {totalFiltrado.toLocaleString("es-PE")} de {alumnos.length.toLocaleString("es-PE")} alumnos · notas del Bimestre {bimestre} (escala AD/A/B/C) · Conducta: promedio anual
           </p>
         </Panel>
 
@@ -181,16 +225,20 @@ export function ColegioDashboardView({
               <ResponsiveContainer width="100%" height={210}>
                 <PieChart>
                   <Pie
-                    data={[
-                      { name: "Alto", value: counts.ALTO },
-                      { name: "Medio", value: counts.MEDIO },
-                      { name: "Bajo", value: counts.BAJO },
-                    ].filter((d) => d.value > 0)}
+                    data={DONUT_NIVELES
+                      .map(({ nivel, name, color }) => ({ name, color, value: counts[nivel] }))
+                      .filter((d) => d.value > 0)}
                     cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value"
                     label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     labelLine={false}
                   >
-                    <Cell fill="#dc2626" /><Cell fill="#d97706" /><Cell fill="#16a34a" />
+                    {/* Color ligado al nivel real de cada porción (no a su posición
+                        en el arreglo): así, cuando ALTO=0 se omite del donut, MEDIO
+                        y BAJO conservan su color correcto (ámbar / verde) en vez de
+                        heredar el rojo y el ámbar de las posiciones que dejó vacías. */}
+                    {DONUT_NIVELES
+                      .filter(({ nivel }) => counts[nivel] > 0)
+                      .map(({ name, color }) => <Cell key={name} fill={color} />)}
                   </Pie>
                   <Tooltip formatter={(v) => [`${v} alumnos`]} />
                 </PieChart>
@@ -214,6 +262,66 @@ export function ColegioDashboardView({
             </>
           ) : (
             <EmptyState message="Sin datos para el filtro seleccionado." />
+          )}
+        </Panel>
+      </section>
+
+      {/* ── Riesgo por salón ───────────────────────────────────────────────
+          Equivalente al "mapa de calor por distrito" de los colegios EM 2022:
+          como un colegio propio no tiene dispersión geográfica, la unidad de
+          análisis natural es el SALÓN — agrupa visualmente dónde se concentra
+          el riesgo dentro del propio plantel. */}
+      <section className="full-col">
+        <Panel title="Riesgo por salón — distribución dentro del colegio">
+          <div className="model-note" style={{ marginBottom: 10 }}>
+            <strong>Vista por salón</strong> — equivalente, dentro de un solo colegio,
+            al mapa de riesgo por distrito de los demás colegios. Cada fila agrupa a los
+            alumnos de un salón; el color indica qué tan concentrado está el riesgo
+            (ALTO + MEDIO) en ese grupo.
+          </div>
+          {salonRiesgoRows.length > 0 ? (
+            <div className="district-risk-table">
+              <table>
+                <colgroup>
+                  <col style={{ width: "30%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "14%" }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className="col-left">Salón</th>
+                    <th>Total</th>
+                    <th>Alto</th>
+                    <th>Medio</th>
+                    <th>% en riesgo</th>
+                    <th>Nivel</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salonRiesgoRows.map(({ salon, total, alto, medio, pctRiesgo, color, label }) => (
+                    <tr key={salon} onClick={() => setSeccion(seccionFromSalon(salon))} style={{ cursor: "pointer" }}
+                        title={`Filtrar por sección ${seccionFromSalon(salon)}`}>
+                      <td className="col-left"><strong>{salon}</strong> <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>({anioFromSalon(salon).label})</span></td>
+                      <td>{total}</td>
+                      <td style={{ color: "#dc2626", fontWeight: 700 }}>{alto}</td>
+                      <td style={{ color: "#d97706", fontWeight: 700 }}>{medio}</td>
+                      <td><strong>{(pctRiesgo * 100).toFixed(1)}%</strong></td>
+                      <td>
+                        <span className="drift-tag" style={{ background: color + "22", color, border: `1px solid ${color}66` }}>{label}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="model-note" style={{ marginTop: 8, fontSize: 11, textAlign: "center" }}>
+                {salonRiesgoRows.length} salones · Bajo = {counts.BAJO}, Medio = {counts.MEDIO}, Alto = {counts.ALTO} (filtro actual) · clic en una fila para filtrar por su sección
+              </div>
+            </div>
+          ) : (
+            <EmptyState message="Sin datos por salón para el filtro seleccionado." />
           )}
         </Panel>
       </section>

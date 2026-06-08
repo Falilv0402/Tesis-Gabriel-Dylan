@@ -14,6 +14,7 @@ import { Panel } from "@/components/ui/Primitives";
 import { riskClass } from "@/lib/format";
 import {
   MATERIAS_COLEGIO, anioFromSalon, aniosDeSalones,
+  seccionFromSalon, seccionesDeSalones,
   notaInfo, notaBimestre, colegioStudentId, type Bimestre,
 } from "@/lib/colegio";
 
@@ -32,19 +33,19 @@ export function ColegioReportesView({
 }: ColegioReportesViewProps) {
   const [nivel,    setNivel]    = useState<"Todos" | "ALTO" | "MEDIO" | "BAJO">("Todos");
   const [anio,     setAnio]     = useState<string>("Todos");
+  const [seccion,  setSeccion]  = useState<string>("Todas");
   const [bimestre, setBimestre] = useState<Bimestre>("1");
-  const [search,   setSearch]   = useState("");
 
-  const anios = useMemo(() => aniosDeSalones(alumnos), [alumnos]);
+  const anios     = useMemo(() => aniosDeSalones(alumnos), [alumnos]);
+  const secciones = useMemo(() => seccionesDeSalones(alumnos), [alumnos]);
 
   const filtrados = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return alumnos
       .filter((a) => nivel === "Todos" || a.nivel_riesgo === nivel)
       .filter((a) => anio === "Todos" || anioFromSalon(a.salon).label === anio)
-      .filter((a) => !q || a.nombre.toLowerCase().includes(q) || a.salon.toLowerCase().includes(q))
+      .filter((a) => seccion === "Todas" || seccionFromSalon(a.salon) === seccion)
       .sort((a, b) => b.prob_riesgo - a.prob_riesgo);
-  }, [alumnos, nivel, anio, search]);
+  }, [alumnos, nivel, anio, seccion]);
 
   const counts = useMemo(() => {
     const c = { ALTO: 0, MEDIO: 0, BAJO: 0 };
@@ -84,13 +85,14 @@ export function ColegioReportesView({
   // ── Export CSV ────────────────────────────────────────────────────────────
   function exportCsv() {
     const headers = ["n_alumno", "nombre", "salon", "nivel_riesgo", "prob_riesgo",
-      ...MATERIAS_COLEGIO.map((m) => `b${bimestre}_${m.key}`)];
+      ...MATERIAS_COLEGIO.map((m) => `b${bimestre}_${m.key}`), "conducta_promedio"];
     const lines = [headers.join(",")];
     for (const a of filtrados) {
       const row = [
         a.n_alumno, `"${a.nombre}"`, a.salon, a.nivel_riesgo,
         (a.prob_riesgo * 100).toFixed(1) + "%",
         ...MATERIAS_COLEGIO.map((m) => notaBimestre(a, m.key, bimestre) ?? ""),
+        a.conducta_promedio ?? "",
       ];
       lines.push(row.join(","));
     }
@@ -122,6 +124,12 @@ export function ColegioReportesView({
             {anios.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </label>
+        <label className="filter-field">Sección
+          <select value={seccion} onChange={(e) => setSeccion(e.target.value)}>
+            <option value="Todas">Todas</option>
+            {secciones.map((s) => <option key={s} value={s}>Sección {s}</option>)}
+          </select>
+        </label>
         <label className="filter-field">Bimestre
           <select value={bimestre} onChange={(e) => setBimestre(e.target.value as Bimestre)}>
             <option value="1">Bimestre 1</option>
@@ -130,16 +138,12 @@ export function ColegioReportesView({
             <option value="4">Bimestre 4</option>
           </select>
         </label>
-        <label className="filter-field">Buscar
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Nombre o salón..." style={{ minWidth: "150px" }} />
-        </label>
         <button onClick={exportCsv}><Download size={17} /> Exportar CSV</button>
       </section>
 
       <section style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 16, alignItems: "start" }}>
         {/* ── Tabla ──────────────────────────────────────────────────────── */}
-        <Panel title={`${nombreColegio} — ${total.toLocaleString("es-PE")} alumnos · notas del Bimestre ${bimestre}`}>
+        <Panel title={`${nombreColegio} — ${total.toLocaleString("es-PE")} alumnos · notas del Bimestre ${bimestre} · Conducta: promedio anual`}>
           <div style={{ overflowY: "auto", maxHeight: "calc(100vh - 360px)", borderRadius: 10, border: "1px solid var(--border)" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
@@ -149,11 +153,12 @@ export function ColegioReportesView({
                   <th style={th}>Nivel</th>
                   <th style={{ ...th, textAlign: "right" }}>Prob.</th>
                   {MATERIAS_COLEGIO.map((m) => <th key={m.key} style={{ ...th, textAlign: "center" }}>{m.label}</th>)}
+                  <th style={{ ...th, textAlign: "center" }} title="Promedio anual de conducta — también ponderado en el modelo de riesgo">Conducta</th>
                 </tr>
               </thead>
               <tbody>
                 {total === 0 ? (
-                  <tr><td colSpan={4 + MATERIAS_COLEGIO.length} style={{ textAlign: "center", padding: "24px 0", color: "var(--text-muted)" }}>
+                  <tr><td colSpan={5 + MATERIAS_COLEGIO.length} style={{ textAlign: "center", padding: "24px 0", color: "var(--text-muted)" }}>
                     No hay alumnos con el filtro seleccionado.
                   </td></tr>
                 ) : filtrados.map((a, i) => (
@@ -172,6 +177,10 @@ export function ColegioReportesView({
                       const g = notaInfo(notaBimestre(a, m.key, bimestre));
                       return <td key={m.key} style={{ ...td, textAlign: "center", fontWeight: 600, color: g.color }}>{g.label}</td>;
                     })}
+                    {(() => {
+                      const c = notaInfo(a.conducta_promedio);
+                      return <td style={{ ...td, textAlign: "center", fontWeight: 600, color: c.color }}>{c.label}</td>;
+                    })()}
                   </tr>
                 ))}
               </tbody>

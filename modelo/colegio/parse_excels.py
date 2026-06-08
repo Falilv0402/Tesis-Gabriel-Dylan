@@ -24,22 +24,90 @@ def literal_a_num(val) -> float | None:
 
 
 # ─── Asignaturas clave que necesita el modelo ─────────────────────────────────
-# (col_start, nombre_clave) — col donde empieza la asignatura en el Excel
+# (patrón en MAYÚSCULAS, nombre_clave) — primaria y secundaria usan nombres
+# distintos para áreas equivalentes (p.ej. "Personal Social" = "Ciencias
+# Sociales"), así que mapeamos ambas variantes a la misma clave interna.
+# IMPORTANTE: el orden importa — los patrones más específicos van primero,
+# para que "LÓGICO MATEMÁTICA" no quede capturado por "MATEMÁTICA" (es
+# substring) ni "CIENCIAS SOCIALES" por "PERSONAL SOCIAL", etc.
 ASIGNATURAS_OBJETIVO = {
-    "MATEMÁTICA":    "matematica",
-    "COMUNICACIÓN":  "comunicacion",
-    "CIENCIA, TECNOLOGÍA Y AMBIENTE": "cta",
-    "LENGUAJE":      "lenguaje",       # primaria
-    "LÓGICO MATEMÁTICA": "mat_prim",   # primaria alternativo
+    "LÓGICO MATEMÁTICA":               "mat_prim",       # primaria (variante)
+    "MATEMÁTICA":                      "matematica",
+    "COMUNICACIÓN":                    "comunicacion",
+    "LENGUAJE":                        "lenguaje",       # primaria (variante)
+    "CIENCIA, TECNOLOGÍA Y AMBIENTE":  "cta",            # secundaria
+    "CIENCIA Y TECNOLOGIA":            "cta",            # primaria (sin coma/tilde)
+    "CIENCIAS SOCIALES":               "personal_social",# secundaria
+    "PERSONAL SOCIAL":                 "personal_social",# primaria
+    "ARTE Y CULTURA":                  "arte",           # primaria
+    "ARTE":                            "arte",           # secundaria
+    "INGLÉS":                          "english",
+    "ENGLISH":                         "english",
+    "EDUCACIÓN FÍSICA":                "ed_fisica",
 }
+
+# ─── Áreas evaluadas y su peso en el índice de riesgo ponderado ──────────────
+# Pesos definidos por el colegio: un curso de Matemática no puede pesar igual
+# que Educación Física, pero ambos cuentan. Esta tabla alimenta el "índice de
+# riesgo ponderado" — determinístico y transparente — que define nivel_riesgo
+# (ALTO/MEDIO/BAJO). El VotingClassifier (ML) sigue siendo el núcleo predictivo
+# que produce prob_riesgo (B1-B3 → B4). Suman 100%.
+AREAS_PONDERADAS: list[tuple[str, str, float]] = [
+    # (clave_interna, etiqueta, peso)
+    ("matematica",      "Matemática",            0.25),
+    ("comunicacion",    "Comunicación",          0.20),
+    ("cta",             "Ciencia y Tecnología",  0.15),
+    ("personal_social", "Personal Social",       0.10),
+    ("english",         "English",               0.10),
+    ("conducta",        "Conducta",              0.10),
+    ("arte",            "Arte y Cultura",        0.05),
+    ("ed_fisica",       "Educación Física",      0.05),
+]
+
+# Áreas académicas (sin Conducta) — usadas como features del modelo predictivo.
+AREAS_ACADEMICAS: list[str] = [k for k, _, _ in AREAS_PONDERADAS if k != "conducta"]
 
 
 # ─── Parser principal de notas ────────────────────────────────────────────────
 
+def _subject_columns(subject_row: pd.Series) -> dict[int, str]:
+    """
+    Recorre la fila de asignaturas y devuelve {col_i: clave_asignatura} solo
+    para las columnas donde aparece el NOMBRE de un área objetivo.
+
+    Importante: una celda no vacía que NO matchea ningún patrón objetivo es
+    un sub-curso (p.ej. "ARITMÉTICA" dentro de "MATEMÁTICA", o "HISTORIA"
+    dentro de "CIENCIAS SOCIALES") — debe cortar la atribución al área previa,
+    para no mezclar sus notas. Una celda VACÍA continúa el área anterior
+    (así es como primaria reparte un área en varias columnas de competencias).
+    """
+    col_to_key: dict[int, str] = {}
+    current_key: str | None = None
+    for col_i, subj_val in subject_row.items():
+        subj_upper = str(subj_val).strip().upper()
+        if subj_upper:
+            current_key = None
+            for pattern, key in ASIGNATURAS_OBJETIVO.items():
+                if pattern in subj_upper:
+                    current_key = key
+                    break
+        if current_key:
+            col_to_key[col_i] = current_key
+    return col_to_key
+
+
 def _parse_notas_sheet(path: Path, sheet: str, salon: str) -> pd.DataFrame:
     """
     Lee una hoja de un Excel de notas CUBICOL y devuelve un DataFrame con
-    una fila por alumno, con las columnas pp_{asignatura} y bim{1..4}_{asignatura}.
+    una fila por alumno, con las columnas pp_{asignatura} y b{1..4}_{asignatura}.
+
+    Soporta dos formatos vistos en los Excel de Joseph And Mary:
+      - "Bimestral" (la mayoría): 5 filas por alumno (1°,2°,3°,4°,PP), con
+        columnas C1..C{n},PP por área. Permite features B1-B3 → target B4.
+      - "Consolidado anual de competencias" (visto en Sexto Grado B): una
+        sola fila por alumno con la nota consolidada del año por competencia;
+        la columna del nombre del área trae su nota resumen (= PP). No trae
+        desglose por bimestre, así que b1..b4 quedan en None para esos alumnos.
     """
     df_raw = pd.read_excel(path, sheet_name=sheet, header=None, dtype=str)
 
@@ -54,37 +122,43 @@ def _parse_notas_sheet(path: Path, sheet: str, salon: str) -> pd.DataFrame:
         raise ValueError(f"No encontré fila de asignaturas en {path.name}")
 
     subject_row = df_raw.iloc[subject_row_idx].fillna("")
-    period_row  = df_raw.iloc[subject_row_idx + 2].fillna("")  # N°, APELLIDOS, C1, C2..., PP
+    row_plus1   = df_raw.iloc[subject_row_idx + 1].fillna("")
+    row_plus2   = df_raw.iloc[subject_row_idx + 2].fillna("")
 
-    # ── Mapear columna → (asignatura_clave, es_pp) ───────────────────────────
-    current_subject_key = None
-    col_map: dict[int, tuple[str, bool]] = {}  # col → (key, is_pp)
+    col_to_key = _subject_columns(subject_row)
 
-    for col_i, subj_val in subject_row.items():
-        subj_upper = str(subj_val).strip().upper()
-        for pattern, key in ASIGNATURAS_OBJETIVO.items():
-            if pattern in subj_upper:
-                current_subject_key = key
-                break
+    # ── Detectar formato: ¿"APELLIDOS" aparece en row+1 (consolidado, una
+    # fila por alumno) o en row+2 (bimestral, header tras descripciones)? ────
+    es_consolidado = row_plus1.astype(str).str.upper().str.contains("APELLIDOS").any()
 
-        if current_subject_key:
-            period_val = str(period_row.get(col_i, "")).strip().upper()
-            if period_val == "PP":
-                col_map[col_i] = (current_subject_key, True)
-            elif period_val.startswith("C"):
-                col_map[col_i] = (current_subject_key, False)
+    if es_consolidado:
+        return _parse_notas_consolidado(df_raw, subject_row_idx, col_to_key, salon)
+    return _parse_notas_bimestral(df_raw, subject_row_idx, col_to_key, row_plus2, salon)
+
+
+def _parse_notas_bimestral(
+    df_raw: pd.DataFrame, subject_row_idx: int,
+    col_to_key: dict[int, str], period_row: pd.Series, salon: str,
+) -> pd.DataFrame:
+    """Formato estándar: 5 filas por alumno (1°,2°,3°,4°,PP) con columnas C{n}/PP."""
+    # col_i → (clave, es_columna_pp), según la etiqueta de periodo (C1.., PP)
+    col_map: dict[int, tuple[str, bool]] = {}
+    for col_i, key in col_to_key.items():
+        period_val = str(period_row.get(col_i, "")).strip().upper()
+        if period_val == "PP":
+            col_map[col_i] = (key, True)
+        elif period_val.startswith("C"):
+            col_map[col_i] = (key, False)
 
     # ── Detectar fila de inicio de datos (después del header N°/APELLIDOS) ───
     data_start_idx = subject_row_idx + 3
-    # Buscar primera fila con número de alumno en col 0
     for i in range(data_start_idx, min(data_start_idx + 10, len(df_raw))):
         val = str(df_raw.iloc[i, 0]).strip()
         if val.isdigit():
             data_start_idx = i
             break
 
-    # ── Leer datos de alumnos ─────────────────────────────────────────────────
-    # Cada alumno ocupa 5 filas: bim1, bim2, bim3, bim4, PP
+    claves = set(col_to_key.values())
     registros: list[dict] = []
     i = data_start_idx
 
@@ -106,9 +180,8 @@ def _parse_notas_sheet(path: Path, sheet: str, salon: str) -> pd.DataFrame:
             "salon":      salon,
         }
 
-        # Extraer valores por bimestre y PP para cada asignatura objetivo
-        subj_bims: dict[str, list[float | None]] = {k: [] for k in ASIGNATURAS_OBJETIVO.values()}
-        subj_pp:   dict[str, float | None]       = {k: None for k in ASIGNATURAS_OBJETIVO.values()}
+        subj_bims: dict[str, list[float | None]] = {k: [] for k in claves}
+        subj_pp:   dict[str, float | None]       = {k: None for k in claves}
 
         period_col = 3  # col que tiene "1°", "2°", "3°", "4°", "PP"
         for row_j in range(len(block)):
@@ -127,7 +200,7 @@ def _parse_notas_sheet(path: Path, sheet: str, salon: str) -> pd.DataFrame:
                 elif not is_pp and not col_is_pp:
                     subj_bims[key].append(num_val2)
 
-        for key in ASIGNATURAS_OBJETIVO.values():
+        for key in claves:
             record[f"pp_{key}"] = subj_pp.get(key)
             bims = subj_bims.get(key, [])
             for b_i, b_val in enumerate(bims[:4], start=1):
@@ -140,6 +213,52 @@ def _parse_notas_sheet(path: Path, sheet: str, salon: str) -> pd.DataFrame:
 
         registros.append(record)
         i += 5  # saltar al siguiente alumno
+
+    return pd.DataFrame(registros)
+
+
+def _parse_notas_consolidado(
+    df_raw: pd.DataFrame, subject_row_idx: int,
+    col_to_key: dict[int, str], salon: str,
+) -> pd.DataFrame:
+    """
+    Formato "consolidado anual de competencias": una sola fila por alumno;
+    la columna donde aparece el NOMBRE del área trae su nota resumen anual
+    (equivalente al PP). No hay desglose por bimestre — b1..b4 quedan None,
+    y el alumno no participa del entrenamiento predictivo B1-B3→B4, pero sí
+    aparece en el listado con su nota anual, conducta e índice ponderado.
+    """
+    data_start_idx = subject_row_idx + 2
+    claves = set(col_to_key.values())
+    registros: list[dict] = []
+
+    for i in range(data_start_idx, len(df_raw)):
+        num_val = str(df_raw.iloc[i, 0]).strip()
+        if not num_val.isdigit():
+            continue
+
+        n_alumno = int(num_val)
+        nombre   = str(df_raw.iloc[i, 1]).strip() if pd.notna(df_raw.iloc[i, 1]) else f"Alumno {n_alumno}"
+
+        record: dict = {
+            "n_alumno":   n_alumno,
+            "nombre":     nombre,
+            "salon":      salon,
+        }
+        for key in claves:
+            record[f"pp_{key}"] = None
+            for b_i in range(1, 5):
+                record[f"b{b_i}_{key}"] = None
+            record[f"tendencia_{key}"] = None
+
+        for col_i, key in col_to_key.items():
+            if col_i >= len(df_raw.columns):
+                continue
+            num_val2 = literal_a_num(df_raw.iloc[i, col_i])
+            if num_val2 is not None:
+                record[f"pp_{key}"] = num_val2
+
+        registros.append(record)
 
     return pd.DataFrame(registros)
 
@@ -206,6 +325,56 @@ def _parse_conducta_sheet(path: Path, sheet: str = None) -> pd.DataFrame:
         registros.append(record)
 
     return pd.DataFrame(registros)
+
+
+# ─── Índice de riesgo ponderado (transparente, con pesos del colegio) ────────
+
+def _nota_area(row, key: str) -> float | None:
+    """
+    Mejor señal disponible para un área: el promedio anual (PP) si existe;
+    si no, el promedio de los bimestres conocidos (B1-B4). Cubre tanto al
+    alumno regular (con PP) como al de Sexto Grado B (solo trae el
+    "consolidado anual", sin desglose por bimestre — ver _parse_notas_consolidado).
+    """
+    pp = row.get(f"pp_{key}")
+    if pp is not None and not pd.isna(pp):
+        return float(pp)
+    bims = [row.get(f"b{n}_{key}") for n in (1, 2, 3, 4)]
+    bims = [float(b) for b in bims if b is not None and not pd.isna(b)]
+    return float(np.mean(bims)) if bims else None
+
+
+def _riesgo_de_nota(nota: float) -> float:
+    """Convierte una nota (0-20, escala AD/A/B/C) en un score de riesgo 0-1.
+    10 (C, mínima) → 1.0 (riesgo máximo); 18.5 (AD) → 0.0 (riesgo mínimo)."""
+    return max(0.0, min(1.0, (18.5 - nota) / (18.5 - 10.0)))
+
+
+def _indice_riesgo_ponderado(row) -> float:
+    """
+    Índice de riesgo 0-1 calculado como suma ponderada de los riesgos por
+    área, usando los pesos definidos por el colegio (AREAS_PONDERADAS):
+    Matemática 25%, Comunicación 20%, Ciencia y Tecnología 15%,
+    Personal Social 10%, English 10%, Conducta 10%, Arte y Cultura 5%,
+    Educación Física 5%. Es la base transparente y explicable de
+    nivel_riesgo (ALTO/MEDIO/BAJO) — distinta de prob_riesgo (la señal
+    predictiva del VotingClassifier, B1-B3 → B4).
+
+    Si a un alumno le faltan notas de algunas áreas, se renormaliza entre
+    las áreas disponibles (no se le penaliza por datos ausentes).
+    """
+    acumulado  = 0.0
+    peso_total = 0.0
+    for key, _label, peso in AREAS_PONDERADAS:
+        nota = row.get("conducta_promedio") if key == "conducta" else _nota_area(row, key)
+        if nota is None or pd.isna(nota):
+            continue
+        acumulado  += peso * _riesgo_de_nota(float(nota))
+        peso_total += peso
+
+    if peso_total == 0:
+        return 0.5  # sin ninguna nota disponible: riesgo neutro
+    return round(acumulado / peso_total, 4)
 
 
 # ─── Función pública principal ────────────────────────────────────────────────
@@ -327,21 +496,8 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
         if pd.notna(com) and com <= 13.0: return 1
         return 0
 
-    def calcular_score(row):
-        # Score continuo 0-1 para ranking
-        mat = row.get(mat_col) if mat_col else None
-        com = row.get(com_col) if com_col else None
-        cta = row.get("pp_cta")
-        vals = [v for v in [mat, com, cta] if pd.notna(v)]
-        if not vals:
-            return 0.5
-        promedio = np.mean(vals)
-        # Invertir y normalizar: 10→1.0 (máximo riesgo), 18.5→0.0 (mínimo riesgo)
-        score = max(0.0, min(1.0, (18.5 - promedio) / (18.5 - 10.0)))
-        return round(float(score), 4)
-
     df["riesgo"]       = df.apply(calcular_riesgo, axis=1)
-    df["riesgo_score"] = df.apply(calcular_score, axis=1)
+    df["riesgo_score"] = df.apply(_indice_riesgo_ponderado, axis=1)
     df["codigo_ie"]    = codigo_ie
 
     # ── Nivel de riesgo ───────────────────────────────────────────────────────
