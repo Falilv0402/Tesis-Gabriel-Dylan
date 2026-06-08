@@ -1,10 +1,19 @@
 import type { AlumnoColegio, RiskLevel, Student } from "@/types";
 
-/** Materias del colegio que se muestran/grafican. */
+/**
+ * Materias del colegio que se muestran/grafican — las 7 áreas académicas
+ * ponderadas por el colegio (ver AREAS_PONDERADAS en parse_excels.py), en el
+ * mismo orden y con el mismo peso que usa el índice de riesgo y el modelo.
+ * Conducta se muestra aparte (es anual, no por bimestre).
+ */
 export const MATERIAS_COLEGIO = [
-  { key: "matematica",   label: "Matemática" },
-  { key: "comunicacion", label: "Comunicación" },
-  { key: "cta",          label: "CTA" },
+  { key: "matematica",      label: "Matemática" },
+  { key: "comunicacion",    label: "Comunicación" },
+  { key: "cta",             label: "Ciencia y Tec." },
+  { key: "personal_social", label: "Personal Social" },
+  { key: "english",         label: "Inglés" },
+  { key: "arte",            label: "Arte y Cultura" },
+  { key: "ed_fisica",       label: "Ed. Física" },
 ] as const;
 
 export type Bimestre = "1" | "2" | "3" | "4";

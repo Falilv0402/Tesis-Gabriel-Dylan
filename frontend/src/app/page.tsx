@@ -337,6 +337,7 @@ export default function Page() {
               isLoading={colegio.isLoading}
               onRefresh={() => void colegio.reload()}
               onSelect={(a) => { setSelectedColegioId(colegioStudentId(a)); setTab("estudiante"); }}
+              onIntervenir={(a) => { setSelectedColegioId(colegioStudentId(a)); setTab("intervenciones"); }}
             />
           )}
 

@@ -5,7 +5,10 @@ import { RefreshCcw, UserCog, Activity } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { Panel, EmptyState } from "@/components/ui/Primitives";
 
-interface DbUser { id: string; email: string; nombre: string | null; rol: string; activo: boolean }
+interface DbUser {
+  id: string; email: string; nombre: string | null; rol: string; activo: boolean;
+  codigo_ie: string | null; distrito: string | null;
+}
 interface AuditEvent {
   id: string;
   accion: string;
@@ -13,6 +16,23 @@ interface AuditEvent {
   ip?: string | null;
   usuario_nombre?: string | null;
   usuario_email?: string | null;
+}
+
+/**
+ * Resuelve el nombre visible del colegio (IE) al que pertenece una cuenta,
+ * a partir de su `codigo_ie` y la lista de colegios disponible. Normaliza
+ * ambos códigos a número (mismo criterio que el aviso de "Estás creando un
+ * usuario para...") porque pueden venir con/sin ceros a la izquierda.
+ */
+function nombreColegioPorCodigo(
+  codigoIe: string | null | undefined,
+  colegiosList: { distrito: string; id_ie: string; nombre_ie?: string }[],
+): string | null {
+  if (!codigoIe) return null;
+  const match = colegiosList.find(
+    (c) => String(parseInt(String(c.id_ie), 10)) === String(parseInt(codigoIe, 10))
+  );
+  return match?.nombre_ie ? `${match.nombre_ie} · IE ${codigoIe}` : `IE ${codigoIe}`;
 }
 
 interface UsuariosViewProps {
@@ -61,14 +81,25 @@ export function UsuariosView({
     <section className="two-col">
       <Panel title="Usuarios y roles">
         <table><tbody>
-          <tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th></th></tr>
-          {dbUsers.map((u) => (
+          <tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Colegio / Distrito</th><th>Estado</th><th></th></tr>
+          {dbUsers.map((u) => {
+            const colegioNombre = nombreColegioPorCodigo(u.codigo_ie, colegiosList);
+            return (
             <tr key={u.id}>
               <td>{u.nombre ?? "—"}</td>
               <td>{u.email}</td>
               <td><span className={`role-tag ${u.rol}`}>
                 {u.rol === "superadmin" ? "Super Admin" : u.rol === "admin" ? "Admin IE" : u.rol === "director" ? "Director" : "Coordinador"}
               </span></td>
+              <td>
+                {colegioNombre ? (
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--navy)" }}>{colegioNombre}</span>
+                ) : u.distrito ? (
+                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Distrito: {u.distrito}</span>
+                ) : (
+                  <span style={{ color: "var(--text-muted)" }}>—</span>
+                )}
+              </td>
               <td>{u.activo ? "Activo" : <span style={{ color: "#ef4444" }}>Inactivo</span>}</td>
               <td>
                 {u.id !== session.id && (
@@ -90,9 +121,10 @@ export function UsuariosView({
                 )}
               </td>
             </tr>
-          ))}
+            );
+          })}
           {dbUsers.length === 0 && (
-            <tr><td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)" }}>Sin usuarios registrados aun.</td></tr>
+            <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--text-muted)" }}>Sin usuarios registrados aun.</td></tr>
           )}
         </tbody></table>
 

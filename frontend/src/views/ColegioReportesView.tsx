@@ -144,7 +144,7 @@ export function ColegioReportesView({
       <section style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 16, alignItems: "start" }}>
         {/* ── Tabla ──────────────────────────────────────────────────────── */}
         <Panel title={`${nombreColegio} — ${total.toLocaleString("es-PE")} alumnos · notas del Bimestre ${bimestre} · Conducta: promedio anual`}>
-          <div style={{ overflowY: "auto", maxHeight: "calc(100vh - 360px)", borderRadius: 10, border: "1px solid var(--border)" }}>
+          <div style={{ overflowY: "auto", overflowX: "auto", maxHeight: "calc(100vh - 360px)", borderRadius: 10, border: "1px solid var(--border)" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: "var(--navy)", color: "#fff", position: "sticky", top: 0 }}>
@@ -245,10 +245,10 @@ export function ColegioReportesView({
             <div className="model-note" style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
               <BarChartIcon size={12} /> Cantidad de alumnos por nota (AD/A/B/C).
             </div>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={notasPorMateria} margin={{ top: 8, right: 8, left: -20, bottom: 4 }}>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={notasPorMateria} margin={{ top: 8, right: 8, left: -20, bottom: 28 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="materia" tick={{ fontSize: 11 }} />
+                <XAxis dataKey="materia" tick={{ fontSize: 10 }} angle={-25} textAnchor="end" interval={0} height={50} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: 11 }} />

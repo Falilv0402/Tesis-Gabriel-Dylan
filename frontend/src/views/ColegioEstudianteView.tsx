@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import {
-  Activity, BarChart3, CheckCircle2, MessageSquare, Pencil, Plus, Save, Users, TrendingUp,
+  Activity, BarChart3, CalendarRange, CheckCircle2, MessageSquare, Pencil, Plus, Save, Users, TrendingUp,
 } from "lucide-react";
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -9,7 +10,7 @@ import {
 import type { AlumnoColegio, Tab } from "@/types";
 import { Panel, EmptyState } from "@/components/ui/Primitives";
 import { pct, riskClass } from "@/lib/format";
-import { MATERIAS_COLEGIO, anioFromSalon, notaBimestre, colegioStudentId } from "@/lib/colegio";
+import { MATERIAS_COLEGIO, anioFromSalon, notaInfo, notaBimestre, colegioStudentId, type Bimestre } from "@/lib/colegio";
 
 interface Annotation { id: string; estudiante_id: string; contenido: string; created_at: string; autor_nombre?: string | null; autor_email?: string | null; es_propia?: boolean }
 interface Milestone  { id: string; texto: string; fecha: string; completado: boolean; autor_nombre?: string | null; autor_email?: string | null; es_propio?: boolean }
@@ -38,7 +39,13 @@ interface ColegioEstudianteViewProps {
 }
 
 const LINE_COLORS: Record<string, string> = {
-  "Matemática": "#2563eb", "Comunicación": "#7c3aed", "CTA": "#0891b2",
+  "Matemática":      "#2563eb",
+  "Comunicación":    "#7c3aed",
+  "Ciencia y Tec.":  "#0891b2",
+  "Personal Social": "#f59e0b",
+  "Inglés":          "#db2777",
+  "Arte y Cultura":  "#84cc16",
+  "Ed. Física":      "#f97316",
 };
 
 export function ColegioEstudianteView({
@@ -49,6 +56,7 @@ export function ColegioEstudianteView({
   saveAnnotation, loadAnnotations, addMilestone, toggleMilestone, loadMilestones, isLoadingMilestones,
 }: ColegioEstudianteViewProps) {
   const canEditAll = role === "director";
+  const [bimestreDetalle, setBimestreDetalle] = useState<Bimestre>("1");
 
   if (!alumno) {
     return (
@@ -135,6 +143,63 @@ export function ColegioEstudianteView({
           <div className="student-tab-content">
             {studentTab === "resumen" && (
               <div className="shap-section">
+                {/* ── Detalle por bimestre ──────────────────────────────────
+                    Tabla con la nota de cada materia (+ Conducta) para el
+                    bimestre seleccionado — complementa la trayectoria con un
+                    corte puntual, fácil de leer de un vistazo. */}
+                <div className="shap-section-title" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <CalendarRange size={14} /> Detalle por bimestre
+                  </span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--text-muted)" }}>
+                    Bimestre
+                    <select value={bimestreDetalle} onChange={(e) => setBimestreDetalle(e.target.value as Bimestre)}>
+                      <option value="1">Bimestre 1</option>
+                      <option value="2">Bimestre 2</option>
+                      <option value="3">Bimestre 3</option>
+                      <option value="4">Bimestre 4</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="model-note" style={{ marginBottom: 4 }}>
+                  Notas del <strong>Bimestre {bimestreDetalle}</strong> por materia (escala AD/A/B/C).
+                  La Conducta se evalúa de forma anual, no por bimestre.
+                </div>
+                <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid var(--border)", marginBottom: 18 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: "var(--navy)", color: "#fff" }}>
+                        {MATERIAS_COLEGIO.map((m) => (
+                          <th key={m.key} style={{ padding: "8px 10px", textAlign: "center", fontSize: 11, fontWeight: 700, letterSpacing: "0.03em" }}>{m.label}</th>
+                        ))}
+                        <th style={{ padding: "8px 10px", textAlign: "center", fontSize: 11, fontWeight: 700, letterSpacing: "0.03em" }} title="Promedio anual de conducta">
+                          Conducta
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style={{ background: "var(--surface)" }}>
+                        {MATERIAS_COLEGIO.map((m) => {
+                          const g = notaInfo(notaBimestre(alumno, m.key, bimestreDetalle));
+                          return (
+                            <td key={m.key} style={{ padding: "10px", textAlign: "center", fontWeight: 700, color: g.color }}>
+                              {g.label}
+                            </td>
+                          );
+                        })}
+                        {(() => {
+                          const c = notaInfo(alumno.conducta_promedio);
+                          return (
+                            <td style={{ padding: "10px", textAlign: "center", fontWeight: 700, color: c.color }}>
+                              {c.label}
+                            </td>
+                          );
+                        })()}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
                 <div className="shap-section-title">
                   <TrendingUp size={14} /> Trayectoria de notas por bimestre
                 </div>
@@ -142,13 +207,13 @@ export function ColegioEstudianteView({
                   Evolución de las notas (0-20) a lo largo de los 4 bimestres. El modelo usa los
                   primeros 3 bimestres para anticipar el riesgo al cierre del 4°.
                 </div>
-                <ResponsiveContainer width="100%" height={260}>
+                <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={trayectoria} margin={{ top: 8, right: 16, left: -10, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="bimestre" tick={{ fontSize: 12 }} />
                     <YAxis domain={[0, 20]} tick={{ fontSize: 11 }} />
                     <Tooltip formatter={(v) => v == null ? "Sin nota" : Number(v).toFixed(0)} />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
                     {MATERIAS_COLEGIO.map((m) => (
                       <Line key={m.key} type="monotone" dataKey={m.label} stroke={LINE_COLORS[m.label]} strokeWidth={2.5} dot={{ r: 4 }} connectNulls />
                     ))}

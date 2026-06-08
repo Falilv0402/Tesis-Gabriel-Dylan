@@ -5,7 +5,7 @@ import { Filter, RefreshCcw, GraduationCap, AlertTriangle, Users } from "lucide-
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { AlumnoColegio, ColegioResumen } from "@/types";
 import { Kpi, Panel, EmptyState } from "@/components/ui/Primitives";
-import { riskClass } from "@/lib/format";
+import { pct, riskClass } from "@/lib/format";
 import {
   MATERIAS_COLEGIO as MATERIAS, anioFromSalon, aniosDeSalones,
   seccionFromSalon, seccionesDeSalones,
@@ -31,10 +31,12 @@ interface ColegioDashboardViewProps {
   isLoading: boolean;
   onRefresh: () => void;
   onSelect?: (a: AlumnoColegio) => void;
+  /** Selecciona al alumno y navega a la pestaña de Intervenciones — botón "Intervenir". */
+  onIntervenir?: (a: AlumnoColegio) => void;
 }
 
 export function ColegioDashboardView({
-  nombreColegio, alumnos, resumen, isLoading, onRefresh, onSelect,
+  nombreColegio, alumnos, resumen, isLoading, onRefresh, onSelect, onIntervenir,
 }: ColegioDashboardViewProps) {
   const [nivel,    setNivel]    = useState<"Todos" | "ALTO" | "MEDIO" | "BAJO">("Todos");
   const [anio,     setAnio]     = useState<string>("Todos");
@@ -87,6 +89,18 @@ export function ColegioDashboardView({
         return { salon, ...e, pctRiesgo, color, label };
       })
       .sort((x, y) => y.pctRiesgo - x.pctRiesgo);
+  }, [filtrados]);
+
+  // ── Alumnos prioritarios para intervención ────────────────────────────────
+  // Equivalente a "Alertas activas" del dashboard distrital — pero ahí solo se
+  // listan alumnos en riesgo ALTO, y muchos colegios propios pueden no tener
+  // ninguno (no hay "críticos"). Para que el botón "Intervenir" esté siempre
+  // accesible desde el dashboard, priorizamos primero a los de riesgo ALTO y,
+  // si no alcanzan, completamos con los de riesgo MEDIO de mayor probabilidad.
+  const prioritarios = useMemo(() => {
+    const altos  = filtrados.filter((a) => a.nivel_riesgo === "ALTO").sort((a, b) => b.prob_riesgo - a.prob_riesgo);
+    const medios = filtrados.filter((a) => a.nivel_riesgo === "MEDIO").sort((a, b) => b.prob_riesgo - a.prob_riesgo);
+    return [...altos, ...medios].slice(0, 5);
   }, [filtrados]);
 
   return (
@@ -154,7 +168,7 @@ export function ColegioDashboardView({
           ) : totalFiltrado === 0 ? (
             <EmptyState message="No hay alumnos con el filtro seleccionado." />
           ) : (
-            <div style={{ overflowY: "auto", maxHeight: "calc(100vh - 420px)", borderRadius: 10, border: "1px solid var(--border)" }}>
+            <div style={{ overflowY: "auto", overflowX: "auto", maxHeight: "calc(100vh - 420px)", borderRadius: 10, border: "1px solid var(--border)" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: "var(--navy)", color: "#fff", position: "sticky", top: 0 }}>
@@ -262,6 +276,46 @@ export function ColegioDashboardView({
             </>
           ) : (
             <EmptyState message="Sin datos para el filtro seleccionado." />
+          )}
+        </Panel>
+      </section>
+
+      {/* ── Alumnos que requieren intervención ─────────────────────────────
+          Equivalente a "Alertas activas" del dashboard distrital: ahí solo se
+          listan alumnos en riesgo ALTO ("críticos"), pero un colegio propio
+          puede no tener ninguno. Para que "Intervenir" esté siempre accesible,
+          priorizamos ALTO y, si no alcanzan, completamos con MEDIO. */}
+      <section className="full-col">
+        <Panel title="Alumnos que requieren intervención">
+          <div className="model-note" style={{ marginBottom: 10 }}>
+            Prioriza primero a los alumnos de riesgo <strong>ALTO</strong> y, si no hay
+            suficientes, a los de riesgo <strong>MEDIO</strong> con mayor probabilidad —
+            así el botón <strong>Intervenir</strong> está siempre disponible, aunque el
+            colegio no tenga casos críticos por el momento.
+          </div>
+          {prioritarios.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {prioritarios.map((a) => {
+                const color = a.nivel_riesgo === "ALTO" ? "#dc2626" : "#d97706";
+                return (
+                  <div className="alert-card" key={colegioStudentId(a)} style={{ borderLeft: `3px solid ${color}` }}>
+                    <div className="alert-card-icon" style={{ color }}><AlertTriangle size={16} /></div>
+                    <div className="alert-card-body">
+                      <strong>{a.nombre}</strong>
+                      <span>{a.salon} · {anioFromSalon(a.salon).label}</span>
+                      <span style={{ color, fontWeight: 600 }}>
+                        {a.nivel_riesgo} · {pct(a.prob_riesgo)} prob. de riesgo
+                      </span>
+                    </div>
+                    <button className="alert-card-btn" style={{ background: color }} onClick={() => onIntervenir?.(a)}>
+                      Intervenir
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState message="No hay alumnos que requieran intervención prioritaria por ahora." />
           )}
         </Panel>
       </section>

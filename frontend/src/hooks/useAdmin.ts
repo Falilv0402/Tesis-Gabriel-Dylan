@@ -20,6 +20,8 @@ export function useAdmin(
     nombre: string | null;
     rol: string;
     activo: boolean;
+    codigo_ie: string | null;
+    distrito: string | null;
   }[]>([]);
   const [dbAudit, setDbAudit] = useState<{
     id: string;
@@ -110,7 +112,7 @@ export function useAdmin(
   async function loadDbUsers() {
     let query = supabase
       .from("profiles")
-      .select("id, email, nombre, rol, activo, codigo_ie")
+      .select("id, email, nombre, rol, activo, codigo_ie, distrito")
       .order("created_at");
 
     // Admin de colegio solo ve usuarios de su IE
