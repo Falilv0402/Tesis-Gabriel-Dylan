@@ -165,41 +165,36 @@ export function useAdmin(
   ) {
     setAuthBusy(true);
 
-    const rolEfectivo  = newUserRol; // admin de IE y superadmin ambos usan el rol elegido
-    const ieEfectiva   = role === "admin" ? (profileCodigoIe ?? "") : newUserDistrito;
+    const rolEfectivo = newUserRol;
+    const ieEfectiva  = role === "admin" ? (profileCodigoIe ?? "") : newUserDistrito;
+
+    // codigo_ie y distrito se pasan como metadatos del usuario: el trigger
+    // handle_new_user (SECURITY DEFINER, migración 0010) los lee desde
+    // raw_user_meta_data y los inserta directamente en profiles al crear
+    // la fila — sin necesidad de un UPDATE posterior ni restricciones RLS.
+    const metaCodigoIe = ieEfectiva || null;
+    const metaDistrito = (rolEfectivo === "director" || rolEfectivo === "coordinador")
+      ? (newUserDistrito || null)
+      : null;
 
     const { data: signUpData, error } = await supabase.auth.signUp({
       email: newUserEmail,
       password: newUserPwd,
-      options: { data: { nombre: newUserNombre, rol: rolEfectivo } },
+      options: {
+        data: {
+          nombre:    newUserNombre,
+          rol:       rolEfectivo,
+          codigo_ie: metaCodigoIe,
+          distrito:  metaDistrito,
+        },
+      },
     });
+
     if (!error && signUpData.user) {
-      const uid = signUpData.user.id;
-
-      if (ieEfectiva) {
-        // Actualizar campos según el rol asignado
-        const updateField = rolEfectivo === "director" || rolEfectivo === "coordinador"
-          ? { codigo_ie: ieEfectiva, distrito: newUserDistrito || null }
-          : { codigo_ie: ieEfectiva };
-
-        // Esperar a que el trigger de Supabase cree el perfil antes de actualizarlo
-        let actualizado = false;
-        for (let i = 0; i < 12; i++) {
-          await new Promise((r) => setTimeout(r, 400));
-          const { data: rows, error: upErr } = await supabase
-            .from("profiles")
-            .update(updateField)
-            .eq("id", uid)
-            .select("id");
-          if (!upErr && rows && rows.length > 0) { actualizado = true; break; }
-        }
-        if (!actualizado) toast("El perfil se creó pero no se pudo asignar el colegio.", "error");
-      }
-
       await insertAudit("Crear usuario", "profiles", { email: newUserEmail, rol: newUserRol, asignacion: newUserDistrito });
       setShowCreateUser(false);
       setNewUserEmail(""); setNewUserNombre(""); setNewUserPwd(""); setNewUserRol("director"); setNewUserDistrito("");
-      toast(`Usuario ${newUserEmail} creado como ${newUserRol}.`);
+      toast(`Usuario ${newUserEmail} creado correctamente como ${newUserRol}.`);
       void loadDbUsers();
     } else if (error) {
       toast(translateAuthError(error.message), "error");

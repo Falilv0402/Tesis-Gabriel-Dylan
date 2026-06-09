@@ -456,6 +456,7 @@ export default function Page() {
               alumnos={colegio.alumnos}
               resumen={colegio.resumen}
               onSelect={(a) => { setSelectedColegioId(colegioStudentId(a)); setTab("estudiante"); }}
+              userEmail={auth.session?.email ?? "usuario"}
             />
           )}
 

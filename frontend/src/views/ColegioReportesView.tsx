@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import {
-  Filter, Download, Users, AlertTriangle,
+  Filter, Download, FileText, Users, AlertTriangle,
   BarChart as BarChartIcon,
 } from "lucide-react";
+import { exportColegioPdf } from "@/lib/colegioPdfExport";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell,
@@ -23,13 +24,14 @@ interface ColegioReportesViewProps {
   alumnos: AlumnoColegio[];
   resumen: ColegioResumen | null;
   onSelect?: (a: AlumnoColegio) => void;
+  userEmail?: string;
 }
 
 const RISK_COLORS = { ALTO: "#dc2626", MEDIO: "#d97706", BAJO: "#16a34a" };
 const NOTA_COLORS = { AD: "#16a34a", A: "#2563eb", B: "#d97706", C: "#dc2626" };
 
 export function ColegioReportesView({
-  nombreColegio, alumnos, resumen, onSelect,
+  nombreColegio, alumnos, resumen, onSelect, userEmail,
 }: ColegioReportesViewProps) {
   const [nivel,    setNivel]    = useState<"Todos" | "ALTO" | "MEDIO" | "BAJO">("Todos");
   const [anio,     setAnio]     = useState<string>("Todos");
@@ -139,6 +141,13 @@ export function ColegioReportesView({
           </select>
         </label>
         <button onClick={exportCsv}><Download size={17} /> Exportar CSV</button>
+        <button
+          onClick={() => exportColegioPdf(nombreColegio, filtrados, alumnos, bimestre, userEmail ?? "usuario")}
+          style={{ background: "var(--navy)", color: "#fff", border: "none" }}
+          title="Exportar reporte PDF (landscape A4, hasta 120 alumnos)"
+        >
+          <FileText size={17} /> Reporte PDF
+        </button>
       </section>
 
       <section style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 16, alignItems: "start" }}>
