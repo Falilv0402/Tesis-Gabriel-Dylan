@@ -69,8 +69,8 @@ export function DatosView({
   colegioModelStats,
 }: DatosViewProps) {
 
-  // Si el admin tiene un colegio asignado, usarlo por defecto
-  const ieEfectiva = role === "admin" && profileCodigoIe ? profileCodigoIe : colegioUploadIe;
+  // El panel de carga es exclusivo del superadmin: usa la IE que escribe.
+  const ieEfectiva = colegioUploadIe;
 
   const statusIcon = {
     idle:      <School size={18} style={{ color: "var(--accent)" }} />,
@@ -255,9 +255,9 @@ export function DatosView({
         </Panel>
       )}
 
-      {/* ── Panel 1: Carga Excel del colegio ──────────────────────────────── */}
-      {/* Solo se muestra si hay modelo activo (admin) o si es superadmin */}
-      {(!isAdminRole || colegioModelStats) && (
+      {/* ── Panel 1: Carga Excel del colegio (solo Super Admin) ───────────── */}
+      {/* El admin de colegio solo monitorea; el entrenamiento es tarea del superadmin */}
+      {role === "superadmin" && (
       <Panel title="Datos del colegio — Excel interno">
         {!isLocalBackend() && (
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8,
@@ -296,33 +296,24 @@ export function DatosView({
           }}
         />
 
-        {/* IE selector — solo si el admin no tiene IE fija */}
-        {role === "superadmin" && (
-          <label style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 12, fontWeight: 600 }}>
-              Código IE del colegio <span style={{ color: "#ef4444" }}>*</span>
-            </span>
-            <input
-              value={colegioUploadIe}
-              onChange={(e) => setColegioUploadIe(e.target.value.trim())}
-              placeholder="Ej: 0249 ó 249"
-              style={{ fontSize: 13, padding: "7px 10px", borderRadius: 8,
-                border: "1px solid var(--border)" }}
-            />
-          </label>
-        )}
-
-        {role === "admin" && profileCodigoIe && (
-          <div style={{ padding: "8px 12px", background: "#f0f9ff", border: "1px solid #bae6fd",
-            borderRadius: 8, fontSize: 12, color: "#0369a1", marginBottom: 10 }}>
-            📌 Los archivos se procesarán para tu colegio (IE {profileCodigoIe})
-          </div>
-        )}
+        {/* IE selector — el superadmin indica para qué colegio es la carga */}
+        <label style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 12, fontWeight: 600 }}>
+            Código IE del colegio <span style={{ color: "#ef4444" }}>*</span>
+          </span>
+          <input
+            value={colegioUploadIe}
+            onChange={(e) => setColegioUploadIe(e.target.value.trim())}
+            placeholder="Ej: 0249 ó 249"
+            style={{ fontSize: 13, padding: "7px 10px", borderRadius: 8,
+              border: "1px solid var(--border)" }}
+          />
+        </label>
 
         {/* Botón de carga */}
         <button
           className="primary"
-          disabled={colegioUploadStatus === "uploading" || (!ieEfectiva && role === "superadmin")}
+          disabled={colegioUploadStatus === "uploading" || !ieEfectiva}
           onClick={() => colegioFileRef.current?.click()}
           style={{ width: "100%", marginBottom: 8 }}
         >
