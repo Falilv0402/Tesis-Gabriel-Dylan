@@ -1,9 +1,10 @@
 "use client";
 
 import { RefObject } from "react";
-import { Upload, CheckCircle2, AlertTriangle, School, Loader, Info } from "lucide-react";
+import { Upload, CheckCircle2, AlertTriangle, School, Loader, Info, Cpu, ShieldAlert } from "lucide-react";
 import { Panel, Kpi } from "@/components/ui/Primitives";
 import { isLocalBackend } from "@/lib/env";
+import type { Metrics } from "@/types";
 
 interface CsvValidation {
   total_filas: number;
@@ -43,6 +44,8 @@ interface DatosViewProps {
   onUploadColegioExcels: (files: FileList, ie: string) => void;
   role: string;
   profileCodigoIe: string | null;
+  // Métricas del modelo nacional EM2022 (para admin de colegios sin modelo CUBICOL propio)
+  em2022Metrics?: Metrics;
   colegioModelStats: {
     nombre_colegio: string; n_alumnos: number; n_riesgo: number;
     pct_riesgo: number; auc_cv: number | null; auc_train: number | null;
@@ -62,6 +65,7 @@ export function DatosView({
   colegioUploadStatus, colegioUploadMsg, colegioUploadResult,
   onUploadColegioExcels,
   role, profileCodigoIe,
+  em2022Metrics,
   colegioModelStats,
 }: DatosViewProps) {
 
@@ -75,25 +79,79 @@ export function DatosView({
     error:     <AlertTriangle size={18} style={{ color: "#dc2626" }} />,
   }[colegioUploadStatus];
 
+  const isAdminRole   = role === "admin";
+  const noModelYet    = isAdminRole && !colegioModelStats;
+  const noIeAssigned  = isAdminRole && !profileCodigoIe;
+  const isEM2022      = colegioModelStats?.modo_prediccion === "Modelo Nacional EM2022";
+
   return (
     <section className="full-col" style={{ maxWidth: 780 }}>
 
-      {/* ── Panel 0: Estadísticas del modelo actual ─────────────────────── */}
-      {colegioModelStats && (
-        <Panel title={`Modelo del colegio — ${colegioModelStats.nombre_colegio}`}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* ── Estado: cuenta admin sin IE asignada ──────────────────────────── */}
+      {noIeAssigned && (
+        <Panel title="Sin colegio asignado">
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center",
+            gap: 14, padding: "24px 16px", textAlign: "center",
+          }}>
+            <div style={{
+              width: 52, height: 52, borderRadius: "50%",
+              background: "#fef2f2", border: "2px solid #fca5a5",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <ShieldAlert size={24} style={{ color: "#dc2626" }} />
+            </div>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
+                Tu cuenta no tiene un colegio asignado
+              </p>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6, maxWidth: 420 }}>
+                Para gestionar los datos de un colegio necesitas que el Super Admin te asigne
+                un código IE. Comunícate con el administrador del sistema.
+              </p>
+            </div>
+          </div>
+        </Panel>
+      )}
 
-            {/* Métricas principales */}
+      {/* ── Estado: admin con IE pero sin datos en ningún modelo ────────── */}
+      {noModelYet && profileCodigoIe && (
+        <Panel title={`Colegio IE ${profileCodigoIe} — Sin datos`}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12,
+            padding: "16px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10 }}>
+            <Info size={18} style={{ color: "#d97706", flexShrink: 0 }} />
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#92400e", marginBottom: 3 }}>
+                No hay datos disponibles para esta IE
+              </p>
+              <p style={{ fontSize: 12, color: "#92400e", lineHeight: 1.5 }}>
+                El colegio IE <strong>{profileCodigoIe}</strong> no está en el dataset EM2022 ni tiene
+                un modelo CUBICOL propio. Contacta al Super Admin.
+              </p>
+            </div>
+          </div>
+        </Panel>
+      )}
+
+      {/* ── Panel 0: Estadísticas del colegio en el modelo ──────────────── */}
+      {colegioModelStats && (
+        <Panel title={`Datos del colegio — ${colegioModelStats.nombre_colegio}`}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+            {/* KPIs del colegio: alumnos + riesgo + distribución */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
-              <Kpi label="Alumnos"   value={colegioModelStats.n_alumnos}           detail="en el modelo" />
-              <Kpi label="En riesgo" value={colegioModelStats.n_riesgo}            detail={`${colegioModelStats.pct_riesgo}% del total`} tone={colegioModelStats.n_riesgo > 0 ? "high" : undefined} />
-              <Kpi label="AUC CV"    value={colegioModelStats.auc_cv != null ? `${(colegioModelStats.auc_cv * 100).toFixed(1)}%` : "—"} detail="5-fold estratificado" tone={colegioModelStats.auc_cv != null && colegioModelStats.auc_cv >= 0.80 ? "low" : "medium"} />
+              <Kpi label="Alumnos en el modelo" value={colegioModelStats.n_alumnos} detail={isEM2022 ? "Dataset EM2022" : "Modelo propio"} />
+              <Kpi label="En riesgo"    value={colegioModelStats.n_riesgo}  detail={`${colegioModelStats.pct_riesgo}% del total`} tone={colegioModelStats.n_riesgo > 0 ? "high" : undefined} />
+              {!isEM2022
+                ? <Kpi label="AUC CV" value={colegioModelStats.auc_cv != null ? `${(colegioModelStats.auc_cv * 100).toFixed(1)}%` : "—"} detail="5-fold estratificado" tone={colegioModelStats.auc_cv != null && colegioModelStats.auc_cv >= 0.80 ? "low" : "medium"} />
+                : <Kpi label="AUC-ROC" value={em2022Metrics?.auc_roc != null ? `${((em2022Metrics.auc_roc) * 100).toFixed(1)}%` : "—"} detail="Modelo nacional" tone="low" />
+              }
             </div>
 
-            {/* Distribución por nivel */}
+            {/* Barra de distribución */}
             {Object.keys(colegioModelStats.por_nivel).length > 0 && (
               <div>
-                <p style={{ fontSize: 11, fontWeight: 700, color: "var(--navy)", marginBottom: 4, textTransform: "uppercase" }}>Distribución</p>
+                <p style={{ fontSize: 11, fontWeight: 700, color: "var(--navy)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.5px" }}>Distribución de riesgo</p>
                 <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", gap: 1 }}>
                   {[["ALTO","#dc2626"],["MEDIO","#d97706"],["BAJO","#16a34a"]].map(([nivel, color]) =>
                     (colegioModelStats.por_nivel[nivel] ?? 0) > 0 ? (
@@ -102,7 +160,7 @@ export function DatosView({
                     ) : null
                   )}
                 </div>
-                <div style={{ display: "flex", gap: 12, marginTop: 4, fontSize: 11, color: "var(--text-muted)" }}>
+                <div style={{ display: "flex", gap: 12, marginTop: 5, fontSize: 11 }}>
                   {[["ALTO","#dc2626"],["MEDIO","#d97706"],["BAJO","#16a34a"]].map(([nivel, color]) => (
                     <span key={nivel} style={{ color }}>
                       {nivel}: <strong>{colegioModelStats.por_nivel[nivel] ?? 0}</strong>
@@ -112,24 +170,94 @@ export function DatosView({
               </div>
             )}
 
-            {/* Modo y features */}
-            <div style={{ padding: "8px 10px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 8, fontSize: 12 }}>
-              <strong style={{ color: "#0369a1" }}>Modo:</strong>{" "}
-              <span style={{ color: "#0369a1" }}>{colegioModelStats.modo_prediccion}</span>
-            </div>
+            {/* ── Métricas del modelo EM2022 (para colegios sin modelo CUBICOL) ── */}
+            {isEM2022 && em2022Metrics && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "8px 12px",
+                  background: "var(--navy)", borderRadius: 10,
+                }}>
+                  <Cpu size={14} style={{ color: "#93c5fd" }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>
+                    Modelo Nacional EM2022 — Operación del modelo
+                  </span>
+                  {em2022Metrics.trained_at && (
+                    <span style={{ fontSize: 10, color: "#93c5fd", marginLeft: "auto" }}>
+                      {em2022Metrics.trained_at}
+                    </span>
+                  )}
+                </div>
 
-            {/* Salones y fecha */}
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)" }}>
-              <span>Salones: {colegioModelStats.salones.join(" · ")}</span>
-              {colegioModelStats.trained_at && (
-                <span>Entrenado: {new Date(colegioModelStats.trained_at).toLocaleDateString("es-PE", { dateStyle: "medium" })}</span>
-              )}
-            </div>
+                {/* Métricas principales: 4 KPIs */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+                  <Kpi label="Accuracy"
+                    value={em2022Metrics.accuracy != null ? `${(em2022Metrics.accuracy * 100).toFixed(1)}%` : "—"}
+                    detail="Test (umbral fijo)" />
+                  <Kpi label="Recall"
+                    value={em2022Metrics.recall != null ? `${(em2022Metrics.recall * 100).toFixed(1)}%` : "—"}
+                    detail="Crítico" tone="high" />
+                  <Kpi label="F1"
+                    value={em2022Metrics.f1_score != null ? `${(em2022Metrics.f1_score * 100).toFixed(1)}%` : "—"}
+                    detail={em2022Metrics.f1_ci_95 ? `IC95% [${(em2022Metrics.f1_ci_95[0]*100).toFixed(1)}%–${(em2022Metrics.f1_ci_95[1]*100).toFixed(1)}%]` : ""} />
+                  <Kpi label="AUC-ROC"
+                    value={em2022Metrics.auc_roc != null ? `${(em2022Metrics.auc_roc * 100).toFixed(1)}%` : "—"}
+                    detail={em2022Metrics.auc_ci_95 ? `IC95% [${(em2022Metrics.auc_ci_95[0]*100).toFixed(1)}%–${(em2022Metrics.auc_ci_95[1]*100).toFixed(1)}%]` : ""}
+                    tone="low" />
+                </div>
+
+                {/* PR-AUC + Brier */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <Kpi label="PR-AUC"
+                    value={em2022Metrics.pr_auc != null ? `${(em2022Metrics.pr_auc * 100).toFixed(1)}%` : "—"}
+                    detail={em2022Metrics.pr_baseline != null ? `Baseline ${(em2022Metrics.pr_baseline * 100).toFixed(1)}%` : ""}
+                    tone="low" />
+                  <Kpi label="Brier"
+                    value={em2022Metrics.brier_score != null ? em2022Metrics.brier_score.toFixed(3) : "—"}
+                    detail={em2022Metrics.brier_ci_95 ? `IC95% [${em2022Metrics.brier_ci_95[0].toFixed(3)}–${em2022Metrics.brier_ci_95[1].toFixed(3)}]` : ""}
+                    tone="medium" />
+                </div>
+
+                {/* Info modelo */}
+                {(em2022Metrics.train_rows || em2022Metrics.test_rows || em2022Metrics.scope) && (
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.6,
+                    padding: "7px 10px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8 }}>
+                    {em2022Metrics.modelo_ganador && (
+                      <span>Modelo: <strong style={{ color: "var(--navy)" }}>{em2022Metrics.modelo_ganador}</strong></span>
+                    )}
+                    {em2022Metrics.train_rows && <span style={{ marginLeft: 12 }}>Train: <strong>{em2022Metrics.train_rows.toLocaleString()}</strong> alumnos</span>}
+                    {em2022Metrics.test_rows  && <span style={{ marginLeft: 12 }}>Test: <strong>{em2022Metrics.test_rows.toLocaleString()}</strong> alumnos</span>}
+                    {em2022Metrics.scope && <div style={{ marginTop: 2 }}>{em2022Metrics.scope}</div>}
+                  </div>
+                )}
+
+              </div>
+            )}
+
+            {/* Modo y salones (solo modelo CUBICOL) */}
+            {!isEM2022 && (
+              <>
+                <div style={{ padding: "8px 10px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 8, fontSize: 12 }}>
+                  <strong style={{ color: "#0369a1" }}>Modo:</strong>{" "}
+                  <span style={{ color: "#0369a1" }}>{colegioModelStats.modo_prediccion}</span>
+                </div>
+                {(colegioModelStats.salones.length > 0 || colegioModelStats.trained_at) && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)" }}>
+                    {colegioModelStats.salones.length > 0 && <span>Salones: {colegioModelStats.salones.join(" · ")}</span>}
+                    {colegioModelStats.trained_at && (
+                      <span>Entrenado: {new Date(colegioModelStats.trained_at).toLocaleDateString("es-PE", { dateStyle: "medium" })}</span>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </Panel>
       )}
 
-      {/* ── Panel 1: Carga Excel del colegio (solo en local) ──────────── */}
+      {/* ── Panel 1: Carga Excel del colegio ──────────────────────────────── */}
+      {/* Solo se muestra si hay modelo activo (admin) o si es superadmin */}
+      {(!isAdminRole || colegioModelStats) && (
       <Panel title="Datos del colegio — Excel interno">
         {!isLocalBackend() && (
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8,
@@ -246,6 +374,7 @@ export function DatosView({
         )}
         </>)}
       </Panel>
+      )}
 
     </section>
   );

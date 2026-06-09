@@ -171,7 +171,12 @@ export default function Page() {
   }
 
   // ── Loading state ─────────────────────────────────────────────────
-  if (auth.authLoading) {
+  // authLoading: sesión aún no verificada con Supabase.
+  // roleLoaded: sesión verificada pero perfil (rol real) aún no llegó de BD.
+  //   Bloqueamos el render mientras alguno sea falso para evitar que el default
+  //   role="director" cause un flash de vistas incorrectas (ej. superadmin que
+  //   ve brevemente el dashboard del colegio antes de ser redirigido a usuarios).
+  if (auth.authLoading || (auth.session && !auth.roleLoaded)) {
     return (
       <main className="auth-screen">
         <section className="auth-panel" style={{ textAlign: "center", gap: 12 }}>
@@ -492,6 +497,7 @@ export default function Page() {
               onUploadColegioExcels={(files, ie) => void admin.uploadColegioExcels(files, ie)}
               role={auth.role}
               profileCodigoIe={auth.profileCodigoIe}
+              em2022Metrics={modelData.metrics}
               colegioModelStats={admin.colegioModelStats}
             />
           )}

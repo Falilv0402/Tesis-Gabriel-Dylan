@@ -74,22 +74,62 @@ export function useAdmin(
 
   async function loadColegioModelStats(ieCode: string) {
     if (!ieCode) return;
+    const ieNorm = String(parseInt(ieCode, 10)); // "0249" → "249"
     try {
-      const res = await fetch(`${apiUrl}/v1/colegio/${ieCode}/resumen`);
+      // 1️⃣ Intentar modelo CUBICOL propio del colegio
+      const res = await fetch(`${apiUrl}/v1/colegio/${ieNorm}/resumen`);
       if (res.ok) {
         const data = await res.json();
         const m = data.metricas ?? {};
         setColegioModelStats({
-          nombre_colegio: data.nombre_colegio ?? ieCode,
-          n_alumnos:      data.n_alumnos ?? 0,
-          n_riesgo:       data.n_riesgo  ?? 0,
-          pct_riesgo:     data.pct_riesgo ?? 0,
-          auc_cv:         m.auc_cv ?? null,
-          auc_train:      m.auc_train ?? null,
+          nombre_colegio:  data.nombre_colegio ?? ieCode,
+          n_alumnos:       data.n_alumnos ?? 0,
+          n_riesgo:        data.n_riesgo  ?? 0,
+          pct_riesgo:      data.pct_riesgo ?? 0,
+          auc_cv:          m.auc_cv ?? null,
+          auc_train:       m.auc_train ?? null,
           modo_prediccion: m.modo_prediccion ?? "—",
-          salones:        m.salones ?? [],
-          trained_at:     data.trained_at ?? null,
-          por_nivel:      data.por_nivel ?? {},
+          salones:         m.salones ?? [],
+          trained_at:      data.trained_at ?? null,
+          por_nivel:       data.por_nivel ?? {},
+        });
+        return;
+      }
+
+      // 2️⃣ Fallback: cargar stats del modelo nacional EM2022 para esta IE
+      const emRes = await fetch(`${apiUrl}/v1/predicciones/resumen?id_ie=${ieNorm}`);
+      if (emRes.ok) {
+        const em = await emRes.json();
+        const counts: Record<string, number> = em.risk_counts ?? {};
+        const nAlto   = counts["ALTO"]  ?? 0;
+        const nMedio  = counts["MEDIO"] ?? 0;
+        const nBajo   = counts["BAJO"]  ?? 0;
+        const nTotal  = em.total ?? (nAlto + nMedio + nBajo);
+        const nRiesgo = nAlto + nMedio;
+        const pct     = nTotal > 0 ? Math.round((nRiesgo / nTotal) * 100) : 0;
+
+        // Obtener nombre del colegio desde el listado general
+        let nombreColegio = `IE ${ieCode}`;
+        try {
+          const colegiosRes = await fetch(`${apiUrl}/v1/colegios`);
+          if (colegiosRes.ok) {
+            const colegios: { id_ie: string; nombre_ie?: string }[] = await colegiosRes.json();
+            const match = colegios.find(c => String(parseInt(String(c.id_ie), 10)) === ieNorm);
+            if (match?.nombre_ie) nombreColegio = match.nombre_ie;
+          }
+        } catch { /* nombre por defecto */ }
+
+        setColegioModelStats({
+          nombre_colegio:  nombreColegio,
+          n_alumnos:       nTotal,
+          n_riesgo:        nRiesgo,
+          pct_riesgo:      pct,
+          auc_cv:          null,
+          auc_train:       null,
+          modo_prediccion: "Modelo Nacional EM2022",
+          salones:         [],
+          trained_at:      null,
+          por_nivel:       { ALTO: nAlto, MEDIO: nMedio, BAJO: nBajo },
         });
       } else {
         setColegioModelStats(null);

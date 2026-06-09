@@ -21,6 +21,10 @@ export function useAuth(
   const [authMsg,      setAuthMsg]      = useState("");
   const [authBusy,     setAuthBusy]     = useState(false);
   const [role,         setRole]         = useState<UserRole>("director");
+  // roleLoaded: true solo después de que loadProfile leyó el rol real desde BD.
+  // Mientras sea false, page.tsx muestra el spinner y nunca renderiza contenido
+  // con el rol por-defecto ("director"), evitando flashes de vistas incorrectas.
+  const [roleLoaded,   setRoleLoaded]   = useState(false);
 
   // ── Registration ──────────────────────────────────────────────────────────
   const [regDistrito,      setRegDistrito]      = useState("");
@@ -89,6 +93,7 @@ export function useAuth(
 
     if (data?.rol) {
       setRole(data.rol as UserRole);
+      setRoleLoaded(true);
 
       // Si el distrito viene de la BD lo usamos; si no, intentamos el caché local
       const cachedDistrito = localStorage.getItem(`satra_distrito_${userId}`);
@@ -263,7 +268,8 @@ export function useAuth(
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s?.user ?? null);
       if (s?.user) {
-        abortLoadProfile.current = false; 
+        abortLoadProfile.current = false;
+        setRoleLoaded(false);   // bloquear render hasta que llegue el rol real
         void loadProfile(s.user.id);
         if (event === "SIGNED_IN") {
           void supabase.from("audit_log").insert({
@@ -274,6 +280,7 @@ export function useAuth(
         }
       } else {
         setRole("director");
+        setRoleLoaded(false);   // reset al cerrar sesión
         setAuthLoading(false);
       }
     });
@@ -321,7 +328,7 @@ export function useAuth(
 
   // ── Public API ────────────────────────────────────────────────────────────
   return {
-    session, authLoading,
+    session, authLoading, roleLoaded,
     authMode, setAuthMode,
     authEmail, setAuthEmail,
     authPassword, setAuthPassword,

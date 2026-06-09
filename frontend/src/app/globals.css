@@ -1732,20 +1732,22 @@ tr:hover td { background: #f7f9fd; }
   border-bottom: 1px solid var(--border);
 }
 .student-detail-header .gauge {
-  text-align: right;
+  text-align: center;
 }
 .student-detail-header .gauge strong {
   font-size: 32px;
   font-weight: 800;
-  color: var(--accent, #2563eb);
+  /* color se aplica vía inline style (varía por nivel de riesgo) */
+  color: inherit;
   display: block;
   line-height: 1;
 }
 .student-detail-header .gauge span {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted, #6b7280);
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
+  line-height: 1.4;
 }
 
 /* ── Empty state grande (cuando no hay estudiante seleccionado) ──────── */

@@ -80,6 +80,16 @@ export function ColegioEstudianteView({
   const sid = colegioStudentId(alumno);
   const anioLabel = anioFromSalon(alumno.salon).label;
 
+  // Colores derivados del nivel de riesgo y de las notas
+  const gaugeColor  = alumno.nivel_riesgo === "ALTO" ? "#dc2626"
+                    : alumno.nivel_riesgo === "MEDIO" ? "#d97706"
+                    : "#16a34a";
+  const gradeColor  = (n: number | null | undefined) =>
+    n == null ? "var(--text-muted)" : n >= 15 ? "#16a34a" : n >= 13 ? "#d97706" : "#dc2626";
+  const promedioNum = alumno.promedio_materias  != null ? Number(alumno.promedio_materias)  : null;
+  const conductaNum = alumno.conducta_promedio  != null ? Number(alumno.conducta_promedio)  : null;
+  const cursosC     = alumno.n_materias_c ?? 0;
+
   // Trayectoria de notas por bimestre y materia (B1-B4)
   const trayectoria = (["1", "2", "3", "4"] as const).map((b) => {
     const row: Record<string, number | string | null> = { bimestre: `B${b}` };
@@ -94,25 +104,62 @@ export function ColegioEstudianteView({
       <Panel title={`${alumno.nombre} — Detalle del alumno`}>
         <div className="student-detail-page">
           <div className="student-detail-header">
-            <div>
-              <h2 style={{ margin: "0 0 6px" }}>{alumno.nombre}</h2>
-              <span className={riskClass(alumno.nivel_riesgo)}>{alumno.nivel_riesgo}</span>
-              <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>
-                {alumno.salon} · {anioLabel}
-              </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 800, color: "var(--navy)", lineHeight: 1.2 }}>
+                {alumno.nombre}
+              </h2>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span className={riskClass(alumno.nivel_riesgo)}>{alumno.nivel_riesgo}</span>
+                <span style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5 }}>
+                  <span style={{ opacity: 0.35, fontSize: 16, lineHeight: 1 }}>·</span>
+                  {alumno.salon}
+                  <span style={{ opacity: 0.35, fontSize: 16, lineHeight: 1 }}>·</span>
+                  {anioLabel}
+                </span>
+              </div>
             </div>
-            <div className="gauge">
-              <strong>{pct(alumno.prob_riesgo)}</strong>
-              <span>Probabilidad de riesgo</span>
+
+            {/* Gauge: color según nivel de riesgo */}
+            <div className="gauge" style={{ borderColor: `${gaugeColor}28`, minWidth: 130 }}>
+              <strong style={{ color: gaugeColor }}>{pct(alumno.prob_riesgo)}</strong>
+              <span>Probabilidad de<br/>riesgo</span>
             </div>
           </div>
 
-          <div className="detail-grid">
-            <span>Salón</span><strong>{alumno.salon}</strong>
-            <span>Año</span><strong>{anioLabel}</strong>
-            <span>Promedio general</span><strong>{alumno.promedio_materias != null ? Number(alumno.promedio_materias).toFixed(1) : "—"}</strong>
-            <span>Conducta</span><strong>{alumno.conducta_promedio != null ? Number(alumno.conducta_promedio).toFixed(1) : "—"}</strong>
-            <span>Cursos en C</span><strong>{alumno.n_materias_c ?? "—"}</strong>
+          {/* ── Stat chips ── cada chip es un div contenedor (label + valor)    */}
+          {/* Reemplaza el detail-grid anterior que tenía span/strong como hijos  */}
+          {/* sueltos del grid y se despareaban al romper columnas.               */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            {([
+              { label: "Salón",          value: alumno.salon,                                           accent: "var(--navy)" },
+              { label: "Año escolar",    value: anioLabel,                                              accent: "var(--navy)" },
+              { label: "Promedio anual", value: promedioNum != null ? promedioNum.toFixed(1) : "—",     accent: gradeColor(promedioNum) },
+              { label: "Conducta",       value: conductaNum != null ? conductaNum.toFixed(1) : "—",     accent: gradeColor(conductaNum) },
+              { label: "Cursos en C",    value: String(cursosC),                                        accent: cursosC > 2 ? "#dc2626" : cursosC > 0 ? "#d97706" : "#16a34a" },
+            ] as { label: string; value: string; accent: string }[]).map(({ label, value, accent }) => (
+              <div key={label} style={{
+                flex: "1 1 100px",
+                minWidth: 90,
+                background: "var(--surface)",
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                borderLeft: `3px solid ${accent}`,
+                padding: "10px 14px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+              }}>
+                <span style={{
+                  fontSize: 10, fontWeight: 700, color: "var(--text-muted)",
+                  textTransform: "uppercase", letterSpacing: "0.55px",
+                }}>
+                  {label}
+                </span>
+                <strong style={{ fontSize: 20, fontWeight: 800, color: accent, lineHeight: 1.1 }}>
+                  {value}
+                </strong>
+              </div>
+            ))}
           </div>
 
           <div className="student-quick-actions">
