@@ -23,6 +23,7 @@ from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score, accuracy_score
 
 from parse_excels import procesar_colegio, AREAS_ACADEMICAS
@@ -184,20 +185,27 @@ def train(carpeta: str, codigo_ie: str) -> None:
             print("      Muy pocos positivos para CV — se omite AUC CV.")
         n_splits_used = n_splits
 
-        # Entrenar sobre todos los datos para predicciones finales
-        pipe.fit(X, y)
-        y_prob    = pipe.predict_proba(X)[:, 1]
+        # Entrenar el ensemble y CALIBRAR sus probabilidades (Platt / sigmoid).
+        # Sin calibrar, el VotingClassifier produce probabilidades infladas
+        # (muchos alumnos con 90%+ aunque su nivel por notas sea bajo); la
+        # calibración las ajusta a frecuencias reales y las vuelve creíbles.
+        # Queda consistente con el modelo nacional EM 2022 (también calibrado).
+        # Se usa sigmoid (no isotónica) por ser más robusta con pocos alumnos;
+        # el cv interno se acota al tamaño del colegio.
+        cal_cv = 5 if pos >= 25 else 3 if pos >= 6 else 2
+        modelo = CalibratedClassifierCV(pipe, method="sigmoid", cv=cal_cv)
+        modelo.fit(X, y)
+        y_prob    = modelo.predict_proba(X)[:, 1]
         y_pred    = (y_prob >= 0.5).astype(int)
         auc_train       = float(roc_auc_score(y, y_prob))
         f1_train        = float(f1_score(y, y_pred, zero_division=0))
         precision_train = float(precision_score(y, y_pred, zero_division=0))
         recall_train    = float(recall_score(y, y_pred, zero_division=0))
         accuracy_train  = float(accuracy_score(y, y_pred))
-        modelo    = pipe
         print(f"      AUC (train, referencia) : {auc_train:.4f}  "
               f"F1 (train): {f1_train:.4f}  "
               f"Precision: {precision_train:.4f}  Recall: {recall_train:.4f}")
-        print("      NOTA: el AUC CV es el indicador válido; AUC train se reporta solo como referencia.")
+        print("      Modelo CALIBRADO (sigmoid). El AUC CV es el indicador válido.")
 
     # ── 4. Generar predicciones y guardar ─────────────────────────────────────
     print("\n[4/4] Generando predicciones y guardando artefacto...")
@@ -209,6 +217,26 @@ def train(carpeta: str, codigo_ie: str) -> None:
         df["prob_riesgo"] = modelo.predict_proba(X_imp)[:, 1]
     else:
         df["prob_riesgo"] = df["riesgo_score"]
+
+    # ── Nivel de riesgo coherente con el modelo ───────────────────────────────
+    # El badge ALTO/MEDIO/BAJO se deriva de la probabilidad CALIBRADA (umbral
+    # 70%/45%, igual que el modelo nacional EM 2022), no del índice de notas.
+    # Así el badge "Nivel" y el "%" mostrados SIEMPRE concuerdan, y el sistema
+    # actúa como alerta temprana (predicción) y no como foto de notas actuales.
+    # El índice ponderado de notas (riesgo_score) se conserva como métrica
+    # explicable secundaria (transparente: Mate 25%, Com 20%, ...).
+    if modelo is not None:
+        def _nivel_de_prob(p: float) -> str:
+            if p >= 0.70: return "ALTO"
+            if p >= 0.45: return "MEDIO"
+            return "BAJO"
+        df["nivel_riesgo"] = df["prob_riesgo"].apply(_nivel_de_prob)
+        # Reordenar por probabilidad (la señal predictiva) en vez del índice.
+        df = df.sort_values("prob_riesgo", ascending=False).reset_index(drop=True)
+        print(f"      Nivel final (desde prob calibrada 70/45%): "
+              f"ALTO={int((df.nivel_riesgo == 'ALTO').sum())} "
+              f"MEDIO={int((df.nivel_riesgo == 'MEDIO').sum())} "
+              f"BAJO={int((df.nivel_riesgo == 'BAJO').sum())}")
 
     # Convertir a lista de dicts para el endpoint.
     # Incluimos las notas de TODOS los bimestres (b1..b4) por materia, además

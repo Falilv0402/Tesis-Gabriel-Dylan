@@ -16,7 +16,7 @@ import { riskClass } from "@/lib/format";
 import {
   MATERIAS_COLEGIO, anioFromSalon, aniosDeSalones,
   seccionFromSalon, seccionesDeSalones,
-  notaInfo, notaBimestre, colegioStudentId, type Bimestre,
+  notaInfo, notaCelda, gradeCell, colegioStudentId, type Bimestre,
 } from "@/lib/colegio";
 
 interface ColegioReportesViewProps {
@@ -77,7 +77,7 @@ export function ColegioReportesView({
     return MATERIAS_COLEGIO.map(({ key, label }) => {
       const cnts = { AD: 0, A: 0, B: 0, C: 0 };
       for (const a of filtrados) {
-        const letra = notaInfo(notaBimestre(a, key, bimestre)).letra;
+        const letra = notaInfo(notaCelda(a, key, bimestre).value).letra;
         if (letra in cnts) cnts[letra as keyof typeof cnts]++;
       }
       return { materia: label, ...cnts };
@@ -93,7 +93,7 @@ export function ColegioReportesView({
       const row = [
         a.n_alumno, `"${a.nombre}"`, a.salon, a.nivel_riesgo,
         (a.prob_riesgo * 100).toFixed(1) + "%",
-        ...MATERIAS_COLEGIO.map((m) => notaBimestre(a, m.key, bimestre) ?? ""),
+        ...MATERIAS_COLEGIO.map((m) => notaCelda(a, m.key, bimestre).value ?? ""),
         a.conducta_promedio ?? "",
       ];
       lines.push(row.join(","));
@@ -183,7 +183,7 @@ export function ColegioReportesView({
                       {(a.prob_riesgo * 100).toFixed(0)}%
                     </td>
                     {MATERIAS_COLEGIO.map((m) => {
-                      const g = notaInfo(notaBimestre(a, m.key, bimestre));
+                      const g = gradeCell(a, m.key, bimestre);
                       return <td key={m.key} style={{ ...td, textAlign: "center", fontWeight: 600, color: g.color }}>{g.label}</td>;
                     })}
                     {(() => {

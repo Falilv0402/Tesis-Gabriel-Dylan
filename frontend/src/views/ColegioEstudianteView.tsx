@@ -10,7 +10,7 @@ import {
 import type { AlumnoColegio, Tab } from "@/types";
 import { Panel, EmptyState } from "@/components/ui/Primitives";
 import { pct, riskClass } from "@/lib/format";
-import { MATERIAS_COLEGIO, anioFromSalon, notaInfo, notaBimestre, colegioStudentId, type Bimestre } from "@/lib/colegio";
+import { MATERIAS_COLEGIO, anioFromSalon, notaInfo, notaCelda, gradeCell, colegioStudentId, type Bimestre } from "@/lib/colegio";
 
 interface Annotation { id: string; estudiante_id: string; contenido: string; created_at: string; autor_nombre?: string | null; autor_email?: string | null; es_propia?: boolean }
 interface Milestone  { id: string; texto: string; fecha: string; completado: boolean; autor_nombre?: string | null; autor_email?: string | null; es_propio?: boolean }
@@ -93,7 +93,7 @@ export function ColegioEstudianteView({
   // Trayectoria de notas por bimestre y materia (B1-B4)
   const trayectoria = (["1", "2", "3", "4"] as const).map((b) => {
     const row: Record<string, number | string | null> = { bimestre: `B${b}` };
-    for (const m of MATERIAS_COLEGIO) row[m.label] = notaBimestre(alumno, m.key, b);
+    for (const m of MATERIAS_COLEGIO) row[m.label] = notaCelda(alumno, m.key, b).value;
     return row;
   });
 
@@ -227,7 +227,7 @@ export function ColegioEstudianteView({
                     <tbody>
                       <tr style={{ background: "var(--surface)" }}>
                         {MATERIAS_COLEGIO.map((m) => {
-                          const g = notaInfo(notaBimestre(alumno, m.key, bimestreDetalle));
+                          const g = gradeCell(alumno, m.key, bimestreDetalle);
                           return (
                             <td key={m.key} style={{ padding: "10px", textAlign: "center", fontWeight: 700, color: g.color }}>
                               {g.label}

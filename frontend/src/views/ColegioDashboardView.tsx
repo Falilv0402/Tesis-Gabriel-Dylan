@@ -9,7 +9,7 @@ import { pct, riskClass } from "@/lib/format";
 import {
   MATERIAS_COLEGIO as MATERIAS, anioFromSalon, aniosDeSalones,
   seccionFromSalon, seccionesDeSalones,
-  notaInfo, notaBimestre, colegioStudentId, type Bimestre,
+  notaInfo, gradeCell, colegioStudentId, type Bimestre,
 } from "@/lib/colegio";
 
 /**
@@ -64,7 +64,15 @@ export function ColegioDashboardView({
   const totalFiltrado = filtrados.length;
   const enRiesgo = counts.ALTO + counts.MEDIO;
 
-  const grade = (a: AlumnoColegio, materia: string) => notaInfo(notaBimestre(a, materia, bimestre));
+  const grade = (a: AlumnoColegio, materia: string) => gradeCell(a, materia, bimestre);
+
+  // ¿Hay alguna nota mostrada que provenga del promedio anual (salón sin
+  // desglose por bimestre, p.ej. 6° B)? Para mostrar la aclaración al pie.
+  const hayNotaAnual = useMemo(
+    () => filtrados.some((a) => MATERIAS.some((m) => grade(a, m.key).anual)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filtrados, bimestre]
+  );
 
   // ── Riesgo agrupado por salón (sustituto del mapa geográfico) ─────────────
   // Un colegio propio no tiene distritos: el agrupamiento natural del riesgo
@@ -229,6 +237,7 @@ export function ColegioDashboardView({
           )}
           <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, textAlign: "right" }}>
             {totalFiltrado.toLocaleString("es-PE")} de {alumnos.length.toLocaleString("es-PE")} alumnos · notas del Bimestre {bimestre} (escala AD/A/B/C) · Conducta: promedio anual
+            {hayNotaAnual && <> · <strong>ᵃ</strong> = nota anual (salón sin desglose por bimestre)</>}
           </p>
         </Panel>
 

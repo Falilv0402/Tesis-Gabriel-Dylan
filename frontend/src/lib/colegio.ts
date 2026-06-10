@@ -66,6 +66,40 @@ export function notaBimestre(a: AlumnoColegio, materia: string, bimestre: Bimest
   return v == null || v === "" || Number.isNaN(Number(v)) ? null : Number(v);
 }
 
+/** Lee el promedio anual de una materia (pp_{materia}). */
+export function notaAnual(a: AlumnoColegio, materia: string): number | null {
+  const v = (a as Record<string, number | string | null | undefined>)[`pp_${materia}`];
+  return v == null || v === "" || Number.isNaN(Number(v)) ? null : Number(v);
+}
+
+/**
+ * Nota efectiva a mostrar en un bimestre. Si el alumno tiene la nota de ese
+ * bimestre, se usa. Si el salón NO tiene desglose por bimestre en esa materia
+ * (p.ej. el "consolidado anual" de 6° B) pero sí promedio anual, se usa el
+ * anual en cada bimestre y se marca `anual = true` para indicarlo en la UI.
+ */
+export function notaCelda(
+  a: AlumnoColegio, materia: string, bimestre: Bimestre,
+): { value: number | null; anual: boolean } {
+  const directa = notaBimestre(a, materia, bimestre);
+  if (directa != null) return { value: directa, anual: false };
+  // Solo caemos al anual si NO hay ningún bimestre para esa materia (consolidado);
+  // si falta solo un bimestre puntual, se respeta el vacío.
+  const algunBimestre = (["1", "2", "3", "4"] as const).some((b) => notaBimestre(a, materia, b) != null);
+  if (algunBimestre) return { value: null, anual: false };
+  const anual = notaAnual(a, materia);
+  return anual != null ? { value: anual, anual: true } : { value: null, anual: false };
+}
+
+/** Celda lista para mostrar: etiqueta AD/A/B/C (con marca "ᵃ" si es la nota anual) + color. */
+export function gradeCell(
+  a: AlumnoColegio, materia: string, bimestre: Bimestre,
+): { label: string; color: string; anual: boolean } {
+  const { value, anual } = notaCelda(a, materia, bimestre);
+  const info = notaInfo(value);
+  return { label: anual && value != null ? `${info.label} ᵃ` : info.label, color: info.color, anual };
+}
+
 /** ID estable del alumno de colegio para llaves de BD (anotaciones/plan/intervenciones). */
 export function colegioStudentId(a: AlumnoColegio): string {
   return `${a.codigo_ie}-${a.n_alumno}`;
