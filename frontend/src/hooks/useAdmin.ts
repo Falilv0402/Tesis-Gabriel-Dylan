@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { Tab } from "@/types";
-import { supabase } from "@/lib/supabase";
+import { supabase, createIsolatedClient } from "@/lib/supabase";
 import { apiUrl } from "@/lib/constants";
 
 export function useAdmin(
@@ -66,6 +66,11 @@ export function useAdmin(
     pct_riesgo: number;
     auc_cv: number | null;
     auc_train: number | null;
+    f1_train: number | null;
+    precision_train: number | null;
+    recall_train: number | null;
+    accuracy_train: number | null;
+    n_splits_cv: number | null;
     modo_prediccion: string;
     salones: string[];
     trained_at: string | null;
@@ -88,6 +93,11 @@ export function useAdmin(
           pct_riesgo:      data.pct_riesgo ?? 0,
           auc_cv:          m.auc_cv ?? null,
           auc_train:       m.auc_train ?? null,
+          f1_train:        m.f1_train ?? null,
+          precision_train: m.precision_train ?? null,
+          recall_train:    m.recall_train ?? null,
+          accuracy_train:  m.accuracy_train ?? null,
+          n_splits_cv:     m.n_splits_cv ?? null,
           modo_prediccion: m.modo_prediccion ?? "—",
           salones:         m.salones ?? [],
           trained_at:      data.trained_at ?? null,
@@ -126,6 +136,11 @@ export function useAdmin(
           pct_riesgo:      pct,
           auc_cv:          null,
           auc_train:       null,
+          f1_train:        null,
+          precision_train: null,
+          recall_train:    null,
+          accuracy_train:  null,
+          n_splits_cv:     null,
           modo_prediccion: "Modelo Nacional EM2022",
           salones:         [],
           trained_at:      null,
@@ -217,7 +232,12 @@ export function useAdmin(
       ? (newUserDistrito || null)
       : null;
 
-    const { data: signUpData, error } = await supabase.auth.signUp({
+    // IMPORTANTE: usamos un cliente AISLADO para el signUp. Supabase inicia
+    // sesión automáticamente como el usuario recién creado; si usáramos el
+    // cliente principal, el superadmin/admin quedaría logueado como el usuario
+    // que acaba de crear. Con el cliente desechable, la sesión actual no se toca.
+    const signupClient = createIsolatedClient();
+    const { data: signUpData, error } = await signupClient.auth.signUp({
       email: newUserEmail,
       password: newUserPwd,
       options: {
@@ -229,6 +249,8 @@ export function useAdmin(
         },
       },
     });
+    // Cerrar la sesión del cliente efímero (no persiste, pero por prolijidad).
+    await signupClient.auth.signOut().catch(() => {});
 
     if (!error && signUpData.user) {
       await insertAudit("Crear usuario", "profiles", { email: newUserEmail, rol: newUserRol, asignacion: newUserDistrito });

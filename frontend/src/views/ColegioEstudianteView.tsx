@@ -56,7 +56,8 @@ export function ColegioEstudianteView({
   saveAnnotation, loadAnnotations, addMilestone, toggleMilestone, loadMilestones, isLoadingMilestones,
 }: ColegioEstudianteViewProps) {
   const canEditAll = role === "director";
-  const [bimestreDetalle, setBimestreDetalle] = useState<Bimestre>("1");
+  // Por defecto mostramos el Bimestre 4 (el que el modelo predice / resultado final).
+  const [bimestreDetalle, setBimestreDetalle] = useState<Bimestre>("4");
 
   if (!alumno) {
     return (
@@ -103,6 +104,17 @@ export function ColegioEstudianteView({
     <section className="full-col">
       <Panel title={`${alumno.nombre} — Detalle del alumno`}>
         <div className="student-detail-page">
+          {/* ── Acciones (arriba a la derecha del card) ───────────────────── */}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 4 }}>
+            <button className="btn-student-action" onClick={() => setTab("intervenciones")} title="Registrar intervención">
+              <CheckCircle2 size={14} /> Intervenir
+            </button>
+            <button className="btn-student-action" onClick={() => setTab("dashboard")} title="Volver al dashboard">
+              ← Volver
+            </button>
+          </div>
+
+          {/* ── Header: identidad + gauge ─────────────────────────────────── */}
           <div className="student-detail-header">
             <div style={{ flex: 1, minWidth: 0 }}>
               <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 800, color: "var(--navy)", lineHeight: 1.2 }}>
@@ -111,7 +123,6 @@ export function ColegioEstudianteView({
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span className={riskClass(alumno.nivel_riesgo)}>{alumno.nivel_riesgo}</span>
                 <span style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ opacity: 0.35, fontSize: 16, lineHeight: 1 }}>·</span>
                   {alumno.salon}
                   <span style={{ opacity: 0.35, fontSize: 16, lineHeight: 1 }}>·</span>
                   {anioLabel}
@@ -126,20 +137,20 @@ export function ColegioEstudianteView({
             </div>
           </div>
 
-          {/* ── Stat chips ── cada chip es un div contenedor (label + valor)    */}
-          {/* Reemplaza el detail-grid anterior que tenía span/strong como hijos  */}
-          {/* sueltos del grid y se despareaban al romper columnas.               */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          {/* ── Stat chips ── grid uniforme (label + valor por celda) ─────── */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: 10,
+          }}>
             {([
-              { label: "Salón",          value: alumno.salon,                                           accent: "var(--navy)" },
-              { label: "Año escolar",    value: anioLabel,                                              accent: "var(--navy)" },
-              { label: "Promedio anual", value: promedioNum != null ? promedioNum.toFixed(1) : "—",     accent: gradeColor(promedioNum) },
-              { label: "Conducta",       value: conductaNum != null ? conductaNum.toFixed(1) : "—",     accent: gradeColor(conductaNum) },
-              { label: "Cursos en C",    value: String(cursosC),                                        accent: cursosC > 2 ? "#dc2626" : cursosC > 0 ? "#d97706" : "#16a34a" },
+              { label: "Salón",          value: alumno.salon,                                       accent: "var(--navy)" },
+              { label: "Grado",          value: anioLabel,                                          accent: "var(--navy)" },
+              { label: "Promedio anual", value: promedioNum != null ? promedioNum.toFixed(1) : "—", accent: gradeColor(promedioNum) },
+              { label: "Conducta",       value: conductaNum != null ? conductaNum.toFixed(1) : "—", accent: gradeColor(conductaNum) },
+              { label: "Cursos en C",    value: String(cursosC),                                    accent: cursosC > 2 ? "#dc2626" : cursosC > 0 ? "#d97706" : "#16a34a" },
             ] as { label: string; value: string; accent: string }[]).map(({ label, value, accent }) => (
               <div key={label} style={{
-                flex: "1 1 100px",
-                minWidth: 90,
                 background: "var(--surface)",
                 borderRadius: 10,
                 border: "1px solid var(--border)",
@@ -160,15 +171,6 @@ export function ColegioEstudianteView({
                 </strong>
               </div>
             ))}
-          </div>
-
-          <div className="student-quick-actions">
-            <button className="btn-student-action" onClick={() => setTab("intervenciones")} title="Registrar intervención">
-              <CheckCircle2 size={14} /> Intervenir
-            </button>
-            <button className="btn-student-action" onClick={() => setTab("dashboard")} title="Volver al dashboard" style={{ marginLeft: "auto" }}>
-              ← Volver
-            </button>
           </div>
 
           <div className="student-tabs" role="tablist">

@@ -34,6 +34,7 @@ import { ColegioReportesView } from "@/views/ColegioReportesView";
 import { ColegioEstudianteView } from "@/views/ColegioEstudianteView";
 import { ColegioIntervencionesView } from "@/views/ColegioIntervencionesView";
 import { useColegio } from "@/hooks/useColegio";
+import { useColegioModels } from "@/hooks/useColegioModels";
 import { colegioStudentId, colegioToStudent } from "@/lib/colegio";
 
 import type { Tab, UserRole } from "@/types";
@@ -92,6 +93,9 @@ export default function Page() {
     auth.profileCodigoIe, auth.profileDistrito,
     "distrito", auth.role, toast, auth.insertAudit
   );
+
+  // Modelos de colegio entrenados (para que el superadmin los vea en Modelo ML).
+  const colegioModels = useColegioModels(auth.role === "superadmin" && tab === "modelo");
 
   // ── Navigation ────────────────────────────────────────────────────
   const notifCount4Nav = interventions.interventions.filter(i => i.estado === "pendiente").length;
@@ -271,6 +275,15 @@ export default function Page() {
                   <span><strong>Sin distrito</strong></span>
                 </span>
               )
+            )}
+            {auth.role === "admin" && auth.profileCodigoIe && (
+              <span className="district-badge" title={`Colegio asignado: IE ${auth.profileCodigoIe}`}>
+                <ShieldCheck size={13} />
+                <span>
+                  <strong>{auth.profileNombreIe ?? `IE ${auth.profileCodigoIe}`}</strong>
+                  <em>IE {auth.profileCodigoIe} · Admin de colegio</em>
+                </span>
+              </span>
             )}
             <button className="notif-bell-btn" onClick={() => { setShowNotifInbox((v) => !v); setNotifCount(0); }} title="Bandeja de notificaciones">
               <Bell size={18} />
@@ -504,6 +517,7 @@ export default function Page() {
 
           {isSuperadmin && tab === "modelo" && (
             <ModeloView
+              colegioModels={colegioModels.models}
               metrics={modelData.metrics} evaluation={modelData.evaluation}
               diagnostico={modelData.diagnostico} globalSummary={modelData.globalSummary}
               topFactors={modelData.topFactors} maxImportance={modelData.maxImportance}

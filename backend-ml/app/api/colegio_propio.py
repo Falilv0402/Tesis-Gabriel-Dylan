@@ -125,6 +125,10 @@ def get_resumen(codigo_ie: str = Depends(_validate_ie)):
         "metricas": {
             "auc_cv":            m.get("auc_cv"),
             "auc_train":         m.get("auc_train"),
+            "f1_train":          m.get("f1_train"),
+            "precision_train":   m.get("precision_train"),
+            "recall_train":      m.get("recall_train"),
+            "accuracy_train":    m.get("accuracy_train"),
             "n_splits_cv":       m.get("n_splits_cv"),
             "modo_prediccion":   m.get("modo_prediccion"),
             "salones":           m.get("salones", []),

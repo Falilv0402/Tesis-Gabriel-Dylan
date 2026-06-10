@@ -120,7 +120,7 @@ export function ColegioReportesView({
             <option value="BAJO">BAJO</option>
           </select>
         </label>
-        <label className="filter-field">Año de secundaria
+        <label className="filter-field">Grado
           <select value={anio} onChange={(e) => setAnio(e.target.value)}>
             <option value="Todos">Todos</option>
             {anios.map((a) => <option key={a} value={a}>{a}</option>)}

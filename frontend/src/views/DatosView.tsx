@@ -49,6 +49,9 @@ interface DatosViewProps {
   colegioModelStats: {
     nombre_colegio: string; n_alumnos: number; n_riesgo: number;
     pct_riesgo: number; auc_cv: number | null; auc_train: number | null;
+    f1_train: number | null; precision_train: number | null;
+    recall_train: number | null; accuracy_train: number | null;
+    n_splits_cv: number | null;
     modo_prediccion: string; salones: string[]; trained_at: string | null;
     por_nivel: Record<string, number>;
   } | null;
@@ -167,6 +170,39 @@ export function DatosView({
                     </span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* ── Métricas completas del modelo PROPIO del colegio (híbrido LR+RF calibrado) ── */}
+            {!isEM2022 && (colegioModelStats.auc_cv != null || colegioModelStats.f1_train != null) && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "var(--navy)", borderRadius: 10 }}>
+                  <Cpu size={14} style={{ color: "#93c5fd" }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>
+                    Modelo híbrido del colegio (Reg. Logística + Random Forest, calibrado) — métricas
+                  </span>
+                </div>
+                {(() => {
+                  const pp = (v: number | null) => v != null ? `${(v * 100).toFixed(1)}%` : "—";
+                  const cs = colegioModelStats;
+                  return (
+                    <>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+                        <Kpi label="AUC CV" value={pp(cs.auc_cv)} detail={`${cs.n_splits_cv ?? 5}-fold · indicador válido`} tone="low" />
+                        <Kpi label="F1 (train)" value={pp(cs.f1_train)} detail="referencia" />
+                        <Kpi label="Precisión (train)" value={pp(cs.precision_train)} detail="referencia" />
+                        <Kpi label="Recall (train)" value={pp(cs.recall_train)} detail="referencia" />
+                        <Kpi label="Accuracy (train)" value={pp(cs.accuracy_train)} detail="referencia" />
+                        <Kpi label="AUC (train)" value={pp(cs.auc_train)} detail="referencia (optimista)" />
+                      </div>
+                      <p style={{ fontSize: 10.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
+                        El <strong>AUC CV</strong> (validación cruzada por folds) es la métrica válida; las marcadas
+                        <em> (train)</em> se calculan sobre los mismos datos de entrenamiento y son solo de referencia
+                        (tienden a ser optimistas). Modo: <strong>{cs.modo_prediccion}</strong>.
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
             )}
 

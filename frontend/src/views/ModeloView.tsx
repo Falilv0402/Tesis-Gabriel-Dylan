@@ -13,6 +13,7 @@ import { RocMiniChart } from "@/components/charts/RocMiniChart";
 import { featureLabels, modelLabel } from "@/lib/constants";
 import { pct, fmt } from "@/lib/format";
 import { DiagnosticoAvanzado } from "@/views/modelo/DiagnosticoAvanzado";
+import type { ColegioModelSummary } from "@/hooks/useColegioModels";
 
 interface LiveMetrics {
   tp: number; fp: number; tn: number; fn: number;
@@ -20,6 +21,7 @@ interface LiveMetrics {
 }
 
 interface ModeloViewProps {
+  colegioModels: ColegioModelSummary[];
   metrics: Metrics;
   evaluation: Evaluation;
   diagnostico: Diagnostico | null;
@@ -41,14 +43,64 @@ interface ModeloViewProps {
 }
 
 export function ModeloView({
+  colegioModels,
   metrics, evaluation, diagnostico, globalSummary,
   topFactors, maxImportance, liveMetrics,
   thresholdHigh, setThresholdHigh, thresholdMedium, setThresholdMedium,
   scheduleFreq, setScheduleFreq, scheduleMsg, nextUpdate,
   modelMessage, onRetrain, onSaveSchedule,
 }: ModeloViewProps) {
+  const ppm = (v: number | null) => v != null ? pct(v) : "—";
   return (
     <>
+      {/* ── Modelos de colegio (CUBICOL) — supervisión del superadmin ───── */}
+      {colegioModels.length > 0 && (
+        <section className="full-col">
+          <Panel title="Modelos de colegio (CUBICOL) — supervisión">
+            <div className="model-note" style={{ marginBottom: 8 }}>
+              Modelos propios entrenados por colegio (Ensemble híbrido LR + RF, calibrado · predictivo B1-B3 → B4).
+              La métrica válida es el <strong>AUC CV</strong>; las marcadas con <strong>*</strong> son de entrenamiento (referencia).
+            </div>
+            <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid var(--border)" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: "var(--navy)", color: "#fff" }}>
+                    <th style={thM}>Colegio</th>
+                    <th style={{ ...thM, textAlign: "right" }}>Alumnos</th>
+                    <th style={{ ...thM, textAlign: "right" }}>En riesgo</th>
+                    <th style={{ ...thM, textAlign: "right" }}>AUC CV</th>
+                    <th style={{ ...thM, textAlign: "right" }}>F1*</th>
+                    <th style={{ ...thM, textAlign: "right" }}>Precisión*</th>
+                    <th style={{ ...thM, textAlign: "right" }}>Recall*</th>
+                    <th style={{ ...thM, textAlign: "right" }}>Accuracy*</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {colegioModels.map((c, i) => (
+                    <tr key={c.codigo_ie} style={{ background: i % 2 === 0 ? "var(--surface)" : "transparent", borderBottom: "1px solid var(--border)" }}>
+                      <td style={tdM}>
+                        <strong>{c.nombre_colegio}</strong>{" "}
+                        <span style={{ color: "var(--text-muted)" }}>IE {c.codigo_ie}</span>
+                      </td>
+                      <td style={{ ...tdM, textAlign: "right" }}>{c.n_alumnos.toLocaleString("es-PE")}</td>
+                      <td style={{ ...tdM, textAlign: "right" }}>{c.n_riesgo} <span style={{ color: "var(--text-muted)" }}>({c.pct_riesgo}%)</span></td>
+                      <td style={{ ...tdM, textAlign: "right", fontWeight: 700, color: "#16a34a" }}>{ppm(c.auc_cv)}</td>
+                      <td style={{ ...tdM, textAlign: "right" }}>{ppm(c.f1_train)}</td>
+                      <td style={{ ...tdM, textAlign: "right" }}>{ppm(c.precision_train)}</td>
+                      <td style={{ ...tdM, textAlign: "right" }}>{ppm(c.recall_train)}</td>
+                      <td style={{ ...tdM, textAlign: "right" }}>{ppm(c.accuracy_train)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="model-note" style={{ marginTop: 8, fontSize: 11 }}>
+              <strong>*</strong> métricas de entrenamiento (en muestra, optimistas). El <strong>AUC CV</strong> (validación cruzada) es el indicador válido.
+            </div>
+          </Panel>
+        </section>
+      )}
+
       {/* ── Operacion + SHAP global ─────────────────────────────── */}
       <section className="two-col">
         <Panel title="Operacion del modelo">
@@ -236,3 +288,12 @@ export function ModeloView({
     </>
   );
 }
+
+// ── Estilos tabla "Modelos de colegio" ─────────────────────────────────────────
+const thM: React.CSSProperties = {
+  padding: "8px 10px", textAlign: "left", fontSize: 11,
+  fontWeight: 700, whiteSpace: "nowrap", letterSpacing: "0.03em",
+};
+const tdM: React.CSSProperties = {
+  padding: "7px 10px", whiteSpace: "nowrap",
+};
