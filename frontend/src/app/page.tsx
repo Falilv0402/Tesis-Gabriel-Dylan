@@ -109,6 +109,13 @@ export default function Page() {
   const isDirector   = auth.role === "director";
   const isDirectorRole = auth.role === "director" || auth.role === "coordinador";
 
+  // Para director/coordinador, la barra superior global solo se muestra en el
+  // Dashboard; en las demás secciones (Estudiante, Intervenciones, Reportes) se
+  // oculta para una vista más limpia. Se vuelve al Dashboard desde el menú
+  // lateral (donde está el perfil/Salir). Admin y superadmin la conservan
+  // siempre (no tienen Dashboard y necesitan el acceso a Salir).
+  const ocultarTopbar = isDirectorRole && tab !== "dashboard";
+
   // Filtrar navegación según el rol del usuario
   const visibleNav = navItems.filter((item) =>
     item.roles.includes(auth.role as UserRole)
@@ -244,7 +251,8 @@ export default function Page() {
 
       {/* Workspace */}
       <section className="workspace" id="main-content" role="main" aria-label="Área de trabajo">
-        {/* Topbar */}
+        {/* Topbar — se oculta en el detalle del alumno para una vista enfocada */}
+        {!ocultarTopbar && (
         <header className="topbar">
           <div>
             <h1>{navItems.find((item) => item.id === tab)?.label}</h1>
@@ -299,6 +307,7 @@ export default function Page() {
             <button onClick={() => void auth.handleLogout()}><LogOut size={16} /> Salir</button>
           </div>
         </header>
+        )}
 
         {/* Notification inbox */}
         {showNotifInbox && (
