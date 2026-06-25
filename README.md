@@ -390,7 +390,6 @@ Ver detalle completo en [`docs/PLAN_SPRINTS_P20261012.md`](docs/PLAN_SPRINTS_P20
 
 | Integrante | Foco |
 |---|---|
-| Mathias | Frontend, autenticación, intervenciones, reportes |
 | Dylan | Backend ML, predicción, visualizaciones |
 | Gabriel | Datos, backlog, pruebas, documentación |
 
