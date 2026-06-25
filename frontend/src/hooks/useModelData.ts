@@ -28,39 +28,36 @@ export function useModelData(
 
   async function loadModelMetrics() {
     setIsLoadingModel(true);
+    let anySuccess = false;
+
     try {
-      const [metricsRes, importanceRes] = await Promise.all([
-        fetch(`${apiUrl}/v1/modelo/metricas`),
-        fetch(`${apiUrl}/v1/modelo/importancia`),
-      ]);
-      if (metricsRes.ok)     setMetrics(await metricsRes.json());
-      if (importanceRes.ok)  setImportance(await importanceRes.json());
+      const metricsRes = await fetch(`${apiUrl}/v1/modelo/metricas`);
+      if (metricsRes.ok) { setMetrics(await metricsRes.json()); anySuccess = true; }
+    } catch { /* se conserva el valor anterior */ }
 
-      try {
-        const evalRes = await fetch(`${apiUrl}/v1/modelo/evaluacion`);
-        if (evalRes.ok) setEvaluation(await evalRes.json());
-      } catch { setEvaluation({}); }
+    try {
+      const importanceRes = await fetch(`${apiUrl}/v1/modelo/importancia`);
+      if (importanceRes.ok) { setImportance(await importanceRes.json()); anySuccess = true; }
+    } catch { /* se conserva el valor anterior */ }
 
-      try {
-        const diagRes = await fetch(`${apiUrl}/v1/modelo/diagnostico`);
-        if (diagRes.ok) setDiagnostico(await diagRes.json());
-      } catch { setDiagnostico(null); }
+    try {
+      const evalRes = await fetch(`${apiUrl}/v1/modelo/evaluacion`);
+      if (evalRes.ok) { setEvaluation(await evalRes.json()); anySuccess = true; }
+    } catch { /* se conserva el valor anterior */ }
 
+    try {
+      const diagRes = await fetch(`${apiUrl}/v1/modelo/diagnostico`);
+      if (diagRes.ok) { setDiagnostico(await diagRes.json()); anySuccess = true; }
+    } catch { /* se conserva el valor anterior */ }
+
+    try {
       const globalRes = await fetch(`${apiUrl}/v1/predicciones/resumen`);
-      if (globalRes.ok) setGlobalSummary(await globalRes.json());
+      if (globalRes.ok) { setGlobalSummary(await globalRes.json()); anySuccess = true; }
+    } catch { /* se conserva el valor anterior */ }
 
-      setApiConnected(true);
-      setModelMessage("Modelo cargado desde backend ML.");
-    } catch {
-      setMetrics({});
-      setImportance([]);
-      setEvaluation({});
-      setDiagnostico(null);
-      setApiConnected(false);
-      setModelMessage("No se pudo conectar con el servicio del modelo.");
-    } finally {
-      setIsLoadingModel(false);
-    }
+    setApiConnected(anySuccess);
+    setModelMessage(anySuccess ? "Modelo cargado desde backend ML." : "No se pudo conectar con el servicio del modelo.");
+    setIsLoadingModel(false);
   }
 
   const liveMetrics = useMemo((): LiveMetrics | null => {
