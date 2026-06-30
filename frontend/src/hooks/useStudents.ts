@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { DatasetSummary, Diagnostico, RiskLevel, ShapData, Student } from "@/types";
 import { supabase } from "@/lib/supabase";
@@ -372,6 +372,22 @@ export function useStudents(
     }
     return { bySex };
   }, [classifiedStudents]);
+
+  // Resetear filtros y selección al cambiar de usuario autenticado (login,
+  // logout, o cambio de cuenta en la misma pestaña). Sin esto, los filtros
+  // (sobre todo "distrito") quedaban en memoria de la sesión anterior y se
+  // aplicaban a la cuenta nueva — un director podía terminar viendo datos
+  // de un distrito ajeno al suyo, sin relación con su propia IE.
+  const prevSessionId = useRef<string | null>(null);
+  useEffect(() => {
+    const currentId = session?.id ?? null;
+    if (currentId !== prevSessionId.current) {
+      prevSessionId.current = currentId;
+      setRisk("Todos"); setDistrito("Todos"); setSexo("Todos");
+      setSegment("Todos"); setSearch(""); setSelectedId("");
+      setComparatorIds([]); setStudentTab("resumen");
+    }
+  }, [session?.id]);
 
   // Auto-filter by district for directors AND coordinators
   useEffect(() => {
