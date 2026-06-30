@@ -24,7 +24,10 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score, accuracy_score
+from sklearn.metrics import (
+    roc_auc_score, f1_score, precision_score, recall_score, accuracy_score,
+    confusion_matrix, roc_curve,
+)
 
 from parse_excels import procesar_colegio, AREAS_ACADEMICAS
 
@@ -149,6 +152,9 @@ def train(carpeta: str, codigo_ie: str) -> None:
         recall_train    = float("nan")
         accuracy_train  = float("nan")
         n_splits_used   = 0
+        cm_train        = None
+        fpr_train       = None
+        tpr_train       = None
     else:
         class_weight = {0: 1.0, 1: max(1.0, neg / max(pos, 1))}
 
@@ -206,6 +212,13 @@ def train(carpeta: str, codigo_ie: str) -> None:
               f"F1 (train): {f1_train:.4f}  "
               f"Precision: {precision_train:.4f}  Recall: {recall_train:.4f}")
         print("      Modelo CALIBRADO (sigmoid). El AUC CV es el indicador válido.")
+
+        # Matriz de confusión y curva ROC (en muestra, igual referencia que las
+        # demás métricas "train") — se guardan para mostrar en el front los
+        # mismos gráficos que ya existen para el modelo nacional EM 2022
+        # (ConfusionMatrix / RocMiniChart), con los datos propios del colegio.
+        cm_train = confusion_matrix(y, y_pred).tolist()
+        fpr_train, tpr_train, _ = roc_curve(y, y_prob)
 
     # ── 4. Generar predicciones y guardar ─────────────────────────────────────
     print("\n[4/4] Generando predicciones y guardando artefacto...")
@@ -277,6 +290,11 @@ def train(carpeta: str, codigo_ie: str) -> None:
             "recall_train":   round(recall_train, 4)   if not np.isnan(recall_train)   else None,
             "accuracy_train": round(accuracy_train, 4) if not np.isnan(accuracy_train) else None,
             "n_splits_cv":    n_splits_used,
+            # Para los gráficos del front (mismos componentes que EM 2022:
+            # ConfusionMatrix / RocMiniChart), calculados en muestra (train).
+            "confusion_matrix": cm_train,
+            "roc_fpr": fpr_train.tolist() if fpr_train is not None else None,
+            "roc_tpr": tpr_train.tolist() if tpr_train is not None else None,
             "nota_metodologica": (
                 f"MODO PREDICTIVO: features B1-B3, target B4. "
                 f"AUC CV {n_splits_used}-fold = {round(auc_cv,4) if not np.isnan(auc_cv) else 'N/A'}. "

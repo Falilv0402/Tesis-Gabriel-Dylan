@@ -520,6 +520,7 @@ export default function Page() {
               role={auth.role}
               profileCodigoIe={auth.profileCodigoIe}
               em2022Metrics={modelData.metrics}
+              em2022Evaluation={modelData.evaluation}
               colegioModelStats={admin.colegioModelStats}
             />
           )}

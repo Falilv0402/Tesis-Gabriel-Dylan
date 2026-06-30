@@ -4,7 +4,9 @@ import { RefObject } from "react";
 import { Upload, CheckCircle2, AlertTriangle, School, Loader, Info, Cpu, ShieldAlert } from "lucide-react";
 import { Panel, Kpi } from "@/components/ui/Primitives";
 import { isLocalBackend } from "@/lib/env";
-import type { Metrics } from "@/types";
+import { ConfusionMatrix } from "@/components/charts/ConfusionMatrix";
+import { RocMiniChart } from "@/components/charts/RocMiniChart";
+import type { Metrics, Evaluation } from "@/types";
 
 interface CsvValidation {
   total_filas: number;
@@ -46,12 +48,16 @@ interface DatosViewProps {
   profileCodigoIe: string | null;
   // Métricas del modelo nacional EM2022 (para admin de colegios sin modelo CUBICOL propio)
   em2022Metrics?: Metrics;
+  em2022Evaluation?: Evaluation;
   colegioModelStats: {
     nombre_colegio: string; n_alumnos: number; n_riesgo: number;
     pct_riesgo: number; auc_cv: number | null; auc_train: number | null;
     f1_train: number | null; precision_train: number | null;
     recall_train: number | null; accuracy_train: number | null;
     n_splits_cv: number | null;
+    confusion_matrix: number[][] | null;
+    roc_fpr: number[] | null;
+    roc_tpr: number[] | null;
     modo_prediccion: string; salones: string[]; trained_at: string | null;
     por_nivel: Record<string, number>;
   } | null;
@@ -69,6 +75,7 @@ export function DatosView({
   onUploadColegioExcels,
   role, profileCodigoIe,
   em2022Metrics,
+  em2022Evaluation,
   colegioModelStats,
 }: DatosViewProps) {
 
@@ -88,7 +95,7 @@ export function DatosView({
   const isEM2022      = colegioModelStats?.modo_prediccion === "Modelo Nacional EM2022";
 
   return (
-    <section className="full-col" style={{ maxWidth: 780 }}>
+    <section className="full-col">
 
       {/* ── Estado: cuenta admin sin IE asignada ──────────────────────────── */}
       {noIeAssigned && (
@@ -200,6 +207,18 @@ export function DatosView({
                         <em> (train)</em> se calculan sobre los mismos datos de entrenamiento y son solo de referencia
                         (tienden a ser optimistas). Modo: <strong>{cs.modo_prediccion}</strong>.
                       </p>
+                      {(cs.confusion_matrix || cs.roc_fpr) && (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                          <div>
+                            <p style={{ fontSize: 10.5, fontWeight: 700, color: "var(--navy)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.5px" }}>Matriz de confusión</p>
+                            <ConfusionMatrix matrix={cs.confusion_matrix ?? undefined} />
+                          </div>
+                          <div>
+                            <p style={{ fontSize: 10.5, fontWeight: 700, color: "var(--navy)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.5px" }}>Curva ROC</p>
+                            <RocMiniChart fpr={cs.roc_fpr ?? undefined} tpr={cs.roc_tpr ?? undefined} auc={cs.auc_train ?? undefined} />
+                          </div>
+                        </div>
+                      )}
                     </>
                   );
                 })()}
@@ -253,6 +272,20 @@ export function DatosView({
                     detail={em2022Metrics.brier_ci_95 ? `IC95% [${em2022Metrics.brier_ci_95[0].toFixed(3)}–${em2022Metrics.brier_ci_95[1].toFixed(3)}]` : ""}
                     tone="medium" />
                 </div>
+
+                {/* Matriz de confusión + Curva ROC (test set, conjunto held-out) */}
+                {(em2022Evaluation?.confusion_matrix || em2022Evaluation?.roc_fpr) && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <div>
+                      <p style={{ fontSize: 10.5, fontWeight: 700, color: "var(--navy)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.5px" }}>Matriz de confusión</p>
+                      <ConfusionMatrix matrix={em2022Evaluation?.confusion_matrix} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: 10.5, fontWeight: 700, color: "var(--navy)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.5px" }}>Curva ROC</p>
+                      <RocMiniChart fpr={em2022Evaluation?.roc_fpr} tpr={em2022Evaluation?.roc_tpr} auc={em2022Metrics.auc_roc} />
+                    </div>
+                  </div>
+                )}
 
                 {/* Info modelo */}
                 {(em2022Metrics.train_rows || em2022Metrics.test_rows || em2022Metrics.scope) && (

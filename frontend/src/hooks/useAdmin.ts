@@ -71,6 +71,9 @@ export function useAdmin(
     recall_train: number | null;
     accuracy_train: number | null;
     n_splits_cv: number | null;
+    confusion_matrix: number[][] | null;
+    roc_fpr: number[] | null;
+    roc_tpr: number[] | null;
     modo_prediccion: string;
     salones: string[];
     trained_at: string | null;
@@ -98,6 +101,9 @@ export function useAdmin(
           recall_train:    m.recall_train ?? null,
           accuracy_train:  m.accuracy_train ?? null,
           n_splits_cv:     m.n_splits_cv ?? null,
+          confusion_matrix: m.confusion_matrix ?? null,
+          roc_fpr:         m.roc_fpr ?? null,
+          roc_tpr:         m.roc_tpr ?? null,
           modo_prediccion: m.modo_prediccion ?? "—",
           salones:         m.salones ?? [],
           trained_at:      data.trained_at ?? null,
@@ -141,6 +147,9 @@ export function useAdmin(
           recall_train:    null,
           accuracy_train:  null,
           n_splits_cv:     null,
+          confusion_matrix: null,
+          roc_fpr:         null,
+          roc_tpr:         null,
           modo_prediccion: "Modelo Nacional EM2022",
           salones:         [],
           trained_at:      null,
