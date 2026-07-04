@@ -140,7 +140,12 @@ def _parse_notas_bimestral(
     df_raw: pd.DataFrame, subject_row_idx: int,
     col_to_key: dict[int, str], period_row: pd.Series, salon: str,
 ) -> pd.DataFrame:
-    """Formato estándar: 5 filas por alumno (1°,2°,3°,4°,PP) con columnas C{n}/PP."""
+    """Formato estándar: 5 filas por alumno (1°,2°,3°,4°,PP) con columnas C{n}/PP.
+
+    Soporta bloques donde el N° no aparece en la primera fila (p.ej. P6B donde
+    el número aparece en la fila 3°) y formatos con múltiples competencias
+    (C1-C4) por materia usando la columna PP del bimestre como nota representativa.
+    """
     # col_i → (clave, es_columna_pp), según la etiqueta de periodo (C1.., PP)
     col_map: dict[int, tuple[str, bool]] = {}
     for col_i, key in col_to_key.items():
@@ -162,6 +167,8 @@ def _parse_notas_bimestral(
     registros: list[dict] = []
     i = data_start_idx
 
+    period_col = 3  # col que tiene "1°", "2°", "3°", "4°", "PP"
+
     while i < len(df_raw):
         num_val = str(df_raw.iloc[i, 0]).strip()
         if not num_val.isdigit():
@@ -169,47 +176,68 @@ def _parse_notas_bimestral(
             continue
 
         n_alumno = int(num_val)
-        nombre   = str(df_raw.iloc[i, 1]).strip() if pd.notna(df_raw.iloc[i, 1]) else f"Alumno {n_alumno}"
+        # Nombre: buscar en col 1 o col 2 (según layout del Excel)
+        nombre_raw = ""
+        for col_nombre in (1, 2):
+            v = df_raw.iloc[i, col_nombre] if col_nombre < len(df_raw.columns) else None
+            if v is not None and pd.notna(v):
+                nombre_raw = str(v).strip()
+                if nombre_raw and nombre_raw.lower() not in ("nan", "none", ""):
+                    break
+        nombre = nombre_raw if nombre_raw else f"Alumno {n_alumno}"
 
         # Leer las 5 filas del alumno (puede haber menos al final)
         block = df_raw.iloc[i : i + 5]
 
-        record: dict = {
-            "n_alumno":   n_alumno,
-            "nombre":     nombre,
-            "salon":      salon,
-        }
+        record: dict = {"n_alumno": n_alumno, "nombre": nombre, "salon": salon}
 
-        subj_bims: dict[str, list[float | None]] = {k: [] for k in claves}
-        subj_pp:   dict[str, float | None]       = {k: None for k in claves}
+        # pp anual por materia
+        subj_pp: dict[str, float | None] = {k: None for k in claves}
+        # por bimestre: PP explícita (columna PP) y/o lista de competencias (C1..Cn)
+        bim_pp:  dict[str, dict[int, float]]       = {k: {} for k in claves}
+        bim_c:   dict[str, dict[int, list[float]]] = {k: {1: [], 2: [], 3: [], 4: []} for k in claves}
 
-        period_col = 3  # col que tiene "1°", "2°", "3°", "4°", "PP"
         for row_j in range(len(block)):
             period_label = str(block.iloc[row_j, period_col]).strip().upper()
-            is_pp        = period_label == "PP"
+            # Detectar índice de bimestre por el primer dígito ("1°"→1, "2°"→2…)
+            bim_idx: int | None = None
+            if period_label and period_label[0].isdigit():
+                bim_idx = int(period_label[0])
+            is_annual_pp = (bim_idx is None)  # la fila con "PP" (promedio anual)
 
             for col_i, (key, col_is_pp) in col_map.items():
                 if col_i >= len(block.columns):
                     continue
-                raw_val = block.iloc[row_j, col_i]
+                raw_val  = block.iloc[row_j, col_i]
                 num_val2 = literal_a_num(raw_val)
                 if num_val2 is None:
                     continue
-                if is_pp and col_is_pp:
-                    subj_pp[key] = num_val2
-                elif not is_pp and not col_is_pp:
-                    subj_bims[key].append(num_val2)
+
+                if is_annual_pp:
+                    if col_is_pp:
+                        subj_pp[key] = num_val2   # PP anual de la materia
+                else:
+                    if col_is_pp:
+                        bim_pp[key][bim_idx] = num_val2   # PP del bimestre (nota resumen)
+                    else:
+                        bim_c[key][bim_idx].append(num_val2)  # competencia individual
 
         for key in claves:
             record[f"pp_{key}"] = subj_pp.get(key)
-            bims = subj_bims.get(key, [])
-            for b_i, b_val in enumerate(bims[:4], start=1):
-                record[f"b{b_i}_{key}"] = b_val
-            # Tendencia: último bimestre - primero
-            if len(bims) >= 2:
-                record[f"tendencia_{key}"] = bims[-1] - bims[0]
-            else:
-                record[f"tendencia_{key}"] = None
+            for b_i in range(1, 5):
+                if b_i in bim_pp[key]:
+                    # Columna PP del bimestre: nota resumen directa
+                    record[f"b{b_i}_{key}"] = bim_pp[key][b_i]
+                elif bim_c[key][b_i]:
+                    # Sin PP explícita: promedio de competencias del bimestre
+                    record[f"b{b_i}_{key}"] = float(np.mean(bim_c[key][b_i]))
+                else:
+                    record[f"b{b_i}_{key}"] = None
+
+            # Tendencia: último bimestre disponible − primero disponible
+            b_vals = [record.get(f"b{n}_{key}") for n in range(1, 5)]
+            b_vals = [v for v in b_vals if v is not None]
+            record[f"tendencia_{key}"] = (b_vals[-1] - b_vals[0]) if len(b_vals) >= 2 else None
 
         registros.append(record)
         i += 5  # saltar al siguiente alumno
