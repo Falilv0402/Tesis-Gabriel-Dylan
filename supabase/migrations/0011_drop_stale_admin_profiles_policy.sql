@@ -1,0 +1,37 @@
+-- ============================================================
+-- 0011_drop_stale_admin_profiles_policy.sql
+-- Cierra una fuga de seguridad RLS real: un admin de colegio podía ver
+-- (y desactivar) admins/directores/coordinadores de OTROS colegios.
+--
+-- CAUSA RAÍZ:
+--   La migración 0009 reescribió "profiles_select" con el scoping correcto
+--   (mismo colegio O mismo distrito), pero NUNCA eliminó una política
+--   SELECT más antigua que seguía activa en la base de datos:
+--   "directors_read_same_district_profiles" (de la migración
+--   director_read_district_profiles, anterior a 0009), cuyo predicado era:
+--
+--     is_admin(auth.uid())
+--     OR id = auth.uid()
+--     OR (activo = true AND distrito IS NOT NULL AND distrito = get_user_distrito(auth.uid()))
+--
+--   Postgres combina TODAS las políticas permisivas de una misma acción
+--   (SELECT) con OR. Como is_admin(auth.uid()) es TRUE para CUALQUIER admin
+--   activo — sin ninguna condición sobre codigo_ie de la fila consultada —
+--   esta política vieja, por sí sola, permitía a todo admin leer TODAS las
+--   filas de `profiles`, sin importar el colegio. El scoping correcto de
+--   "profiles_select" quedaba completamente invalidado por este OR extra.
+--
+-- SOLUCIÓN: eliminar la política obsoleta. El scoping correcto (mismo
+-- colegio vía codigo_ie, mismo distrito vía distrito) ya lo cubre
+-- "profiles_select" (migración 0009).
+-- ============================================================
+
+DROP POLICY IF EXISTS "directors_read_same_district_profiles" ON public.profiles;
+
+-- ============================================================
+-- Cómo verificar tras aplicar:
+--   1) select policyname from pg_policies where tablename='profiles' and cmd='SELECT';
+--      → debe listar SOLO "profiles_select" (una sola política SELECT).
+--   2) Login como admin del colegio A → select count(*) from profiles;
+--      → debe contar SOLO usuarios de su IE (antes contaba TODOS).
+-- ============================================================

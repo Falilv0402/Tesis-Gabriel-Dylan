@@ -37,6 +37,10 @@ export function useAdmin(
   const [newUserPwd, setNewUserPwd] = useState("");
   const [newUserRol, setNewUserRol] = useState<"admin" | "director" | "coordinador">("director");
   const [newUserDistrito, setNewUserDistrito] = useState("");
+  // Colegio (IE) opcional para director/coordinador — separado de newUserDistrito
+  // (que para esos roles guarda el DISTRITO, no el código de IE). Antes no existía
+  // este campo y un coordinador no podía quedar asociado a ningún colegio propio.
+  const [newUserColegioIe, setNewUserColegioIe] = useState("");
 
   const [uploadResult, setUploadResult] = useState("Sin archivo cargado.");
   const [csvValidation, setCsvValidation] = useState<{
@@ -230,7 +234,14 @@ export function useAdmin(
     setAuthBusy(true);
 
     const rolEfectivo = newUserRol;
-    const ieEfectiva  = role === "admin" ? (profileCodigoIe ?? "") : newUserDistrito;
+    // Para "admin" newUserDistrito guarda el código de IE elegido (select
+    // "Colegio asignado"); para "director"/"coordinador" guarda el DISTRITO,
+    // y el colegio (opcional) viene del campo separado newUserColegioIe.
+    const ieEfectiva = role === "admin"
+      ? (profileCodigoIe ?? "")
+      : rolEfectivo === "admin"
+        ? newUserDistrito
+        : newUserColegioIe;
 
     // codigo_ie y distrito se pasan como metadatos del usuario: el trigger
     // handle_new_user (SECURITY DEFINER, migración 0010) los lee desde
@@ -264,7 +275,8 @@ export function useAdmin(
     if (!error && signUpData.user) {
       await insertAudit("Crear usuario", "profiles", { email: newUserEmail, rol: newUserRol, asignacion: newUserDistrito });
       setShowCreateUser(false);
-      setNewUserEmail(""); setNewUserNombre(""); setNewUserPwd(""); setNewUserRol("director"); setNewUserDistrito("");
+      setNewUserEmail(""); setNewUserNombre(""); setNewUserPwd(""); setNewUserRol("director");
+      setNewUserDistrito(""); setNewUserColegioIe("");
       toast(`Usuario ${newUserEmail} creado correctamente como ${newUserRol}.`);
       void loadDbUsers();
     } else if (error) {
@@ -429,6 +441,7 @@ export function useAdmin(
     newUserPwd, setNewUserPwd,
     newUserRol, setNewUserRol,
     newUserDistrito, setNewUserDistrito,
+    newUserColegioIe, setNewUserColegioIe,
     uploadResult, setUploadResult,
     csvValidation, isValidating,
     scheduleFreq, setScheduleFreq,

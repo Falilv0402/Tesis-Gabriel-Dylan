@@ -100,9 +100,15 @@ export function gradeCell(
   return { label: anual && value != null ? `${info.label} ᵃ` : info.label, color: info.color, anual };
 }
 
-/** ID estable del alumno de colegio para llaves de BD (anotaciones/plan/intervenciones). */
+/**
+ * ID estable del alumno de colegio para llaves de BD (anotaciones/plan/intervenciones).
+ * n_alumno es solo el número de lista DENTRO del salón (no único en todo el
+ * colegio): sin el salón, alumnos de secciones distintas con el mismo número
+ * de lista colisionaban en el mismo ID (p.ej. "0249-9" existía en 11 salones
+ * a la vez), causando que se mostrara el alumno equivocado al seleccionar uno.
+ */
 export function colegioStudentId(a: AlumnoColegio): string {
-  return `${a.codigo_ie}-${a.n_alumno}`;
+  return `${a.codigo_ie}-${a.salon}-${a.n_alumno}`;
 }
 
 /** Clasifica el tipo de riesgo del alumno de colegio según sus promedios. */

@@ -53,6 +53,8 @@ interface UsuariosViewProps {
   setNewUserRol: (v: "admin" | "director" | "coordinador") => void;
   newUserDistrito: string;
   setNewUserDistrito: (v: string) => void;
+  newUserColegioIe: string;
+  setNewUserColegioIe: (v: string) => void;
   distritosList: string[];
   colegiosList: { distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[];
   authBusy: boolean;
@@ -72,6 +74,7 @@ export function UsuariosView({
   newUserPwd, setNewUserPwd,
   newUserRol, setNewUserRol,
   newUserDistrito, setNewUserDistrito,
+  newUserColegioIe, setNewUserColegioIe,
   distritosList, authBusy,
   colegiosList,
   onCreateUser, onDesactivar, onActivar, onRefreshUsers, onRefreshAudit,
@@ -165,13 +168,33 @@ export function UsuariosView({
                     <option value="admin">Administrador de colegio</option>
                   </select>
                 </label>
-                {newUserRol === "director" && (
-                  <label>Distrito asignado
-                    <select value={newUserDistrito} onChange={(e) => setNewUserDistrito(e.target.value)}>
-                      <option value="">Sin asignar</option>
-                      {distritosList.map((d) => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </label>
+                {(newUserRol === "director" || newUserRol === "coordinador") && (
+                  <>
+                    <label>Distrito asignado
+                      <select value={newUserDistrito} onChange={(e) => setNewUserDistrito(e.target.value)}>
+                        <option value="">Sin asignar</option>
+                        {distritosList.map((d) => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </label>
+                    <label>Colegio asignado (opcional)
+                      <select value={newUserColegioIe} onChange={(e) => setNewUserColegioIe(e.target.value)}>
+                        <option value="">Sin colegio específico (usa el modelo nacional EM2022)</option>
+                        {colegiosList.map((c) => (
+                          <option key={c.id_ie} value={c.id_ie}>
+                            {c.nombre_ie ? `${c.nombre_ie} — ${c.distrito}` : `IE ${c.id_ie} — ${c.distrito}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {newUserColegioIe && (
+                      <div style={{ padding: "8px 12px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, fontSize: 12, color: "#15803d" }}>
+                        ✅ Verá el modelo propio de{" "}
+                        <strong>
+                          {colegiosList.find(c => c.id_ie === newUserColegioIe)?.nombre_ie ?? `IE ${newUserColegioIe}`}
+                        </strong> (si tiene datos cargados).
+                      </div>
+                    )}
+                  </>
                 )}
                 {newUserRol === "admin" && (
                   <>

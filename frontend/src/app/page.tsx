@@ -554,6 +554,7 @@ export default function Page() {
               newUserPwd={admin.newUserPwd} setNewUserPwd={admin.setNewUserPwd}
               newUserRol={admin.newUserRol} setNewUserRol={admin.setNewUserRol}
               newUserDistrito={admin.newUserDistrito} setNewUserDistrito={admin.setNewUserDistrito}
+              newUserColegioIe={admin.newUserColegioIe} setNewUserColegioIe={admin.setNewUserColegioIe}
               distritosList={auth.distritosList}
               colegiosList={auth.colegiosList}
               authBusy={actionBusy}
