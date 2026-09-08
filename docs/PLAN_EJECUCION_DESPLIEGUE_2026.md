@@ -68,8 +68,8 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 - [x] Verificado en vivo: `POST /v1/colegio/249/procesar` sin token → `401` (el guard funciona)
 - [x] Pusheado a git y desplegado en Vercel — confirmado en el navegador
 - [x] Confirmado: el volumen es un bind mount real al disco del host (`~/satra/modelo/model/`) — sobrevive rebuilds/restarts del contenedor
-- [ ] Añadir validación de Excel del colegio (fila + causa del error) equivalente a la que ya existe para CSV EM2022 — cierra HU029/HU032 para este flujo
-- [ ] Probar con los datasets/formatos adicionales que compartas
+- [x] **HU029/HU032 (colegio) cerradas**: las hojas/archivos que se omiten o fallan al parsear (antes solo se imprimían en logs del servidor, invisibles) ahora se capturan en `parse_excels.py` → `df.attrs["advertencias"]` → `metricas["advertencias_carga"]` en el `.pkl` → expuesto en `/procesar` y `/resumen` → visible en `DatosView.tsx` tanto en el resultado inmediato de la carga como de forma persistente en el panel de estadísticas (sobrevive un refresh de página). Probado end-to-end: reentrenamiento real corrió limpio (AUC CV 0.9040, mismos números), campo confirmado en producción.
+- [ ] Probar con los datasets/formatos adicionales que compartas (la validación de arriba reportará qué hojas no reconoce en formatos nuevos, en vez de fallar en silencio)
 - [ ] Decidir: ¿quién puede subir Excel? Hoy es exclusivo de `superadmin` en el frontend — el backend ya soporta que un `admin` de colegio también pueda (solo para su propia IE), falta decidir si se le muestra el panel en `DatosView.tsx`
 
 ## FASE 5 — Cerrar historias de usuario pendientes

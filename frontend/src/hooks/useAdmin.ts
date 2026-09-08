@@ -59,7 +59,7 @@ export function useAdmin(
   const [colegioUploadMsg,    setColegioUploadMsg]    = useState("");
   const [colegioUploadResult, setColegioUploadResult] = useState<{
     n_alumnos: number; n_riesgo: number; pct_riesgo: number;
-    nombre_colegio: string; salones: string[];
+    nombre_colegio: string; salones: string[]; advertencias: string[];
   } | null>(null);
 
   // Estadísticas del modelo actual del colegio (se cargan al abrir Datos)
@@ -82,6 +82,7 @@ export function useAdmin(
     salones: string[];
     trained_at: string | null;
     por_nivel: Record<string, number>;
+    advertencias_carga: string[];
   } | null>(null);
 
   async function loadColegioModelStats(ieCode: string) {
@@ -112,6 +113,7 @@ export function useAdmin(
           salones:         m.salones ?? [],
           trained_at:      data.trained_at ?? null,
           por_nivel:       data.por_nivel ?? {},
+          advertencias_carga: m.advertencias_carga ?? [],
         });
         return;
       }
@@ -158,6 +160,7 @@ export function useAdmin(
           salones:         [],
           trained_at:      null,
           por_nivel:       { ALTO: nAlto, MEDIO: nMedio, BAJO: nBajo },
+          advertencias_carga: [],
         });
       } else {
         setColegioModelStats(null);
@@ -326,16 +329,22 @@ export function useAdmin(
       if (res.ok) {
         const data = await res.json();
         const m = data.metricas ?? {};
+        const advertencias: string[] = m.advertencias_carga ?? [];
         setColegioUploadResult({
           n_alumnos:      m.n_alumnos     ?? 0,
           n_riesgo:       m.n_riesgo      ?? 0,
           pct_riesgo:     m.pct_riesgo    ?? 0,
           nombre_colegio: m.nombre_colegio ?? ieCode,
           salones:        m.salones        ?? [],
+          advertencias,
         });
         setColegioUploadStatus("success");
-        setColegioUploadMsg(`Modelo entrenado correctamente para ${m.nombre_colegio ?? ieCode}.`);
-        await insertAudit("Cargar Excel del colegio", "colegio", { ie: ieCode, n_alumnos: m.n_alumnos });
+        setColegioUploadMsg(
+          advertencias.length > 0
+            ? `Modelo entrenado para ${m.nombre_colegio ?? ieCode}, con ${advertencias.length} advertencia(s) — revisa el detalle abajo.`
+            : `Modelo entrenado correctamente para ${m.nombre_colegio ?? ieCode}.`
+        );
+        await insertAudit("Cargar Excel del colegio", "colegio", { ie: ieCode, n_alumnos: m.n_alumnos, advertencias: advertencias.length });
         toast(`Datos de ${m.nombre_colegio ?? ieCode} cargados. ${m.n_alumnos} alumnos procesados.`, "success");
       } else {
         const err = await res.json().catch(() => ({ detail: "Error desconocido" }));

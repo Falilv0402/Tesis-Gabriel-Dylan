@@ -306,6 +306,10 @@ def train(carpeta: str, codigo_ie: str) -> None:
                 "Actualizar cuando estén disponibles todos los bimestres."
             ),
             "salones":        df["salon"].unique().tolist(),
+            # Hojas/archivos que se omitieron o fallaron al leer el Excel (p.ej.
+            # muy pocos alumnos, formato no reconocido) — se muestran en la UI
+            # del admin para que sepa qué no se cargó y por qué.
+            "advertencias_carga": df.attrs.get("advertencias", []),
         },
         "trained_at": pd.Timestamp.now().isoformat(timespec="seconds"),
     }

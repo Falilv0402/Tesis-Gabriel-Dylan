@@ -415,9 +415,14 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
     Returns:
         DataFrame con columnas: n_alumno, nombre, salon, codigo_ie,
         pp_matematica, pp_comunicacion, pp_cta, conducta_promedio,
-        tendencia_*, n_materias_c, riesgo (target), riesgo_score
+        tendencia_*, n_materias_c, riesgo (target), riesgo_score.
+        Además, `df.attrs["advertencias"]` trae la lista de hojas/archivos
+        omitidos o con error durante el parseo (antes solo se imprimían por
+        stdout y se perdían — ahora viajan hasta la UI del admin que sube
+        el Excel, para que sepa exactamente qué no se pudo leer y por qué).
     """
     carpeta = Path(carpeta)
+    advertencias: list[str] = []
 
     # ── Detectar archivos ─────────────────────────────────────────────────────
     # Leer tanto .xlsx como .xls (formato antiguo CUBICOL)
@@ -425,7 +430,10 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
     conducta_files = sorted(carpeta.glob("*Conducta*.xlsx")) + sorted(carpeta.glob("*Conducta*.xls"))
 
     if not notas_files:
-        raise FileNotFoundError(f"No se encontraron archivos de notas en {carpeta}")
+        raise FileNotFoundError(
+            "No se encontró ningún archivo con 'Notas' en el nombre. "
+            "Verifica que el archivo subido incluya esa palabra (p.ej. 'Quinto A - Notas.xlsx')."
+        )
 
     # ── Extraer nombre del colegio de la primera fila del primer Excel ────────
     nombre_colegio = "Colegio"
@@ -453,16 +461,26 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
             for sheet in hojas_validas:
                 # Normalizar: S5A→5A, S5B→5B, P6A→P6A, P6B→P6B
                 salon = _normalizar_salon(sheet.strip().upper())
-                df_n = _parse_notas_sheet(nf, sheet, salon)
+                try:
+                    df_n = _parse_notas_sheet(nf, sheet, salon)
+                except Exception as e:
+                    msg = f"Hoja '{sheet}' de {nf.name}: no se pudo leer el formato de notas ({e})"
+                    print(f"  ERROR {msg}")
+                    advertencias.append(msg)
+                    continue
                 if len(df_n) < 5:
                     # Hoja con muy pocos alumnos — skip (datos incompletos)
-                    print(f"  SKIP Notas {nf.name} [{sheet}]: solo {len(df_n)} alumnos (incompleto)")
+                    msg = f"Hoja '{sheet}' de {nf.name}: omitida, solo {len(df_n)} alumno(s) detectado(s) (mínimo 5)"
+                    print(f"  SKIP {msg}")
+                    advertencias.append(msg)
                     continue
                 df_n["sheet"] = sheet
                 dfs_notas.append(df_n)
                 print(f"  OK Notas {nf.name} [{sheet}]: {len(df_n)} alumnos, salon={salon}")
         except Exception as e:
-            print(f"  ERROR en {nf.name}: {e}")
+            msg = f"Archivo {nf.name}: no se pudo procesar ({e})"
+            print(f"  ERROR {msg}")
+            advertencias.append(msg)
 
     for cf in conducta_files:
         try:
@@ -481,10 +499,13 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
                 dfs_conducta.append(df_c)
                 print(f"  OK Conducta {cf.name} [{sheet}]: {len(df_c)} alumnos, salon={salon}")
         except Exception as e:
-            print(f"  ERROR en {cf.name}: {e}")
+            msg = f"Archivo de conducta {cf.name}: no se pudo procesar ({e})"
+            print(f"  ERROR {msg}")
+            advertencias.append(msg)
 
     if not dfs_notas:
-        raise RuntimeError("No se pudo parsear ningún archivo de notas.")
+        detalle = " | ".join(advertencias) if advertencias else "motivo desconocido"
+        raise RuntimeError(f"No se pudo parsear ningún archivo de notas. Detalle: {detalle}")
 
     # ── Unir notas + deduplicar por (salon, n_alumno) ────────────────────────
     df_notas = pd.concat(dfs_notas, ignore_index=True)
@@ -543,6 +564,11 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
     print(f"  Distribución: ALTO={len(df[df.nivel_riesgo=='ALTO'])} "
           f"MEDIO={len(df[df.nivel_riesgo=='MEDIO'])} "
           f"BAJO={len(df[df.nivel_riesgo=='BAJO'])}")
+    if advertencias:
+        print(f"  Advertencias ({len(advertencias)}):")
+        for a in advertencias:
+            print(f"    - {a}")
+    df.attrs["advertencias"] = advertencias
     return df
 
 

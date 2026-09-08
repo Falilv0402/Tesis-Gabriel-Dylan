@@ -20,6 +20,7 @@ interface ColegioUploadResult {
   pct_riesgo: number;
   nombre_colegio: string;
   salones: string[];
+  advertencias: string[];
 }
 
 interface DatosViewProps {
@@ -59,6 +60,7 @@ interface DatosViewProps {
     roc_tpr: number[] | null;
     modo_prediccion: string; salones: string[]; trained_at: string | null;
     por_nivel: Record<string, number>;
+    advertencias_carga: string[];
   } | null;
 }
 
@@ -317,6 +319,16 @@ export function DatosView({
                     )}
                   </div>
                 )}
+                {colegioModelStats.advertencias_carga.length > 0 && (
+                  <div style={{ padding: "8px 10px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8 }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: "#92400e", marginBottom: 4 }}>
+                      ⚠️ {colegioModelStats.advertencias_carga.length} hoja(s)/archivo(s) omitidos en la última carga:
+                    </p>
+                    <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, color: "#92400e", lineHeight: 1.6 }}>
+                      {colegioModelStats.advertencias_carga.map((a, i) => <li key={i}>{a}</li>)}
+                    </ul>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -417,6 +429,17 @@ export function DatosView({
             <p style={{ fontSize: 11, color: "#16a34a", marginTop: 6, fontWeight: 600 }}>
               ✓ El modelo del colegio quedó actualizado con estos datos.
             </p>
+            {colegioUploadResult.advertencias.length > 0 && (
+              <div style={{ marginTop: 10, padding: "8px 10px", background: "#fffbeb",
+                border: "1px solid #fde68a", borderRadius: 8 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: "#92400e", marginBottom: 4 }}>
+                  ⚠️ {colegioUploadResult.advertencias.length} hoja(s)/archivo(s) omitidos o con error:
+                </p>
+                <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, color: "#92400e", lineHeight: 1.6 }}>
+                  {colegioUploadResult.advertencias.map((a, i) => <li key={i}>{a}</li>)}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </Panel>
