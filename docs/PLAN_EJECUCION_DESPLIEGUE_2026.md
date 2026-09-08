@@ -100,11 +100,13 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 - [ ] **HU030** — decidir si se implementa de verdad un cron de actualización periódica o se retira la funcionalidad cosmética actual (`scheduleFreq`/`saveSchedule`/`nextUpdate`/`scheduleMsg`, código muerto en 6 archivos — deprioritizado, no urgente)
 - [x] **HU033** — evaluado: los sliders de umbral ALTO/MEDIO ya existentes satisfacen la intención de la HU sin exponer hiperparámetros riesgosos del modelo; no se necesita más UI
 
-## FASE 6 — Rediseño de frontend orientado a acción/insight
+## FASE 6 — Rediseño de frontend orientado a acción/insight 🟡 primera pasada desplegada
 
-- [ ] Sesión de mockups: traducir "no quiero solo una tabla" en pantallas concretas (candidatas: tarjetas de alumno con semáforo + acción recomendada como elemento principal, resumen ejecutivo tipo "esto necesita tu atención hoy" arriba del dashboard, vista de intervención con checklist accionable)
-- [ ] Validar con Mathias antes de tocar código de vistas
-- [ ] Implementar sobre `DashboardView`, `ColegioDashboardView`, `EstudianteView`, `ColegioEstudianteView`
+- [x] **Banner "Resumen ejecutivo"** (`AttentionBanner.tsx`, nuevo componente): va como lo primero que se ve al entrar a `DashboardView` (EM2022) y `ColegioDashboardView` (colegio propio) — muestra "casos que necesitan tu atención hoy" priorizados por probabilidad de riesgo, con botón **Intervenir** a un clic, antes de cualquier tabla o filtro. Estado alterno "en calma" (verde) cuando no hay casos ALTO/MEDIO con el filtro actual.
+- [x] **Sistema visual más expresivo** en `globals.css`: tokens nuevos (sombras escalonadas `--shadow-sm/md/lg`, radios `--radius-sm/md/lg`, gradientes de marca `--grad-navy`/`--grad-accent`, colores de riesgo semánticos) aplicados a `.panel`, `.kpi`, `.sidebar` (ahora con gradiente en vez de navy plano), botón primario (gradiente + glow al hover) y el nav activo (glow sutil)
+- [x] Verificado con un harness de previsualización temporal (`/dev-preview`, borrado después) en desktop y mobile — glassmorphism en los chips del banner, scroll horizontal, estado "en calma" — y confirmado en vivo en `satraapp.com` (el chunk JS de producción contiene el nuevo componente)
+- [ ] **Pendiente**: `EstudianteView` y `ColegioEstudianteView` (vista de detalle de un alumno) y `IntervencionesView`/`ColegioIntervencionesView` (checklist accionable) todavía no pasaron por esta pasada de rediseño — quedan con el look anterior (funcional, pero sin el banner/gradientes nuevos)
+- [ ] Validar con Mathias si el tono/copy del banner ejecutivo funciona para los 4 roles (director/coordinador/admin/superadmin) o si necesita variarse
 
 ## FASE 7 — Documentación de tesis actualizada
 
