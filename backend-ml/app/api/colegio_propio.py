@@ -8,7 +8,6 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File
 import httpx
 import joblib
-import shutil
 import subprocess
 import sys
 
@@ -350,13 +349,29 @@ async def procesar_excels(
     except HTTPException:
         pass
 
-    # Guardar archivos subidos
+    # Guardar archivos subidos — validando extensión (previene subir tipos
+    # arbitrarios) y tamaño máximo por archivo (previene un upload gigante
+    # usado como DoS; un Excel de notas real nunca se acerca a este límite).
+    MAX_BYTES_POR_ARCHIVO = 20 * 1024 * 1024  # 20 MB
+    CHUNK = 1024 * 1024
     saved = []
     for f in notas_files + conducta_files:
         safe_name = Path(f.filename or "archivo.xlsx").name
+        if Path(safe_name).suffix.lower() not in (".xlsx", ".xls"):
+            raise HTTPException(status_code=400, detail=f"Tipo de archivo no permitido: '{safe_name}' (solo .xlsx/.xls).")
         dest = upload_dir / safe_name
+        total = 0
         with open(dest, "wb") as out:
-            shutil.copyfileobj(f.file, out)
+            while chunk := await f.read(CHUNK):
+                total += len(chunk)
+                if total > MAX_BYTES_POR_ARCHIVO:
+                    out.close()
+                    dest.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"'{safe_name}' supera el tamaño máximo permitido (20 MB).",
+                    )
+                out.write(chunk)
         saved.append(str(dest))
 
     if not saved:
