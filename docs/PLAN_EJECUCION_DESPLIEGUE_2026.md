@@ -69,8 +69,21 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 - [x] Pusheado a git y desplegado en Vercel — confirmado en el navegador
 - [x] Confirmado: el volumen es un bind mount real al disco del host (`~/satra/modelo/model/`) — sobrevive rebuilds/restarts del contenedor
 - [x] **HU029/HU032 (colegio) cerradas**: las hojas/archivos que se omiten o fallan al parsear (antes solo se imprimían en logs del servidor, invisibles) ahora se capturan en `parse_excels.py` → `df.attrs["advertencias"]` → `metricas["advertencias_carga"]` en el `.pkl` → expuesto en `/procesar` y `/resumen` → visible en `DatosView.tsx` tanto en el resultado inmediato de la carga como de forma persistente en el panel de estadísticas (sobrevive un refresh de página). Probado end-to-end: reentrenamiento real corrió limpio (AUC CV 0.9040, mismos números), campo confirmado en producción.
-- [ ] Probar con los datasets/formatos adicionales que compartas (la validación de arriba reportará qué hojas no reconoce en formatos nuevos, en vez de fallar en silencio)
+- [x] **Probado con 3 datasets reales nuevos** (Andrés Avelino Cáceres - Trapiche, Rafael Hoyos Rubio - La Victoria, Andrés Avelino Cáceres - La Perla) — formato "Reporte consolidado", completamente distinto de CUBICOL. Ver detalle completo abajo.
 - [ ] Decidir: ¿quién puede subir Excel? Hoy es exclusivo de `superadmin` en el frontend — el backend ya soporta que un `admin` de colegio también pueda (solo para su propia IE), falta decidir si se le muestra el panel en `DatosView.tsx`
+
+### Soporte al formato "Reporte consolidado" (3 colegios nuevos) ✅ (2026-09-08)
+
+- [x] Detecta el formato ("REPORTE CONSOLIDADO..." en la fila 0), mapea materias granulares (Álgebra/Aritmética/Geometría/Razonamiento Matemático → matematica; Plan Lector/Razonamiento Verbal → comunicacion; Danza/Música → arte; Comportamiento → conducta) a las 8 áreas ponderadas
+- [x] **Extrae el bimestre real del título** ("... - II BIMESTRE") — cada salón trae 4 archivos (uno por bimestre, notas distintas confirmadas, no duplicados) → habilita el modo predictivo B1-B3→B4 genuino, igual que CUBICOL (no solo un promedio anual)
+- [x] **3 bugs metodológicos reales corregidos** (afectaban a cualquier colegio sin bimestres completos, no solo a los nuevos): (1) modo predictivo se activaba sin datos reales de B4 → target degenerado (0% en riesgo); (2) modo descriptivo tenía fuga de datos (pp_matematica/pp_comunicacion como feature Y como definición del target, AUC≈1.0 sin valor real) — excluidas de `FEATURES_PP`; (3) glob de archivos sensible a mayúsculas, no matcheaba "notas" en minúscula en Linux
+- [x] Deduplicación por (salón, n_alumno) cambiada de "quedarse con el primero" a "promediar" — ya no descarta datos silenciosamente
+- [x] `_load_artefacto()` en `colegio_propio.py` solo soportaba códigos IE de hasta 4 dígitos (zfill(4)) — los códigos modulares reales de MINEDU tienen 7 (ej. `0831305`) y el frontend los normaliza quitando el cero inicial en varios lugares (`parseInt`) — corregido para soportar ambas convenciones
+- [x] Códigos IE verificados en MINEDU (Identicole): Trapiche → **0831305**, La Victoria → **0864785**. La Perla usa código temporal **9001** — no se pudo verificar el real con una fuente oficial (el candidato de deperu.com resultó no existir en Identicole)
+- [x] Los 4 colegios (0249, 0831305, 0864785, 9001) entrenados y verificados respondiendo correctamente en producción (`api.satraapp.com`)
+- [ ] **Pendiente**: estos 3 colegios nuevos NO aparecen en el selector "Colegio asignado" (crear usuario / autoregistro) porque esa lista sale del CSV de EM2022 (`get_colegios()` en `prediction_service.py`), y son colegios nuevos que no están ahí — hay que extender esa función para incluir colegios que solo tienen modelo propio
+- [ ] **Pendiente**: las carpetas `modelo/data/Colegio 2/3/4 - .../` con los Excel originales (nombres reales de alumnos) quedaron sin subir a git — decisión pendiente de si deben versionarse (PII de estudiantes en el historial de git) o mantenerse solo localmente
+- [ ] Confirmar con los colegios (o con quien te pasó los datos) el código IE real de "Andrés Avelino Cáceres - La Perla" para reemplazar el temporal 9001
 
 ## FASE 5 — Cerrar historias de usuario pendientes
 
