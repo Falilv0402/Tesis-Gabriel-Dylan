@@ -100,6 +100,17 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 - [ ] **HU030** — decidir si se implementa de verdad un cron de actualización periódica o se retira la funcionalidad cosmética actual (`scheduleFreq`/`saveSchedule`/`nextUpdate`/`scheduleMsg`, código muerto en 6 archivos — deprioritizado, no urgente)
 - [x] **HU033** — evaluado: los sliders de umbral ALTO/MEDIO ya existentes satisfacen la intención de la HU sin exponer hiperparámetros riesgosos del modelo; no se necesita más UI
 
+## FASE 9 — Notificaciones, seguridad general y branding (2026-09-08)
+
+- [x] **Favicon real**: `icon.png`/`apple-icon.png` generados del logo oficial SATRA (antes se veía el ícono genérico del navegador). Título de pestaña corregido a "SATRA — Sistema de Alerta Temprana de Riesgo Académico".
+- [x] **Notificaciones entre compañeros del mismo colegio** (pedido explícito de Mathias): al agregar una anotación o agendar un hito, los demás director/coordinador de esa IE reciben una notificación persistida y en tiempo real (Supabase Realtime). Nueva tabla `notificaciones` (migración `0013_notificaciones.sql`), hook `useNotificaciones.ts`, bell del topbar reconectado (antes solo mostraba errores/avisos locales de la sesión).
+- [ ] **Migración `0013_notificaciones.sql` pendiente de aplicar** — mismo caso que la 0012: el MCP de Supabase no está conectado en esta sesión, hay que correrla a mano en el SQL Editor. Sin ella, el bell simplemente no muestra nada (best-effort, no rompe el guardado de anotaciones/hitos).
+- [x] **Endurecimiento de seguridad general**:
+  - Headers HTTP en frontend (`next.config.mjs`) y backend (`Caddyfile`): `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, HSTS explícito en la API; se quitó el header `Server: uvicorn` que revelaba stack innecesariamente
+  - `/colegio/{ie}/procesar` valida extensión (.xlsx/.xls) y tamaño máximo (20MB) por archivo antes de guardarlo — antes no había ningún límite
+  - Escaneo de secretos en el repo: limpio, solo `.env.example` trackeados
+  - **Pendiente de decisión/acción del usuario**: rotar la API key de Resend a una con permiso "Sending access" en vez de "Full access" (no urgente); revisar política de contraseñas en Supabase Auth dashboard (fuera del alcance de este repo — configuración del proyecto Supabase)
+
 ## FASE 6 — Rediseño de frontend orientado a acción/insight 🟡 primera pasada desplegada
 
 - [x] **Banner "Resumen ejecutivo"** (`AttentionBanner.tsx`, nuevo componente): va como lo primero que se ve al entrar a `DashboardView` (EM2022) y `ColegioDashboardView` (colegio propio) — muestra "casos que necesitan tu atención hoy" priorizados por probabilidad de riesgo, con botón **Intervenir** a un clic, antes de cualquier tabla o filtro. Estado alterno "en calma" (verde) cuando no hay casos ALTO/MEDIO con el filtro actual.
