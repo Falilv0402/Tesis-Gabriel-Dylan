@@ -480,10 +480,10 @@ export function useAdmin(
     }
   }, [role, tab, session, stableLoadUsers, stableLoadAudit]);
 
-  // Cargar estadísticas del modelo del colegio cuando el admin abre la pestaña Datos
+  // Cargar estadísticas del modelo del colegio cuando el admin/director/coordinador abre la pestaña Datos
   useEffect(() => {
-    const isAdminRole = role === "admin" || role === "superadmin";
-    if (isAdminRole && tab === "datos" && profileCodigoIe) {
+    const isColegioRole = role === "admin" || role === "superadmin" || role === "director" || role === "coordinador";
+    if (isColegioRole && tab === "datos" && profileCodigoIe) {
       const ie = String(parseInt(profileCodigoIe, 10));
       void loadColegioModelStats(ie);
       void loadModelosVersiones(ie);

@@ -49,6 +49,7 @@ interface DatosViewProps {
   onUploadColegioExcels: (files: FileList, ie: string) => void;
   role: string;
   profileCodigoIe: string | null;
+  setTab: (tab: import("@/types").Tab) => void;
   // Métricas del modelo nacional EM2022 (para admin de colegios sin modelo CUBICOL propio)
   em2022Metrics?: Metrics;
   em2022Evaluation?: Evaluation;
@@ -83,15 +84,17 @@ export function DatosView({
   colegioUploadIe, setColegioUploadIe,
   colegioUploadStatus, colegioUploadMsg, colegioUploadResult,
   onUploadColegioExcels,
-  role, profileCodigoIe,
+  role, profileCodigoIe, setTab,
   em2022Metrics,
   em2022Evaluation,
   colegioModelStats,
   modelosVersiones,
 }: DatosViewProps) {
 
-  // El panel de carga es exclusivo del superadmin: usa la IE que escribe.
-  const ieEfectiva = colegioUploadIe;
+  // El superadmin escribe la IE a mano (puede cargar cualquier colegio);
+  // admin/director/coordinador quedan fijos a la IE de su propio perfil.
+  const isSuperadmin = role === "superadmin";
+  const ieEfectiva = isSuperadmin ? colegioUploadIe : (profileCodigoIe ?? "");
 
   const statusIcon = {
     idle:      <School size={18} style={{ color: "var(--accent)" }} />,
@@ -100,10 +103,11 @@ export function DatosView({
     error:     <AlertTriangle size={18} style={{ color: "#dc2626" }} />,
   }[colegioUploadStatus];
 
-  const isAdminRole   = role === "admin";
-  const noModelYet    = isAdminRole && !colegioModelStats;
-  const noIeAssigned  = isAdminRole && !profileCodigoIe;
+  const isColegioRole = role === "admin" || role === "director" || role === "coordinador";
+  const noModelYet    = isColegioRole && !colegioModelStats;
+  const noIeAssigned  = isColegioRole && !profileCodigoIe;
   const isEM2022      = colegioModelStats?.modo_prediccion === "Modelo Nacional EM2022";
+  const puedeSubirExcel = isSuperadmin || (isColegioRole && !!profileCodigoIe);
 
   return (
     <section className="full-col">
@@ -436,17 +440,18 @@ export function DatosView({
         </Panel>
       )}
 
-      {/* ── Panel 1: Carga Excel del colegio (solo Super Admin) ───────────── */}
-      {/* El admin de colegio solo monitorea; el entrenamiento es tarea del superadmin.
-          El servidor de producción (Hetzner) tiene disco persistente y el endpoint
-          /procesar valida el rol contra la sesión de Supabase, así que ya no hace
-          falta restringir esto a localhost como cuando el plan era Railway
-          (filesystem efímero) — ver docs/ROADMAP_CARGA_EXCEL_COLEGIO.md. */}
-      {role === "superadmin" && (
+      {/* ── Panel 1: Carga Excel del colegio ────────────────────────────────
+          El superadmin puede cargar para cualquier IE (la escribe a mano);
+          admin/director/coordinador solo pueden cargar para su propio
+          colegio (la IE queda fija, tomada de su perfil) — el backend
+          (require_admin_de_colegio en colegio_propio.py) valida lo mismo
+          del lado del servidor, así que esto es solo UX, no la única barrera. */}
+      {puedeSubirExcel && (
       <Panel title="Datos del colegio — Excel interno">
         <p className="model-note" style={{ marginBottom: 12 }}>
-          Sube los archivos Excel de notas y conducta del colegio (formato CUBICOL Académico).
-          El sistema entrenará automáticamente el modelo de riesgo con las notas internas.
+          Sube los archivos Excel de notas y conducta del colegio (formato CUBICOL Académico
+          o Reporte consolidado, según el que use tu colegio). El sistema entrenará
+          automáticamente el modelo de riesgo con las notas internas.
         </p>
 
         {/* Input oculto para múltiples Excel */}
@@ -465,19 +470,27 @@ export function DatosView({
           }}
         />
 
-        {/* IE selector — el superadmin indica para qué colegio es la carga */}
-        <label style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>
-            Código IE del colegio <span style={{ color: "#ef4444" }}>*</span>
-          </span>
-          <input
-            value={colegioUploadIe}
-            onChange={(e) => setColegioUploadIe(e.target.value.trim())}
-            placeholder="Ej: 0249 ó 249"
-            style={{ fontSize: 13, padding: "7px 10px", borderRadius: 8,
-              border: "1px solid var(--border)" }}
-          />
-        </label>
+        {/* IE selector — el superadmin indica para qué colegio es la carga;
+            el resto de roles ven fija la IE de su propio colegio. */}
+        {isSuperadmin ? (
+          <label style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>
+              Código IE del colegio <span style={{ color: "#ef4444" }}>*</span>
+            </span>
+            <input
+              value={colegioUploadIe}
+              onChange={(e) => setColegioUploadIe(e.target.value.trim())}
+              placeholder="Ej: 0249 ó 249"
+              style={{ fontSize: 13, padding: "7px 10px", borderRadius: 8,
+                border: "1px solid var(--border)" }}
+            />
+          </label>
+        ) : (
+          <div style={{ marginBottom: 10, padding: "8px 10px", fontSize: 12,
+            background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8 }}>
+            Vas a cargar datos para tu colegio — <strong>IE {ieEfectiva}</strong>
+          </div>
+        )}
 
         {/* Botón de carga */}
         <button
@@ -530,6 +543,15 @@ export function DatosView({
             <p style={{ fontSize: 11, color: "#16a34a", marginTop: 6, fontWeight: 600 }}>
               ✓ El modelo del colegio quedó actualizado con estos datos.
             </p>
+            {(role === "director" || role === "coordinador") && (
+              <button
+                className="primary"
+                style={{ marginTop: 10, width: "100%" }}
+                onClick={() => setTab("dashboard")}
+              >
+                Ver en el Dashboard →
+              </button>
+            )}
             {colegioUploadResult.advertencias.length > 0 && (
               <div style={{ marginTop: 10, padding: "8px 10px", background: "#fffbeb",
                 border: "1px solid #fde68a", borderRadius: 8 }}>

@@ -100,7 +100,7 @@ export default function Page() {
   // ── Navigation ────────────────────────────────────────────────────
   const notifCount4Nav = interventions.interventions.filter(i => i.estado === "pendiente").length;
 
-  const directorTabs   = ["dashboard", "estudiante", "reportes", "intervenciones"]; // también coordinador
+  const directorTabs   = ["dashboard", "estudiante", "reportes", "intervenciones", "datos"]; // también coordinador
   const adminTabs      = ["usuarios", "datos"];
   const superadminTabs = ["usuarios", "datos", "modelo"];
 
@@ -501,7 +501,7 @@ export default function Page() {
             />
           )}
 
-          {isAdmin && tab === "datos" && (
+          {(isAdmin || isDirectorRole) && tab === "datos" && (
             <DatosView
               fileInputRef={admin.fileInputRef}
               uploadResult={admin.uploadResult} setUploadResult={admin.setUploadResult}
@@ -516,9 +516,15 @@ export default function Page() {
               colegioUploadStatus={admin.colegioUploadStatus}
               colegioUploadMsg={admin.colegioUploadMsg}
               colegioUploadResult={admin.colegioUploadResult}
-              onUploadColegioExcels={(files, ie) => void admin.uploadColegioExcels(files, ie)}
+              onUploadColegioExcels={(files, ie) => {
+                // Tras (intentar) reentrenar, refresca el dashboard del colegio
+                // (useColegio solo recarga cuando cambia la IE, no solo por
+                // cambiar de pestaña) para que los datos nunca queden obsoletos.
+                void admin.uploadColegioExcels(files, ie).then(() => colegio.reload());
+              }}
               role={auth.role}
               profileCodigoIe={auth.profileCodigoIe}
+              setTab={setTab}
               em2022Metrics={modelData.metrics}
               em2022Evaluation={modelData.evaluation}
               colegioModelStats={admin.colegioModelStats}

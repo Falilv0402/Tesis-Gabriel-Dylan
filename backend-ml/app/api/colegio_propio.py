@@ -38,11 +38,12 @@ async def require_admin_de_colegio(
     codigo_ie: str = Depends(_validate_ie),
     authorization: str = Header(default=""),
 ) -> dict:
-    """Verifica que quien llama sea admin/superadmin activo y, si es admin de
-    un colegio específico, que coincida con el `codigo_ie` que intenta subir.
-    Devuelve {codigo_ie, token} — el token se reutiliza para consultar a los
-    destinatarios de la alerta proactiva (HU019) respetando RLS, sin
-    necesitar ningún secreto adicional en el backend."""
+    """Verifica que quien llama tenga un rol autorizado a cargar datos del
+    colegio (admin/director/coordinador de ESE colegio, o superadmin sin
+    restricción de IE) y esté activo. Devuelve {codigo_ie, token} — el token
+    se reutiliza para consultar a los destinatarios de la alerta proactiva
+    (HU019) respetando RLS, sin necesitar ningún secreto adicional en el
+    backend."""
     if not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Falta el token de autenticación.")
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
@@ -69,11 +70,11 @@ async def require_admin_de_colegio(
     perfil = perfiles[0]
     if not perfil.get("activo", True):
         raise HTTPException(status_code=403, detail="Cuenta inactiva.")
-    if perfil.get("rol") not in ("admin", "superadmin"):
-        raise HTTPException(status_code=403, detail="Requiere rol de administrador.")
-    if perfil.get("rol") == "admin":
+    if perfil.get("rol") not in ("admin", "superadmin", "director", "coordinador"):
+        raise HTTPException(status_code=403, detail="Tu rol no puede cargar datos del colegio.")
+    if perfil.get("rol") != "superadmin":
         perfil_ie = str(perfil.get("codigo_ie") or "")
-        if perfil_ie.lstrip("0") != codigo_ie.lstrip("0"):
+        if not perfil_ie or perfil_ie.lstrip("0") != codigo_ie.lstrip("0"):
             raise HTTPException(status_code=403, detail="Solo puedes cargar datos de tu propio colegio.")
     return {"codigo_ie": codigo_ie, "token": token}
 

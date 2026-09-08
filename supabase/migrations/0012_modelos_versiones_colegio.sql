@@ -19,11 +19,15 @@ ALTER TABLE public.modelos_versiones
 CREATE INDEX IF NOT EXISTS idx_modelos_versiones_codigo_ie
   ON public.modelos_versiones(codigo_ie, created_at DESC);
 
--- ─── RLS: permitir que también un 'admin' (no solo superadmin) registre
--- versiones de SU PROPIO colegio, y lea el historial de su colegio ─────────
--- La política original (0007) solo permitía FOR ALL a superadmin. La
--- carga de Excel del colegio (HU031, ya soportado también para 'admin' vía
--- require_admin_de_colegio en el backend) necesita poder insertar aquí.
+-- ─── RLS: permitir que también admin/director/coordinador (no solo
+-- superadmin) registren versiones de SU PROPIO colegio, y lean el
+-- historial de su colegio ────────────────────────────────────────────────
+-- La política original (0007) solo permitía FOR ALL a superadmin. La carga
+-- de Excel del colegio (HU031) ya soporta admin/director/coordinador desde
+-- require_admin_de_colegio en el backend (colegio_propio.py) — este INSERT
+-- debe reflejar exactamente los mismos roles, o el registro del historial
+-- (HU034) queda silenciosamente vacío para esos usuarios (best-effort:
+-- no rompe la carga, pero no queda rastro).
 
 DROP POLICY IF EXISTS "modelos_versiones_all" ON public.modelos_versiones;
 
@@ -31,8 +35,7 @@ CREATE POLICY "modelos_versiones_select"
 ON public.modelos_versiones FOR SELECT
 USING (
   public.get_my_role() = 'superadmin'
-  OR (public.get_my_role() = 'admin' AND codigo_ie = public.get_my_ie())
-  OR (public.get_my_role() IN ('director', 'coordinador')
+  OR (public.get_my_role() IN ('admin', 'director', 'coordinador')
       AND codigo_ie IS NOT NULL
       AND codigo_ie = public.get_my_ie())
 );
@@ -41,7 +44,9 @@ CREATE POLICY "modelos_versiones_insert"
 ON public.modelos_versiones FOR INSERT
 WITH CHECK (
   public.get_my_role() = 'superadmin'
-  OR (public.get_my_role() = 'admin' AND codigo_ie = public.get_my_ie())
+  OR (public.get_my_role() IN ('admin', 'director', 'coordinador')
+      AND codigo_ie IS NOT NULL
+      AND codigo_ie = public.get_my_ie())
 );
 
 CREATE POLICY "modelos_versiones_update_delete"
