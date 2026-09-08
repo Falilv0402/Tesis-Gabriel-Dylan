@@ -41,32 +41,36 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 - [x] Docker 29.8.0 + Docker Compose v5.5.1 instalados, `deploy` en grupo `docker` (sin sudo)
 - [x] Caddy (vía imagen oficial `caddy:2-alpine` en docker-compose) — HTTPS automático con Let's Encrypt, no se instaló a nivel de SO
 
-## FASE 2 — Dockerizar y desplegar el backend 🟡 en progreso (2026-09-08)
+## FASE 2 — Dockerizar y desplegar el backend ✅ (2026-09-08)
 
 - [x] `backend-ml/Dockerfile` ya existía (armado para Railway) — se le agregó `COPY modelo/colegio ./modelo/colegio` (faltaba para que el entrenamiento del colegio funcione en el container)
 - [x] `docker-compose.yml` creado en la raíz: servicio `backend` (build del Dockerfile, volúmenes persistentes en `./modelo/model` y `./modelo/data`) + servicio `caddy` (puertos 80/443, Caddyfile montado)
 - [x] `Caddyfile` creado: reverse proxy de `api.satraapp.com` → `backend:8000`
-- [x] `backend-ml/.env.production` con `SATRA_API_KEY` generada (protege `/v1/modelo/reentrenamiento`)
+- [x] `backend-ml/.env.production` con `SATRA_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`
 - [x] Código + modelos `.pkl` + datasets + scripts de `modelo/colegio` y `modelo/em2022` transferidos al servidor vía `scp` a `~/satra/`
-- [~] `docker compose up -d --build` corriendo en background — pendiente confirmar build exitoso y responder en `https://api.satraapp.com/health`
-- [ ] Copiar/subir los artefactos `.pkl` existentes (`modelo_em.pkl`, `metricas_em.pkl`, `colegio_0249.pkl`, etc.) al volumen persistente del servidor
-- [ ] Levantar el stack y verificar `/health`, `/v1/modelo/metricas`, `/v1/colegio/249/resumen`
+- [x] `docker compose up -d --build` — build exitoso, `satra-backend-1` y `satra-caddy-1` corriendo
+- [x] Verificado en vivo: `https://api.satraapp.com/v1/health` → `{"status":"ok","model_loaded":true}`, `/v1/modelo/metricas` y `/v1/colegio/249/resumen` responden con datos reales
 
-## FASE 3 — Dominio y HTTPS
+## FASE 3 — Dominio y HTTPS ✅ (2026-09-08)
 
-- [ ] Crear registro DNS en Cloudflare apuntando el subdominio de API a `2.28.71.5`
-- [ ] Verificar emisión de certificado TLS (Caddy automático)
-- [ ] Actualizar `NEXT_PUBLIC_ML_API_URL` en Vercel al dominio nuevo
-- [ ] Actualizar CORS en `backend-ml/app/main.py` para incluir el dominio final del frontend (ya cubre `*.vercel.app`, pero si usas dominio propio en Vercel hay que añadirlo)
-- [ ] Probar el flujo completo end-to-end: `app.tudominio.com` → login → dashboard → predicciones
+- [x] Registros DNS en Cloudflare: `@`→Vercel, `www`→Vercel, `api`→`2.28.71.5` (todos DNS-only)
+- [x] Certificado TLS emitido automáticamente por Caddy (Let's Encrypt) para `api.satraapp.com`, confirmado en logs (`certificate obtained successfully`)
+- [x] CORS del backend actualizado (`backend-ml/app/main.py`) para aceptar `https://satraapp.com` y `https://www.satraapp.com`
+- [x] Vercel: `NEXT_PUBLIC_ML_API_URL` actualizada a `https://api.satraapp.com` (hecho por Mathias)
+- [x] Push a `origin/main` (commit `4eff165`, autenticado como la cuenta del cliente `Falilv0402`) → Vercel redeployó automáticamente
+- [x] Verificado en vivo con el navegador: `satraapp.com` carga el login de SATRA correctamente, y el bundle JS de producción tiene `https://api.satraapp.com` compilado (no localhost) — el circuito dominio → Vercel → Hetzner → Supabase queda cerrado
 
-## FASE 4 — Habilitar la carga de Excel del colegio en producción
+## FASE 4 — Habilitar la carga de Excel del colegio en producción ✅ desplegado, 🟡 falta pulir
 
-- [ ] Quitar el gate `isLocalBackend()` en `DatosView.tsx` para el panel de subida de Excel (ahora que el disco es persistente)
-- [ ] Confirmar que el volumen Docker persiste `modelo/data/colegio_*` y `modelo/model/colegio_*.pkl` entre reinicios del container
+- [x] Encontrado y cerrado: `/v1/colegio/{ie}/procesar` no tenía ninguna autenticación — ahora exige sesión Supabase con rol admin/superadmin (y un admin de colegio solo puede subir para su propia IE), vía `require_admin_de_colegio` en `colegio_propio.py`
+- [x] Quitado el gate `isLocalBackend()` en `DatosView.tsx` — ya no aplica con disco persistente en Hetzner
+- [x] `useAdmin.ts` → `uploadColegioExcels` ahora envía el `Authorization: Bearer <token>` de la sesión activa
+- [x] Verificado en vivo: `POST /v1/colegio/249/procesar` sin token → `401` (el guard funciona)
+- [x] Pusheado a git y desplegado en Vercel — confirmado en el navegador
+- [x] Confirmado: el volumen es un bind mount real al disco del host (`~/satra/modelo/model/`) — sobrevive rebuilds/restarts del contenedor
 - [ ] Añadir validación de Excel del colegio (fila + causa del error) equivalente a la que ya existe para CSV EM2022 — cierra HU029/HU032 para este flujo
-- [ ] Probar con los datasets/formatos adicionales que me compartas
-- [ ] Decidir: ¿quién puede subir Excel? Hoy es exclusivo de `superadmin` — ¿se abre también a `admin` de colegio, ya que ellos "monitorean" pero no entrenan?
+- [ ] Probar con los datasets/formatos adicionales que compartas
+- [ ] Decidir: ¿quién puede subir Excel? Hoy es exclusivo de `superadmin` en el frontend — el backend ya soporta que un `admin` de colegio también pueda (solo para su propia IE), falta decidir si se le muestra el panel en `DatosView.tsx`
 
 ## FASE 5 — Cerrar historias de usuario pendientes
 
