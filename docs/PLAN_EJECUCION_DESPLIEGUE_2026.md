@@ -81,9 +81,9 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 - [x] `_load_artefacto()` en `colegio_propio.py` solo soportaba códigos IE de hasta 4 dígitos (zfill(4)) — los códigos modulares reales de MINEDU tienen 7 (ej. `0831305`) y el frontend los normaliza quitando el cero inicial en varios lugares (`parseInt`) — corregido para soportar ambas convenciones
 - [x] Códigos IE verificados en MINEDU (Identicole): Trapiche → **0831305**, La Victoria → **0864785**. La Perla usa código temporal **9001** — no se pudo verificar el real con una fuente oficial (el candidato de deperu.com resultó no existir en Identicole)
 - [x] Los 4 colegios (0249, 0831305, 0864785, 9001) entrenados y verificados respondiendo correctamente en producción (`api.satraapp.com`)
-- [ ] **Pendiente**: estos 3 colegios nuevos NO aparecen en el selector "Colegio asignado" (crear usuario / autoregistro) porque esa lista sale del CSV de EM2022 (`get_colegios()` en `prediction_service.py`), y son colegios nuevos que no están ahí — hay que extender esa función para incluir colegios que solo tienen modelo propio
+- [x] **Selector de colegios corregido** (2026-09-08): `get_colegios()` ahora también escanea `modelo/model/colegio_*.pkl` y agrega los que no están en EM2022. Se agregó `--distrito` (opcional) a `train_colegio_model.py`; los 3 colegios nuevos se reentrenaron con su distrito real (Comas, La Victoria, La Perla). Los selectores de `UsuariosView.tsx` y `AuthView.tsx` muestran nombre real + IE + distrito. Verificado en producción: los 3 colegios aparecen en `/v1/colegios` con sus datos correctos.
+- [x] Código real de La Perla: **no se busca más** (decisión del usuario) — se mantiene el temporal `9001` indefinidamente salvo que el colegio lo provea directamente.
 - [ ] **Pendiente**: las carpetas `modelo/data/Colegio 2/3/4 - .../` con los Excel originales (nombres reales de alumnos) quedaron sin subir a git — decisión pendiente de si deben versionarse (PII de estudiantes en el historial de git) o mantenerse solo localmente
-- [ ] Confirmar con los colegios (o con quien te pasó los datos) el código IE real de "Andrés Avelino Cáceres - La Perla" para reemplazar el temporal 9001
 
 ## FASE 5 — Cerrar historias de usuario pendientes
 
