@@ -5,6 +5,7 @@ import { Filter, RefreshCcw, GraduationCap, AlertTriangle, Users } from "lucide-
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { AlumnoColegio, ColegioResumen } from "@/types";
 import { Kpi, Panel, EmptyState } from "@/components/ui/Primitives";
+import { AttentionBanner, type AttentionItem } from "@/components/ui/AttentionBanner";
 import { pct, riskClass } from "@/lib/format";
 import {
   MATERIAS_COLEGIO as MATERIAS, anioFromSalon, aniosDeSalones,
@@ -111,8 +112,26 @@ export function ColegioDashboardView({
     return [...altos, ...medios].slice(0, 5);
   }, [filtrados]);
 
+  const attentionItems: AttentionItem[] = prioritarios.map((a) => ({
+    id: colegioStudentId(a),
+    nombre: a.nombre,
+    detalle: `${a.salon} · ${anioFromSalon(a.salon).label}`,
+    nivel: a.nivel_riesgo === "ALTO" ? "ALTO" : "MEDIO",
+    prob: a.prob_riesgo,
+  }));
+  const attentionMap = new Map(prioritarios.map((a) => [colegioStudentId(a), a]));
+
   return (
     <>
+      {/* ── Resumen ejecutivo accionable ──────────────────────────────── */}
+      <AttentionBanner
+        items={attentionItems}
+        totalUrgente={enRiesgo}
+        contexto={`en ${nombreColegio}`}
+        onSelect={onSelect ? (id) => { const a = attentionMap.get(id); if (a) onSelect(a); } : undefined}
+        onIntervenir={onIntervenir ? (id) => { const a = attentionMap.get(id); if (a) onIntervenir(a); } : undefined}
+      />
+
       {/* ── Encabezado del colegio ─────────────────────────────────────── */}
       <div className="colegio-hero">
         <div className="colegio-hero-icon"><GraduationCap size={22} /></div>

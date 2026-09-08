@@ -1,11 +1,13 @@
 "use client";
 
+import { useMemo } from "react";
 import { AlertTriangle, Download, Filter, RefreshCcw } from "lucide-react";
 import { Cell, PieChart, Pie, ResponsiveContainer, Tooltip } from "recharts";
 import dynamic from "next/dynamic";
 import type { Student, DatasetSummary, Metrics } from "@/types";
 import type { DistrictRiskEntry } from "@/components/maps/LimaHeatmap";
 import { Kpi, Panel, Bar, EmptyState } from "@/components/ui/Primitives";
+import { AttentionBanner, type AttentionItem } from "@/components/ui/AttentionBanner";
 import { StudentTable } from "@/components/tables/StudentTable";
 import { shortId, pct, riskClass } from "@/lib/format";
 
@@ -61,8 +63,31 @@ export function DashboardView({
   setTab, loadModelData, exportCsv, exportXlsx,
   savePredictionsToSupabase, loadMoreStudents,
 }: DashboardViewProps) {
+  const prioritarios = useMemo(() => {
+    const altos  = filtered.filter((s) => s.nivel_riesgo === "ALTO").sort((a, b) => b.probabilidad_riesgo - a.probabilidad_riesgo);
+    const medios = filtered.filter((s) => s.nivel_riesgo === "MEDIO").sort((a, b) => b.probabilidad_riesgo - a.probabilidad_riesgo);
+    return [...altos, ...medios].slice(0, 5);
+  }, [filtered]);
+
+  const attentionItems: AttentionItem[] = prioritarios.map((s) => ({
+    id: s.id,
+    nombre: `Estudiante ${shortId(s.id)}`,
+    detalle: `${s.distrito} · ${s.tipo_riesgo}`,
+    nivel: s.nivel_riesgo === "ALTO" ? "ALTO" : "MEDIO",
+    prob: s.probabilidad_riesgo,
+  }));
+
   return (
     <>
+      {/* ── Resumen ejecutivo accionable ──────────────────────────────── */}
+      <AttentionBanner
+        items={attentionItems}
+        totalUrgente={high + medium}
+        contexto="en la muestra filtrada"
+        onSelect={setSelectedId}
+        onIntervenir={(id) => { setSelectedId(id); setTab("intervenciones"); }}
+      />
+
       <section className="kpi-grid">
         <Kpi label="Estudiantes" value={displayTotal} detail={`${filtered.length.toLocaleString("es-PE")} filtrados`} />
         <Kpi label="Riesgo alto" value={high} detail={`${((high / Math.max(displayTotal, 1)) * 100).toFixed(1)}%`} tone="high" />
