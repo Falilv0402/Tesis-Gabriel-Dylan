@@ -1,18 +1,73 @@
-# Justificación del Modelo Predictivo SARA — Pipeline Completo
+# Justificación del Modelo Predictivo SATRA — Pipeline Completo
 
-**Proyecto:** P20261012 — Sistema de Alerta de Riesgo Académico (SARA)
+**Proyecto:** P20261012 — Sistema de Alerta Temprana de Riesgo Académico (SATRA)
 **Institución:** Universidad Peruana de Ciencias Aplicadas (UPC)
-**Dominio:** Educación secundaria (EM), Lima Metropolitana, gestión privada, 2.° grado
-**Fuente de datos:** Evaluación Muestral EM 2022 — Ministerio de Educación del Perú (MINEDU/UMC)
-**Última actualización:** Mayo 2026
+**Última actualización:** Septiembre 2026
 
 ---
 
 ## Resumen ejecutivo
 
-SARA es un sistema de alerta temprana de riesgo académico que implementa un pipeline de Machine Learning de nivel de investigación avanzada sobre datos reales del sistema educativo peruano. El pipeline abarca 12 features con ingeniería de variables derivadas, comparación de 7 estrategias de modelado, calibración probabilística, 20+ métricas, auditoría de equidad por subgrupos con bootstrap, interpretabilidad multicapa (SHAP, PDP, permutación, ablación), y pruebas estadísticas formales. Este documento justifica cada decisión de diseño con fundamento teórico y evidencia empírica.
+SATRA opera con **dos modelos predictivos** de propósito distinto, y este documento los distingue explícitamente para evitar ambigüedad ante el jurado:
+
+1. **Modelo híbrido de colegio propio** (Sección 0) — **es el modelo defendido como aporte central de esta tesis**. Se entrena de forma independiente para cada institución educativa a partir de sus propias notas internas (Excel subidos por el colegio), con un enfoque predictivo genuino: usa las notas de los bimestres 1-3 para anticipar quién estará en riesgo al cierre del bimestre 4, dando tiempo real de intervención. Es un ensemble calibrado de Regresión Logística + Random Forest, y está desplegado y operando con datos reales de 4 colegios (no un prototipo sobre datos sintéticos).
+
+2. **Modelo nacional EM 2022** (Secciones 1-13) — pipeline de investigación avanzada sobre la Evaluación Muestral EM 2022 (MINEDU/UMC), con 12 features, comparación de 7 estrategias de modelado, calibración, auditoría de fairness con bootstrap, e interpretabilidad multicapa (SHAP, PDP, permutación, ablación). Es metodológicamente el más riguroso de los dos, pero **queda posicionado como modelo de referencia y fallback técnico**: sirve para colegios que aún no tienen su propio modelo entrenado, y como evidencia de la profundidad metodológica del equipo, pero no es el sistema que un colegio usa día a día una vez que sube sus propias notas.
+
+**Por qué esta decisión de arquitectura:** un modelo nacional entrenado sobre un dataset agregado (EM 2022) no puede capturar las particularidades pedagógicas de un colegio específico — su propio sistema de calificación, su calendario de bimestres, su población real. El modelo de colegio propio sí lo hace, al costo de un pipeline estadístico más simple (validación cruzada sobre muestras pequeñas de ~30-300 alumnos por colegio, sin el volumen para bootstrap/fairness/SHAP a esa escala). Esta tesis defiende que ese costo es aceptable porque el valor operativo — alertas tempranas específicas del colegio, accionables por su propio director — es el objetivo real del sistema.
 
 ---
+
+## 0. Modelo defendido — Híbrido de colegio propio (LR + RF calibrado)
+
+### 0.1 Arquitectura
+
+Implementado en `modelo/colegio/train_colegio_model.py`. Para cada colegio (identificado por su código IE), se entrena un modelo independiente:
+
+```
+VotingClassifier(voting="soft", estimators=[
+    ("lr", Pipeline([StandardScaler(), LogisticRegression(class_weight=..., random_state=42)])),
+    ("rf", Pipeline([StandardScaler(), RandomForestClassifier(n_estimators=300, max_depth=6,
+                                                                class_weight=..., random_state=42)])),
+])
+→ envuelto en CalibratedClassifierCV(method="sigmoid", cv=2 a 5 según tamaño de clase positiva)
+```
+
+Es un ensemble híbrido por diseño: la Regresión Logística aporta una frontera de decisión lineal e interpretable; el Random Forest captura no-linealidades e interacciones entre materias que la regresión no puede. El voto "soft" promedia las probabilidades de ambos, no solo la clase predicha, preservando la calibración posterior.
+
+### 0.2 Enfoque predictivo genuino: B1-B3 → B4
+
+A diferencia de una descripción de notas actuales, el modelo se entrena para **anticipar** el resultado del 4.° bimestre usando únicamente información de los tres primeros:
+
+- **Features** (modo predictivo): las 7 áreas académicas ponderadas (Matemática, Comunicación, Ciencia y Tecnología, Personal Social, Inglés, Arte y Cultura, Educación Física) en cada uno de los bimestres 1, 2 y 3, más el promedio de conducta y una feature de **tendencia temprana** (`b3 − b1` por materia) que captura si el alumno viene mejorando o empeorando.
+- **Target**: `1` si el alumno obtiene nota "C" (≤13/20) en Matemática o Comunicación en el bimestre 4; `0` en caso contrario.
+- Si el colegio aún no tiene el 4.° bimestre cargado (o el formato del Excel no distingue bimestres), el sistema cae a un **modo descriptivo** de respaldo: el target se define sobre el promedio anual (PP) y las features son las demás áreas del PP (excluyendo intencionalmente `pp_matematica`/`pp_comunicacion` — ver 0.4). Este modo se etiqueta explícitamente en el artefacto (`modo_prediccion`) y en la UI, para que nunca se confunda con una predicción real.
+
+### 0.3 Manejo de desbalance y validación
+
+- **Class-weighting**: `class_weight = {0: 1.0, 1: max(1.0, negativos/positivos)}`, calculado por colegio — los colegios con pocos casos "en riesgo" no ven el modelo colapsar prediciendo siempre "sin riesgo".
+- **Validación cruzada estratificada**: `StratifiedKFold` de 5 folds si hay ≥10 alumnos en riesgo, 3 folds si hay ≥5, y se omite (advertencia explícita) si hay menos — evita reportar un AUC-CV engañoso sobre una muestra demasiado pequeña. El **AUC-CV** es la métrica válida; las métricas "train" (F1, precisión, recall, accuracy, matriz de confusión, curva ROC) se calculan sobre la misma muestra de entrenamiento y se etiquetan explícitamente como referencia optimista, nunca como validación — tanto en el artefacto (`nota_metodologica`) como en el panel de estadísticas del admin (`DatosView.tsx`).
+- **Calibración sigmoid** (Platt scaling) en vez de isotónica: con muestras de decenas a un par de cientos de alumnos por colegio, la calibración isotónica (no paramétrica) sobreajusta fácilmente; sigmoid, al asumir una forma funcional fija, es más robusta a esa escala.
+
+### 0.4 Dos riesgos metodológicos reales identificados y corregidos durante el desarrollo
+
+Ambos bugs fueron encontrados al soportar el formato "Reporte consolidado" de tres colegios adicionales (además de Joseph & Mary) y corregidos porque afectaban a **cualquier** colegio, no solo a los nuevos:
+
+1. **Target degenerado.** Si la columna de notas del bimestre 4 existía pero estaba vacía (formatos que solo reportan el promedio anual), el target se llenaba con `fillna(99)` y ningún alumno quedaba "en riesgo" nunca (0% positivos) — el modelo entrenaba sobre una etiqueta sin información. Corregido exigiendo al menos 5 valores reales no nulos (`df[c].notna().sum() >= 5`) antes de aceptar una columna como target válido; si no se cumple, el sistema cae al modo descriptivo en vez de entrenar sobre un target vacío.
+
+2. **Fuga de datos (data leakage) en el modo descriptivo.** El target de respaldo se define como `pp_matematica <= 13 OR pp_comunicacion <= 13`. La primera versión del modo descriptivo incluía esas mismas dos columnas como features — el modelo aprendía a predecir su propia definición, con AUC ≈ 1.0 sin ningún valor predictivo real. Corregido excluyéndolas explícitamente de `FEATURES_PP`, forzando al modelo a inferir el riesgo en Matemática/Comunicación a partir de *otras* señales (las demás áreas, conducta, cantidad de cursos en C).
+
+### 0.5 Validación empírica: 4 colegios reales, no datos sintéticos
+
+El modelo está entrenado y desplegado en producción (`api.satraapp.com`) para 4 instituciones educativas reales, cada una con su propio artefacto (`colegio_{codigo_ie}.pkl`) y sus propias métricas: Joseph & Mary (código 249, formato CUBICOL), y tres colegios adicionales incorporados con el formato "Reporte consolidado" — Andrés Avelino Cáceres (La Perla), Andrés Avelino Cáceres (Trapiche, código MINEDU 0831305) y Rafael Hoyos Rubio (La Victoria, código MINEDU 0864785). Las métricas exactas (AUC-CV, distribución ALTO/MEDIO/BAJO, matriz de confusión) varían por colegio según su tamaño y tasa base de riesgo, y son accesibles en tiempo real vía `GET /v1/colegio/{codigo_ie}/resumen` y en el panel "Histórico de reentrenamientos" del admin — no se fijan como constantes en este documento porque cambian con cada recarga de Excel.
+
+### 0.6 Límites reconocidos frente al modelo EM 2022
+
+Esta tesis reconoce explícitamente que el modelo de colegio propio **no** implementa, a la fecha, auditoría de fairness por subgrupos, interpretabilidad SHAP, pruebas de significancia formal (McNemar/DeLong) ni validación cruzada anidada — todo lo que sí tiene el modelo EM 2022 (Secciones 1-13). La razón es de escala: esas técnicas requieren cientos o miles de observaciones por grupo para producir intervalos de confianza útiles, y un colegio individual rara vez supera unos pocos cientos de alumnos en total. Se documenta como trabajo futuro, no como omisión accidental.
+
+---
+
+> **A partir de aquí (Secciones 1-13): modelo EM 2022, de referencia.** Todo lo que sigue documenta el pipeline sobre el dataset nacional EM 2022 — el más riguroso metodológicamente, pero **no** el modelo defendido como aporte de esta tesis (ver Sección 0). Se conserva íntegro porque valida que el equipo aplicó los mismos estándares de rigor estadístico a un problema de mayor escala, y porque el sistema lo sigue usando como fallback para colegios sin modelo propio entrenado.
 
 ## 1. ¿Por qué es un modelo predictivo?
 
@@ -90,7 +145,9 @@ El pipeline implementa una comparativa rigurosa entre cuatro familias algorítmi
 
 ### 2.3 Criterio de selección del modelo final
 
-El ganador se selecciona automáticamente como el modelo de mayor AUC promedio en validación cruzada GroupKFold. En la ejecución registrada, **Logistic Regression** resulta ganador por márgenes pequeños pero consistentes, lo que sugiere que las relaciones en el dataset son predominantemente lineales en el espacio de features transformado. Esta observación es coherente con la imposición de restricciones monotónicas, que reducen el grado de complejidad estructural que los modelos de árbol pueden explotar.
+El candidato individual de mayor AUC-CV en la comparativa de la Tabla 2.1 es **Logistic Regression** (0.8650), por márgenes pequeños pero consistentes frente a los modelos de árbol — coherente con la imposición de restricciones monotónicas, que reducen el grado de complejidad estructural que estos últimos pueden explotar.
+
+Sin embargo, el modelo **efectivamente entrenado y persistido en `model/modelo_em.pkl`** no es Logistic Regression en solitario, sino el **ensemble híbrido "Stacking"** (`VotingClassifier` de voto suave sobre los 2 mejores candidatos individuales — ver 2.2), seleccionado por la política implementada en `fit_final_model()`/`run_stacking()` (`modelo/em2022/pipeline/training.py`): el ensemble se prefiere sobre el mejor modelo individual siempre que su AUC-CV no sea más de 1 punto porcentual inferior (`delta >= -0.01`). En la ejecución registrada, el AUC-CV del ensemble (~0.866) **supera** al de Logistic Regression sola (0.8650), por lo que la política lo selecciona automáticamente. Esta es la razón por la que el documento se refiere consistentemente a un "modelo híbrido calibrado" y no a "Logistic Regression": el artefacto final combina la frontera lineal de LR con la capacidad no lineal del segundo mejor candidato, con probabilidades reajustadas por calibración isotónica (Sección 7) sobre ese ensemble, no sobre LR aislada.
 
 ### 2.4 Selección automática vs. manual
 
@@ -410,6 +467,10 @@ La DCA también valida la política de **costo asimétrico FN/FP = 5:1**, mostra
 ### Pregunta 7: *"¿Cómo se asegura la reproducibilidad del modelo?"*
 
 **Respuesta:** El pipeline fija todas las semillas aleatorias (`random_state=42` en todas las instancias estocásticas), persiste el artefacto completo en `model/modelo_em.pkl` (modelo calibrado) y `model/metricas_em.pkl` (todas las métricas), registra el timestamp de entrenamiento, y documenta los datos de drift baseline (media/std/percentiles de cada feature numérica). Cualquier reentrenamiento genera un nuevo artefacto versionado con sus propias métricas, accesible en el historial del endpoint `/v1/modelo/metricas`.
+
+### Pregunta 8: *"Si el sistema tiene dos modelos, ¿cuál es realmente el aporte de la tesis?"*
+
+**Respuesta:** El aporte defendido es el **modelo híbrido de colegio propio** (Sección 0): un ensemble calibrado de Regresión Logística + Random Forest, entrenado de forma independiente por institución educativa a partir de sus propias notas internas, con un diseño predictivo genuino (bimestres 1-3 anticipando el resultado del bimestre 4) que permite intervención real antes del cierre del año. Está desplegado en producción con datos reales de 4 colegios, no como prototipo. El modelo EM 2022 (Secciones 1-13) se mantiene en el sistema como **fallback técnico**: sirve automáticamente a cualquier colegio que aún no haya cargado sus propias notas, y su nivel de rigor estadístico (fairness, SHAP, pruebas de significancia formal) demuestra que el equipo puede sostener ese estándar cuando el volumen de datos lo permite — pero esa profundidad metodológica no sustituye la especificidad institucional que el modelo de colegio propio sí ofrece, que es lo que un director necesita operativamente.
 
 ---
 
