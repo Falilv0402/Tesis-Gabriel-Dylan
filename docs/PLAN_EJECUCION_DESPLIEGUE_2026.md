@@ -94,7 +94,7 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 - [x] **HU034** — cada reentrenamiento se registra en `modelos_versiones` (`_registrar_version_modelo` en `colegio_propio.py`)
 - [x] **HU024/HU026** — panel "Histórico de reentrenamientos" en `DatosView.tsx`: gráfico de línea (ALTO/MEDIO/BAJO por versión) + tabla + export CSV (HU025), leyendo `modelos_versiones` vía `loadModelosVersiones` en `useAdmin.ts`
 - [x] Seguridad reforzada de paso: `/v1/colegio/{ie}/procesar` y `/resumen` ahora exigen JWT válido + rol admin/superadmin de esa IE (antes de esto solo `/procesar` estaba protegido)
-- [ ] **Migración `supabase/migrations/0012_modelos_versiones_colegio.sql` pendiente de aplicar** — el MCP de Supabase sigue desconectado en esta sesión; hay que correrla a mano en el SQL Editor de Supabase (el archivo trae las instrucciones al final). Sin esto, el panel de histórico se ve pero queda vacío (el código tolera el error y no rompe nada).
+- [x] **Migración `0012_modelos_versiones_colegio.sql` aplicada** (2026-09-08, corrida manualmente por Mathias) — verificado vía REST que `modelos_versiones` ya tiene las columnas nuevas. Queda vacía hasta que alguien reentrene un colegio (recién ahí se escribe la primera fila).
 - [x] Backend redesplegado en Hetzner (`docker compose up -d --build backend`), verificado `GET /docs` → 200 y logs limpios
 - [x] Frontend: `npx tsc --noEmit` limpio + `npm run build` exitoso, commit `de5348a` pusheado a `main` → Vercel redeployando
 - [ ] **HU030** — decidir si se implementa de verdad un cron de actualización periódica o se retira la funcionalidad cosmética actual (`scheduleFreq`/`saveSchedule`/`nextUpdate`/`scheduleMsg`, código muerto en 6 archivos — deprioritizado, no urgente)
