@@ -105,13 +105,13 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 - [x] **Banner "Resumen ejecutivo"** (`AttentionBanner.tsx`, nuevo componente): va como lo primero que se ve al entrar a `DashboardView` (EM2022) y `ColegioDashboardView` (colegio propio) — muestra "casos que necesitan tu atención hoy" priorizados por probabilidad de riesgo, con botón **Intervenir** a un clic, antes de cualquier tabla o filtro. Estado alterno "en calma" (verde) cuando no hay casos ALTO/MEDIO con el filtro actual.
 - [x] **Sistema visual más expresivo** en `globals.css`: tokens nuevos (sombras escalonadas `--shadow-sm/md/lg`, radios `--radius-sm/md/lg`, gradientes de marca `--grad-navy`/`--grad-accent`, colores de riesgo semánticos) aplicados a `.panel`, `.kpi`, `.sidebar` (ahora con gradiente en vez de navy plano), botón primario (gradiente + glow al hover) y el nav activo (glow sutil)
 - [x] Verificado con un harness de previsualización temporal (`/dev-preview`, borrado después) en desktop y mobile — glassmorphism en los chips del banner, scroll horizontal, estado "en calma" — y confirmado en vivo en `satraapp.com` (el chunk JS de producción contiene el nuevo componente)
-- [ ] **Pendiente**: `EstudianteView` y `ColegioEstudianteView` (vista de detalle de un alumno) y `IntervencionesView`/`ColegioIntervencionesView` (checklist accionable) todavía no pasaron por esta pasada de rediseño — quedan con el look anterior (funcional, pero sin el banner/gradientes nuevos)
+- [x] `IntervencionesView`/`ColegioIntervencionesView` (`.intervencion-card`, `.alert-notify-box`) actualizadas con los mismos tokens de sombra/radio. `EstudianteView`/`ColegioEstudianteView` revisadas: ya tenían diseño sólido (gauge circular animado, tabs, gráfico de trayectoria) — se dejaron sin tocar para no diluir lo que ya funcionaba bien
 - [ ] Validar con Mathias si el tono/copy del banner ejecutivo funciona para los 4 roles (director/coordinador/admin/superadmin) o si necesita variarse
 
 ## FASE 7 — Documentación de tesis actualizada
 
-- [ ] Actualizar `JUSTIFICACION_MODELO_PREDICTIVO.md`: corregir la sección 2.3 (dice que ganó "Logistic Regression" sola; el `.pkl` real usa Stacking/híbrido) y reencuadrar el documento para defender el modelo híbrido de colegio propio como el aporte de tesis, dejando EM2022 explícitamente como "modelo de referencia / fallback técnico, no el defendido"
-- [ ] Actualizar `IMPLEMENTACION_HUS_CASOS.md` y el Product Backlog con el estado real (matriz de cobertura de las 36 HUs)
+- [x] **`JUSTIFICACION_MODELO_PREDICTIVO.md` reencuadrado** (2026-09-08): nueva Sección 0 defiende el modelo híbrido de colegio propio (LR+RF calibrado); Secciones 1-13 (EM2022) quedan explícitamente como referencia/fallback; corregido el error real de la 2.3 (el `.pkl` desplegado es el ensemble "Stacking", no Logistic Regression sola — verificado contra `training.py`)
+- [x] **`IMPLEMENTACION_HUS_CASOS.md` reescrito** (2026-09-08): matriz real de las 36 HUs leída del Excel fuente — 31 implementadas, 4 parciales (EM2022 completo/colegio propio reducido), 1 pendiente (HU030)
 
 ## FASE 8 — QA final end-to-end
 
