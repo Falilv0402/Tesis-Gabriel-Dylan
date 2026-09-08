@@ -111,6 +111,14 @@ def _parse_notas_sheet(path: Path, sheet: str, salon: str) -> pd.DataFrame:
     """
     df_raw = pd.read_excel(path, sheet_name=sheet, header=None, dtype=str)
 
+    # ── Formato "Reporte consolidado" (otro sistema, no CUBICOL): un archivo
+    # por salón, título "REPORTE CONSOLIDADO" en la primera fila, nota anual
+    # única (0-20) por materia — sin desglose por bimestre. El salón se lee
+    # del propio contenido (fila 2), no del nombre de la hoja (siempre
+    # "CONSOLIDADO DE NOTAS" en este formato).
+    if len(df_raw) > 0 and str(df_raw.iloc[0, 0]).strip().upper().startswith("REPORTE CONSOLIDADO"):
+        return _parse_reporte_consolidado(df_raw, path.name)
+
     # ── Detectar fila de nombres de asignaturas (row 5 usualmente) ────────────
     subject_row_idx = None
     for i in range(min(10, len(df_raw))):
@@ -291,6 +299,144 @@ def _parse_notas_consolidado(
     return pd.DataFrame(registros)
 
 
+# ─── Formato "Reporte consolidado" (otro sistema, distinto de CUBICOL) ───────
+# Un archivo por salón, título "REPORTE CONSOLIDADO" en la primera fila y una
+# sola nota anual (0-20) por materia — sin desglose por bimestre. Cada colegio
+# trae su propia lista de columnas/materias; se agrupan las más granulares
+# (Álgebra/Aritmética/Geometría/Razonamiento Matemático, Plan Lector/
+# Razonamiento Verbal) en las 8 áreas ponderadas del índice de riesgo.
+# Columnas no reconocidas (Computación, Religión, Tutoría, IPM, competencias
+# transversales) se ignoran, igual que cualquier materia faltante hoy.
+MATERIAS_REPORTE_CONSOLIDADO: dict[str, str] = {
+    "ÁLGEBRA": "matematica", "ALGEBRA": "matematica",
+    "ARITMÉTICA": "matematica", "ARITMETICA": "matematica",
+    "GEOMETRÍA": "matematica", "GEOMETRIA": "matematica",
+    "RAZONAMIENTO MATEMÁTICO": "matematica", "RAZONAMIENTO MATEMATICO": "matematica",
+    "MATEMÁTICA": "matematica", "MATEMATICA": "matematica",
+    "COMUNICACIÓN": "comunicacion", "COMUNICACION": "comunicacion",
+    "PLAN LECTOR": "comunicacion",
+    "RAZONAMIENTO VERBAL": "comunicacion",
+    "PERSONAL SOCIAL": "personal_social",
+    "CIENCIA Y TECNOLOGÍA": "cta", "CIENCIA Y TECNOLOGIA": "cta",
+    "INGLÉS": "english", "INGLES": "english",
+    "EDUCACIÓN FÍSICA": "ed_fisica", "EDUCACION FISICA": "ed_fisica",
+    "DANZA": "arte",
+    "MÚSICA": "arte", "MUSICA": "arte",
+    "COMPORTAMIENTO": "conducta",
+}
+
+
+def _salon_desde_reporte_consolidado(texto: str) -> str:
+    """'PRIMARIA - 6° - A' → 'P6A'; 'SECUNDARIA - 3° - B' → '3B' (misma
+    convención de salón que usa el resto del pipeline: prefijo P solo en
+    primaria)."""
+    t = texto.strip().upper()
+    es_primaria = "PRIMARIA" in t and "SECUNDARIA" not in t
+    m = re.search(r"(\d+)\s*°?\s*-\s*([A-ZÑ])\b", t)
+    if m:
+        grado, seccion = m.group(1), m.group(2)
+    else:
+        m_grado = re.search(r"(\d+)", t)
+        m_secc  = re.search(r"\b([A-ZÑ])\s*$", t)
+        grado   = m_grado.group(1) if m_grado else "?"
+        seccion = m_secc.group(1) if m_secc else "A"
+    prefijo = "P" if es_primaria else ""
+    return f"{prefijo}{grado}{seccion}"
+
+
+_ROMANO_A_BIMESTRE = {"IV": 4, "III": 3, "II": 2, "I": 1}  # orden largo→corto: evita que "I" matchee dentro de "IV"/"III"
+
+
+def _bimestre_desde_titulo(titulo: str) -> int | None:
+    """'REPORTE CONSOLIDADO DE NOTAS - II BIMESTRE' → 2. None si el título
+    no trae bimestre (reporte puramente anual)."""
+    m = re.search(r"\b(IV|III|II|I)\s*BIMESTRE\b", titulo.strip().upper())
+    return _ROMANO_A_BIMESTRE[m.group(1)] if m else None
+
+
+def _parse_reporte_consolidado(df_raw: pd.DataFrame, filename: str) -> pd.DataFrame:
+    """
+    Un archivo por salón. El título (fila 0) indica el bimestre — p.ej.
+    "REPORTE CONSOLIDADO DE NOTAS - II BIMESTRE" — así que un mismo salón
+    trae 4 archivos, uno por bimestre, con notas distintas en cada uno
+    (confirmado: mismo alumno, mismo salón, valores diferentes entre
+    archivos). Cuando el título trae bimestre, la nota va a b{n}_{área}
+    (permite el modo predictivo B1-B3→B4, igual que CUBICOL); si el título
+    es puramente anual sin bimestre, va a pp_{área} (modo descriptivo).
+    """
+    salon_texto = str(df_raw.iloc[1, 0]) if len(df_raw) > 1 else ""
+    salon = _salon_desde_reporte_consolidado(salon_texto)
+    bimestre = _bimestre_desde_titulo(str(df_raw.iloc[0, 0]) if len(df_raw) > 0 else "")
+
+    # ── Fila de encabezados: la primera que contenga "APELLIDOS" ─────────────
+    header_idx = None
+    for i in range(min(8, len(df_raw))):
+        fila = df_raw.iloc[i].fillna("").astype(str).str.upper()
+        if fila.str.contains("APELLIDOS").any():
+            header_idx = i
+            break
+    if header_idx is None:
+        raise ValueError(f"No se encontró la fila de encabezados (N°/Apellidos) en {filename}")
+
+    header_row = df_raw.iloc[header_idx].fillna("")
+    col_area: dict[int, str] = {}
+    col_conducta: int | None = None
+    for col_i, val in header_row.items():
+        clave = MATERIAS_REPORTE_CONSOLIDADO.get(str(val).strip().upper())
+        if clave == "conducta":
+            col_conducta = col_i
+        elif clave:
+            col_area[col_i] = clave
+
+    claves = set(AREAS_ACADEMICAS)
+    registros: list[dict] = []
+
+    for i in range(header_idx + 1, len(df_raw)):
+        num_val = str(df_raw.iloc[i, 0]).strip()
+        if not num_val.replace(".", "", 1).isdigit():
+            continue
+        n_alumno = int(float(num_val))
+        nombre = str(df_raw.iloc[i, 1]).strip() if pd.notna(df_raw.iloc[i, 1]) else f"Alumno {n_alumno}"
+
+        record: dict = {"n_alumno": n_alumno, "nombre": nombre, "salon": salon}
+        for key in claves:
+            record[f"pp_{key}"] = None
+            for b_i in range(1, 5):
+                record[f"b{b_i}_{key}"] = None
+            record[f"tendencia_{key}"] = None
+
+        # Varias columnas pueden mapear a la misma área (p.ej. Álgebra +
+        # Aritmética + Geometría → matematica): se promedian entre sí.
+        por_area: dict[str, list[float]] = {}
+        for col_i, area in col_area.items():
+            if col_i >= len(df_raw.columns):
+                continue
+            try:
+                val = float(str(df_raw.iloc[i, col_i]).strip().replace(",", "."))
+            except (ValueError, TypeError):
+                continue
+            por_area.setdefault(area, []).append(val)
+        for area, vals in por_area.items():
+            promedio = float(np.mean(vals))
+            if bimestre is not None:
+                record[f"b{bimestre}_{area}"] = promedio
+            else:
+                record[f"pp_{area}"] = promedio
+
+        record["conducta_promedio"] = None
+        if col_conducta is not None and col_conducta < len(df_raw.columns):
+            try:
+                record["conducta_promedio"] = float(
+                    str(df_raw.iloc[i, col_conducta]).strip().replace(",", ".")
+                )
+            except (ValueError, TypeError):
+                pass
+
+        registros.append(record)
+
+    return pd.DataFrame(registros)
+
+
 # ─── Parser de conducta ───────────────────────────────────────────────────────
 
 def _detect_salon_from_content(df_raw: pd.DataFrame) -> str:
@@ -424,23 +570,33 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
     carpeta = Path(carpeta)
     advertencias: list[str] = []
 
-    # ── Detectar archivos ─────────────────────────────────────────────────────
-    # Leer tanto .xlsx como .xls (formato antiguo CUBICOL)
-    notas_files    = sorted(carpeta.glob("*Notas*.xlsx")) + sorted(carpeta.glob("*Notas*.xls"))
-    conducta_files = sorted(carpeta.glob("*Conducta*.xlsx")) + sorted(carpeta.glob("*Conducta*.xls"))
+    # ── Detectar archivos (case-insensitive: en Linux, a diferencia de
+    # Windows, el filesystem distingue mayúsculas — "notas" no matchea
+    # "*Notas*" — y ya vimos exportaciones con la palabra en minúscula) ──────
+    def _glob_ci(palabra: str) -> list[Path]:
+        palabra = palabra.lower()
+        return sorted(
+            p for p in list(carpeta.glob("*.xlsx")) + list(carpeta.glob("*.xls"))
+            if palabra in p.name.lower()
+        )
+
+    notas_files    = _glob_ci("notas")
+    conducta_files = _glob_ci("conducta")
 
     if not notas_files:
         raise FileNotFoundError(
-            "No se encontró ningún archivo con 'Notas' en el nombre. "
+            "No se encontró ningún archivo con 'notas' en el nombre. "
             "Verifica que el archivo subido incluya esa palabra (p.ej. 'Quinto A - Notas.xlsx')."
         )
 
     # ── Extraer nombre del colegio de la primera fila del primer Excel ────────
-    nombre_colegio = "Colegio"
+    # (En el formato "Reporte consolidado" la fila 0 es un título genérico,
+    # no el nombre del colegio — en ese caso se usa el de la carpeta.)
+    nombre_colegio = re.sub(r"^Colegio\s*\d+\s*-\s*", "", carpeta.name, flags=re.IGNORECASE).strip() or "Colegio"
     try:
         df_header = pd.read_excel(notas_files[0], header=None, nrows=2, dtype=str)
         val = str(df_header.iloc[0, 0]).strip()
-        if val and val.lower() not in ["nan", "none", ""]:
+        if val and val.lower() not in ["nan", "none", ""] and not val.upper().startswith("REPORTE CONSOLIDADO"):
             nombre_colegio = val.title()  # "JOSEPH AND MERY" → "Joseph And Mery"
     except Exception:
         pass
@@ -507,21 +663,53 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
         detalle = " | ".join(advertencias) if advertencias else "motivo desconocido"
         raise RuntimeError(f"No se pudo parsear ningún archivo de notas. Detalle: {detalle}")
 
-    # ── Unir notas + deduplicar por (salon, n_alumno) ────────────────────────
+    # ── Unir notas + agrupar repeticiones por (salon, n_alumno) ───────────────
+    # Un mismo alumno puede aparecer en más de un archivo del mismo salón
+    # (p.ej. "Reporte consolidado" exporta un archivo por corte del año, no
+    # un único workbook con desglose interno como CUBICOL). No se puede asumir
+    # que son duplicados exactos a descartar — se promedian las columnas
+    # numéricas: si de verdad son idénticas el promedio no cambia nada, y si
+    # difieren (varios cortes reales) da una estimación anual más robusta que
+    # quedarse con la primera al azar y perder las demás.
     df_notas = pd.concat(dfs_notas, ignore_index=True)
     before = len(df_notas)
-    df_notas = df_notas.drop_duplicates(subset=["salon", "n_alumno"], keep="first")
-    if len(df_notas) < before:
-        print(f"  Deduplicados {before - len(df_notas)} registros duplicados")
+    n_grupos = df_notas.groupby(["salon", "n_alumno"]).ngroups
+    if n_grupos < before:
+        print(f"  {before - n_grupos} alumno(s) aparecen en más de un archivo del mismo salón — promediando sus notas")
+        numeric_cols = [
+            c for c in df_notas.columns
+            if c.startswith(("pp_", "b1_", "b2_", "b3_", "b4_", "tendencia_")) or c == "conducta_promedio"
+        ]
+        agg = {c: "mean" for c in numeric_cols}
+        for c in df_notas.columns:
+            if c not in agg and c not in ("salon", "n_alumno"):
+                agg[c] = "first"
+        df_notas = df_notas.groupby(["salon", "n_alumno"], as_index=False).agg(agg)
 
     # ── Unir conducta ─────────────────────────────────────────────────────────
+    # Algunos formatos (p.ej. "Reporte consolidado", vía columna COMPORTAMIENTO)
+    # ya traen conducta_promedio calculada en el propio parser de notas — el
+    # merge con archivos externos de conducta no debe pisar esos valores,
+    # solo rellenar los que falten.
+    tiene_conducta_propia = "conducta_promedio" in df_notas.columns
     if dfs_conducta:
         df_cond = pd.concat(dfs_conducta, ignore_index=True)
-        df = df_notas.merge(df_cond[["n_alumno", "salon", "conducta_promedio"]],
-                             on=["n_alumno", "salon"], how="left")
+        if tiene_conducta_propia:
+            df = df_notas.merge(
+                df_cond[["n_alumno", "salon", "conducta_promedio"]].rename(
+                    columns={"conducta_promedio": "conducta_promedio_externa"}
+                ),
+                on=["n_alumno", "salon"], how="left",
+            )
+            df["conducta_promedio"] = df["conducta_promedio"].fillna(df["conducta_promedio_externa"])
+            df = df.drop(columns=["conducta_promedio_externa"])
+        else:
+            df = df_notas.merge(df_cond[["n_alumno", "salon", "conducta_promedio"]],
+                                 on=["n_alumno", "salon"], how="left")
     else:
         df = df_notas.copy()
-        df["conducta_promedio"] = None
+        if not tiene_conducta_propia:
+            df["conducta_promedio"] = None
 
     # ── Features derivadas ────────────────────────────────────────────────────
     # Número de materias clave con PP = C (≤13)

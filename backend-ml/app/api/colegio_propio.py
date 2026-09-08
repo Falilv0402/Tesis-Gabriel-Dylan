@@ -94,11 +94,17 @@ COLEGIO_SCRIPTS = _resolve_repo_path("modelo", "colegio")
 
 
 def _load_artefacto(codigo_ie: str) -> dict:
-    # Intentar con el código tal cual, luego con cero inicial (0249) y sin él (249)
+    # Intentar con el código tal cual, sin ceros iniciales, y con cero(s)
+    # iniciales para las dos convenciones vistas: códigos cortos históricos
+    # (249 → 0249, 4 dígitos) y códigos modulares reales de MINEDU (831305 →
+    # 0831305, 7 dígitos) — el frontend normaliza con parseInt() en varios
+    # lugares, lo que quita el cero inicial antes de llamar a la API.
+    sin_ceros = codigo_ie.lstrip("0") or "0"
     candidates = [
         MODEL_DIR / f"colegio_{codigo_ie}.pkl",
-        MODEL_DIR / f"colegio_{codigo_ie.zfill(4)}.pkl",   # 249 → 0249
-        MODEL_DIR / f"colegio_{codigo_ie.lstrip('0')}.pkl", # 0249 → 249
+        MODEL_DIR / f"colegio_{sin_ceros}.pkl",
+        MODEL_DIR / f"colegio_{sin_ceros.zfill(4)}.pkl",  # 249 → 0249
+        MODEL_DIR / f"colegio_{sin_ceros.zfill(7)}.pkl",  # 831305 → 0831305
     ]
     for path in candidates:
         if path.exists():

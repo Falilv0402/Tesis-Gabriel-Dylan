@@ -45,12 +45,17 @@ FEATURES_EARLY = [
     f"b{n}_{area}" for area in AREAS_ACADEMICAS for n in (1, 2, 3)
 ] + ["conducta_promedio"]
 
-# Si no hay suficientes bimestres, fallback al PP (modo descriptivo)
+# Si no hay suficientes bimestres, fallback al PP (modo descriptivo).
+# IMPORTANTE: pp_matematica y pp_comunicacion se EXCLUYEN a propósito — el
+# target (riesgo_target) en este modo se define exactamente como
+# "pp_matematica <= 13 OR pp_comunicacion <= 13" (ver calcular_riesgo en
+# parse_excels.py), así que incluirlas como features es circular (el modelo
+# predice su propia entrada, AUC ≈ 1.0 sin ningún valor real). El modelo
+# predice riesgo en Matemática/Comunicación a partir de OTRAS señales.
 FEATURES_PP = [
-    f"pp_{area}" for area in AREAS_ACADEMICAS
+    f"pp_{area}" for area in AREAS_ACADEMICAS if area not in ("matematica", "comunicacion")
 ] + [
     "conducta_promedio", "n_materias_c", "promedio_materias",
-    "tendencia_matematica", "tendencia_comunicacion",
 ]
 
 
@@ -76,9 +81,13 @@ def train(carpeta: str, codigo_ie: str) -> None:
     print("\n[2/4] Preparando features (modo predictivo B1-B3 → B4)...")
 
     # ── Target: riesgo en el 4.° bimestre (lo que queremos predecir) ──────────
-    # Usamos B4 si está disponible, sino PP como fallback
-    mat_b4  = next((c for c in ["b4_matematica","b4_mat_prim"] if c in df.columns), None)
-    com_b4  = next((c for c in ["b4_comunicacion","b4_lenguaje"] if c in df.columns), None)
+    # Usamos B4 si está disponible, sino PP como fallback. No basta con que la
+    # COLUMNA exista (algunos formatos, como "Reporte consolidado" o el
+    # consolidado anual de CUBICOL, la crean vacía porque no hay desglose por
+    # bimestre) — hace falta que tenga datos reales, o el target degenera:
+    # con fillna(99) ningún alumno queda "en riesgo" nunca (99 > 13 siempre).
+    mat_b4  = next((c for c in ["b4_matematica","b4_mat_prim"] if c in df.columns and df[c].notna().sum() >= 5), None)
+    com_b4  = next((c for c in ["b4_comunicacion","b4_lenguaje"] if c in df.columns and df[c].notna().sum() >= 5), None)
     mat_pp  = next((c for c in ["pp_matematica","pp_mat_prim"] if c in df.columns), None)
     com_pp  = next((c for c in ["pp_comunicacion","pp_lenguaje"] if c in df.columns), None)
 
@@ -108,14 +117,19 @@ def train(carpeta: str, codigo_ie: str) -> None:
         tend = f"tend_temprana_{materia}"
         if b1 in df.columns and b3 in df.columns:
             df[tend] = df[b3].fillna(df[b1]) - df[b1].fillna(df[b3])
-            if tend not in early_available:
+            # Igual que con FEATURES_EARLY: si b1/b3 no tienen datos reales
+            # (formato solo-anual), tend queda enteramente NaN — no sirve
+            # como feature y no debe contarse para el umbral de "≥3 features".
+            if tend not in early_available and df[tend].notna().sum() >= 5:
                 early_available.append(tend)
 
     if len(early_available) >= 3:
         available = early_available
     else:
-        # Fallback a PP si no hay bimestres
-        available = [f for f in FEATURES_PP if f in df.columns]
+        # Fallback a PP si no hay bimestres. Igual que arriba: una columna
+        # sin datos reales (100% NaN) no se puede imputar por mediana (la
+        # mediana de puro NaN es NaN) y rompe el entrenamiento — se descarta.
+        available = [f for f in FEATURES_PP if f in df.columns and df[f].notna().sum() >= 5]
         modo = "descriptivo (sin bimestres suficientes)"
 
     print(f"      Features usadas ({len(available)}): {available}")
