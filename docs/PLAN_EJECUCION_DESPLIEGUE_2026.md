@@ -83,7 +83,7 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 - [x] Los 4 colegios (0249, 0831305, 0864785, 9001) entrenados y verificados respondiendo correctamente en producción (`api.satraapp.com`)
 - [x] **Selector de colegios corregido** (2026-09-08): `get_colegios()` ahora también escanea `modelo/model/colegio_*.pkl` y agrega los que no están en EM2022. Se agregó `--distrito` (opcional) a `train_colegio_model.py`; los 3 colegios nuevos se reentrenaron con su distrito real (Comas, La Victoria, La Perla). Los selectores de `UsuariosView.tsx` y `AuthView.tsx` muestran nombre real + IE + distrito. Verificado en producción: los 3 colegios aparecen en `/v1/colegios` con sus datos correctos.
 - [x] Código real de La Perla: **no se busca más** (decisión del usuario) — se mantiene el temporal `9001` indefinidamente salvo que el colegio lo provea directamente.
-- [ ] **Pendiente**: las carpetas `modelo/data/Colegio 2/3/4 - .../` con los Excel originales (nombres reales de alumnos) quedaron sin subir a git — decisión pendiente de si deben versionarse (PII de estudiantes en el historial de git) o mantenerse solo localmente
+- [x] Carpetas `modelo/data/Colegio 2/3/4 - .../` (Excel originales, nombres reales de alumnos) versionadas en git (decisión de Mathias: sí subirlas, igual que Joseph & Mary) — commit `e762946`
 
 ## FASE 5 — Cerrar historias de usuario pendientes ✅ código desplegado, 🟡 falta 1 migración manual
 
