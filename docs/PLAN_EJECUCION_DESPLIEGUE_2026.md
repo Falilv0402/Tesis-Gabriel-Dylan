@@ -85,16 +85,20 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 - [x] Código real de La Perla: **no se busca más** (decisión del usuario) — se mantiene el temporal `9001` indefinidamente salvo que el colegio lo provea directamente.
 - [ ] **Pendiente**: las carpetas `modelo/data/Colegio 2/3/4 - .../` con los Excel originales (nombres reales de alumnos) quedaron sin subir a git — decisión pendiente de si deben versionarse (PII de estudiantes en el historial de git) o mantenerse solo localmente
 
-## FASE 5 — Cerrar historias de usuario pendientes
+## FASE 5 — Cerrar historias de usuario pendientes ✅ código desplegado, 🟡 falta 1 migración manual
 
-- [ ] **HU003** — auto-logout por inactividad (30 min)
-- [ ] **HU005** — UI para cambiar el rol de un usuario existente
-- [ ] **HU006** — filtro de auditoría por usuario específico y rango de fechas
-- [ ] **HU019** — alerta proactiva/automática cuando se detecta un nuevo caso ALTO (no solo manual)
-- [ ] **HU024/025/026** — seguimiento histórico multi-periodo y comparación entre periodos (requiere decidir cómo versionar "periodos" en el modelo de colegio propio, que hoy es solo bimestral de un año)
-- [ ] **HU030** — decidir si se implementa de verdad un cron de actualización periódica o se retira la funcionalidad cosmética actual
-- [ ] **HU033** — evaluar si aplica exponer más "ajuste de parámetros" o si los umbrales ALTO/MEDIO ya satisfacen la intención de la HU
-- [ ] **HU034** — versionado real de modelos: usar la tabla `modelos_versiones` (ya existe en Supabase, nunca se escribe) para guardar historial cada vez que se reentrena
+- [x] **HU003** — auto-logout por inactividad (30 min), `useAuth.ts` — detecta mousemove/keydown/scroll/touchstart y cierra sesión sola si no hay actividad
+- [x] **HU005** — rol editable como `<select>` inline en `UsuariosView.tsx` (superadmin cambia cualquiera; admin cambia roles no-superadmin de su colegio), función `cambiarRolUsuario` en `useAdmin.ts`
+- [x] **HU006** — `AuditPanel` en `UsuariosView.tsx` con filtros de usuario y rango de fechas (desde/hasta) + botón "Limpiar"
+- [x] **HU019** — alerta proactiva: al reentrenar, `colegio_propio.py` compara nivel de riesgo antes/después por alumno y dispara la función edge `send-alert` para los que subieron a ALTO (best-effort, no bloquea el entrenamiento si falla)
+- [x] **HU034** — cada reentrenamiento se registra en `modelos_versiones` (`_registrar_version_modelo` en `colegio_propio.py`)
+- [x] **HU024/HU026** — panel "Histórico de reentrenamientos" en `DatosView.tsx`: gráfico de línea (ALTO/MEDIO/BAJO por versión) + tabla + export CSV (HU025), leyendo `modelos_versiones` vía `loadModelosVersiones` en `useAdmin.ts`
+- [x] Seguridad reforzada de paso: `/v1/colegio/{ie}/procesar` y `/resumen` ahora exigen JWT válido + rol admin/superadmin de esa IE (antes de esto solo `/procesar` estaba protegido)
+- [ ] **Migración `supabase/migrations/0012_modelos_versiones_colegio.sql` pendiente de aplicar** — el MCP de Supabase sigue desconectado en esta sesión; hay que correrla a mano en el SQL Editor de Supabase (el archivo trae las instrucciones al final). Sin esto, el panel de histórico se ve pero queda vacío (el código tolera el error y no rompe nada).
+- [x] Backend redesplegado en Hetzner (`docker compose up -d --build backend`), verificado `GET /docs` → 200 y logs limpios
+- [x] Frontend: `npx tsc --noEmit` limpio + `npm run build` exitoso, commit `de5348a` pusheado a `main` → Vercel redeployando
+- [ ] **HU030** — decidir si se implementa de verdad un cron de actualización periódica o se retira la funcionalidad cosmética actual (`scheduleFreq`/`saveSchedule`/`nextUpdate`/`scheduleMsg`, código muerto en 6 archivos — deprioritizado, no urgente)
+- [x] **HU033** — evaluado: los sliders de umbral ALTO/MEDIO ya existentes satisfacen la intención de la HU sin exponer hiperparámetros riesgosos del modelo; no se necesita más UI
 
 ## FASE 6 — Rediseño de frontend orientado a acción/insight
 
