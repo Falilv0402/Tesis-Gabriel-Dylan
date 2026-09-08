@@ -8,40 +8,21 @@ export interface ToastEntry {
   type: "success" | "error" | "info";
 }
 
-export interface NotifEntry {
-  id: number;
-  msg: string;
-  type: string;
-  ts: Date;
-  read: boolean;
-}
-
 export function useToast() {
   const [toasts,          setToasts]          = useState<ToastEntry[]>([]);
-  const [notifInbox,      setNotifInbox]      = useState<NotifEntry[]>([]);
-  const [notifCount,      setNotifCount]      = useState(0);
+  // Controla el panel del bell — el contenido real (notificaciones entre
+  // compañeros del mismo colegio) vive en useNotificaciones, no aquí.
   const [showNotifInbox,  setShowNotifInbox]  = useState(false);
 
   function toast(msg: string, type: ToastEntry["type"] = "success") {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, msg, type }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
-    if (type !== "success") {
-      setNotifInbox((prev) => [{ id, msg, type, ts: new Date(), read: false }, ...prev.slice(0, 49)]);
-      setNotifCount((n) => n + 1);
-    }
-  }
-
-  function clearNotifs() {
-    setNotifInbox([]);
-    setNotifCount(0);
   }
 
   return {
     toasts,
-    notifInbox,
-    notifCount, setNotifCount,
     showNotifInbox, setShowNotifInbox,
-    toast, clearNotifs,
+    toast,
   };
 }

@@ -134,6 +134,7 @@ export function colegioToStudent(a: AlumnoColegio, distrito: string | null): Stu
   return {
     id:                  colegioStudentId(a),
     id_ie:               a.codigo_ie,
+    nombre:              a.nombre,
     sexo:                "—",
     ise:                 0,
     distrito:            distrito ?? "—",

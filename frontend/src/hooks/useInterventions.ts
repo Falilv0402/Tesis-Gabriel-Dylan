@@ -30,6 +30,11 @@ export function useInterventions(
   role:             string,
   toast:            (msg: string, type?: "success" | "error" | "info") => void,
   insertAudit:      (accion: string, tabla?: string, detalle?: object) => Promise<void>,
+  autorNombre?:     string,
+  crearNotificacion?: (params: {
+    codigoIe: string | null | undefined; tipo: "anotacion" | "hito";
+    estudianteId: string; estudianteNombre: string; mensaje: string; autorNombre: string;
+  }) => Promise<void>,
 ) {
   const [interventions,      setInterventions]      = useState<Intervention[]>([]);
   const [tipoIntervencion,   setTipoIntervencion]   = useState<"tutoria" | "reunion" | "derivacion" | "seguimiento">("tutoria");
@@ -40,7 +45,7 @@ export function useInterventions(
   const [isGeneratingStudentPdf, setIsGeneratingStudentPdf] = useState(false);
 
   // Annotations delegated to sub-hook
-  const annotationsHook = useAnnotations(session, selected, insertAudit, toast);
+  const annotationsHook = useAnnotations(session, selected, insertAudit, toast, autorNombre ?? "Alguien", crearNotificacion);
 
   // ── Stats ────────────────────────────────────────────────────────────────
   const interventionStats = useMemo(() => {

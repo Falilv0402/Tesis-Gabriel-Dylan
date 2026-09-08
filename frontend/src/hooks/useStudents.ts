@@ -23,6 +23,11 @@ export function useStudents(
   // seleccionado proviene de ese modelo (no del dataset EM 2022). Se inyecta
   // aquí para que el plan de hitos y demás features compartidas operen sobre él.
   selectedOverride?: Student | undefined,
+  autorNombre?: string,
+  crearNotificacion?: (params: {
+    codigoIe: string | null | undefined; tipo: "anotacion" | "hito";
+    estudianteId: string; estudianteNombre: string; mensaje: string; autorNombre: string;
+  }) => Promise<void>,
 ) {
   const [students,          setStudents]          = useState<Student[]>([]);
   const [totalStudents,     setTotalStudents]      = useState(0);
@@ -274,6 +279,15 @@ export function useStudents(
         setPlanMilestones((prev) =>
           prev.map((m) => m.id === tempId ? { ...m, id: data.id as string } : m)
         );
+        const nombre = selected.nombre ?? `Estudiante ${selected.id.slice(-4).padStart(4, "0")}`;
+        void crearNotificacion?.({
+          codigoIe: selected.id_ie,
+          tipo: "hito",
+          estudianteId: selected.id,
+          estudianteNombre: nombre,
+          mensaje: `${autorNombre ?? "Alguien"} agendó un hito para ${nombre}: "${texto}" (${fecha}).`,
+          autorNombre: autorNombre ?? "Alguien",
+        });
       } else {
         // Roll back if insert failed
         setPlanMilestones((prev) => prev.filter((m) => m.id !== tempId));

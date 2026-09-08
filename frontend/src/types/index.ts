@@ -5,6 +5,7 @@ export type UserRole  = "superadmin" | "admin" | "director" | "coordinador";
 export type Student = {
   id: string;
   id_ie?: string;
+  nombre?: string;
   sexo: string;
   ise: number;
   distrito: string;

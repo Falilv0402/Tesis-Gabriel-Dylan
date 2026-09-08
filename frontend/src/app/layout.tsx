@@ -3,7 +3,7 @@ import "leaflet/dist/leaflet.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "P20261012 - Riesgo Academico",
+  title: "SATRA — Sistema de Alerta Temprana de Riesgo Académico",
   description: "Sistema de alerta temprana para riesgo academico"
 };
 

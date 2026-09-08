@@ -16,11 +16,22 @@ export type Annotation = {
   es_propia?: boolean;
 };
 
+interface CrearNotificacionParams {
+  codigoIe: string | null | undefined;
+  tipo: "anotacion" | "hito";
+  estudianteId: string;
+  estudianteNombre: string;
+  mensaje: string;
+  autorNombre: string;
+}
+
 export function useAnnotations(
   session:     User | null,
   selected:    Student | undefined,
   insertAudit: (accion: string, tabla?: string, detalle?: object) => Promise<void>,
   toast:       (msg: string, type?: "success" | "error" | "info") => void,
+  autorNombre: string,
+  crearNotificacion?: (params: CrearNotificacionParams) => Promise<void>,
 ) {
   const [annotations,       setAnnotations]       = useState<Annotation[]>([]);
   const [annotationText,    setAnnotationText]    = useState("");
@@ -66,6 +77,15 @@ export function useAnnotations(
       await loadAnnotations(selected.id);
       toast("Anotación guardada.");
       await insertAudit("Guardar anotacion", "anotaciones", { estudiante_id: selected.id });
+      const nombre = selected.nombre ?? `Estudiante ${selected.id.slice(-4).padStart(4, "0")}`;
+      void crearNotificacion?.({
+        codigoIe: selected.id_ie,
+        tipo: "anotacion",
+        estudianteId: selected.id,
+        estudianteNombre: nombre,
+        mensaje: `${autorNombre} agregó una anotación sobre ${nombre}.`,
+        autorNombre,
+      });
     } else {
       toast("Error al guardar la anotación.", "error");
     }

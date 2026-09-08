@@ -12,6 +12,7 @@ import { useModelData } from "@/hooks/useModelData";
 import { useStudents } from "@/hooks/useStudents";
 import { useInterventions } from "@/hooks/useInterventions";
 import { useToast } from "@/hooks/useToast";
+import { useNotificaciones } from "@/hooks/useNotificaciones";
 
 import { navItems, apiUrl } from "@/lib/constants";
 import { exportCsv, exportXlsx, exportPdf } from "@/lib/exports";
@@ -47,15 +48,19 @@ export default function Page() {
   const [selectedColegioId, setSelectedColegioId] = useState("");
 
   const {
-    toasts, notifInbox, notifCount, setNotifCount,
+    toasts,
     showNotifInbox, setShowNotifInbox,
-    toast, clearNotifs,
+    toast,
   } = useToast();
 
   // ── Hooks ─────────────────────────────────────────────────────────
   const auth = useAuth(toast);
   const admin = useAdmin(auth.session, auth.role, tab, toast, auth.insertAudit, auth.profileCodigoIe);
   const modelData = useModelData(admin.apiConnected, admin.setApiConnected, toast);
+  const notificaciones = useNotificaciones(auth.session);
+  const autorNombreActual = auth.profileNombre
+    ? `${auth.profileNombre}${auth.profileApellidos ? " " + auth.profileApellidos : ""}`
+    : (auth.session?.email?.split("@")[0] ?? "Alguien");
 
   // Datos del modelo interno del colegio (solo si la IE del usuario tiene uno).
   const colegio = useColegio(auth.profileCodigoIe);
@@ -81,6 +86,7 @@ export default function Page() {
     admin.apiConnected, admin.setApiConnected,
     toast, auth.insertAudit,
     colegio.hasModel ? colegioSelectedStudent : undefined,
+    autorNombreActual, notificaciones.crearNotificacion,
   );
 
   // Estudiante "activo" para las features compartidas (anotaciones, plan,
@@ -91,7 +97,8 @@ export default function Page() {
   const interventions = useInterventions(
     auth.session, activeSelected,
     auth.profileCodigoIe, auth.profileDistrito,
-    "distrito", auth.role, toast, auth.insertAudit
+    "distrito", auth.role, toast, auth.insertAudit,
+    autorNombreActual, notificaciones.crearNotificacion,
   );
 
   // Modelos de colegio entrenados (para que el superadmin los vea en Modelo ML).
@@ -293,9 +300,9 @@ export default function Page() {
                 </span>
               </span>
             )}
-            <button className="notif-bell-btn" onClick={() => { setShowNotifInbox((v) => !v); setNotifCount(0); }} title="Bandeja de notificaciones">
+            <button className="notif-bell-btn" onClick={() => setShowNotifInbox((v) => !v)} title="Notificaciones del equipo">
               <Bell size={18} />
-              {notifCount > 0 && <span className="notif-badge">{notifCount}</span>}
+              {notificaciones.unreadCount > 0 && <span className="notif-badge">{notificaciones.unreadCount}</span>}
             </button>
             <button className="user-badge-btn" onClick={auth.openProfilePanel} title="Editar perfil">
               <Avatar nombre={auth.profileNombre} apellidos={auth.profileApellidos} email={auth.session.email ?? ""} color={auth.profileAvatarColor} size={32} />
@@ -314,24 +321,35 @@ export default function Page() {
           <div className="notif-inbox-overlay" onClick={() => setShowNotifInbox(false)}>
             <div className="notif-inbox" onClick={(e) => e.stopPropagation()}>
               <div className="notif-inbox-header">
-                <Bell size={16} /><strong>Notificaciones</strong>
+                <Bell size={16} /><strong>Notificaciones del equipo</strong>
                 <button className="notif-inbox-close" onClick={() => setShowNotifInbox(false)}><X size={16} /></button>
               </div>
-              {notifInbox.length === 0 ? (
-                <div className="notif-inbox-empty">Sin notificaciones recientes</div>
+              {notificaciones.notificaciones.length === 0 ? (
+                <div className="notif-inbox-empty">
+                  Sin notificaciones — te avisamos aquí cuando alguien de tu colegio agregue una anotación o agende un hito.
+                </div>
               ) : (
                 <ul className="notif-inbox-list">
-                  {notifInbox.map((n) => (
-                    <li key={n.id} className={`notif-inbox-item notif-${n.type}${n.read ? " notif-read" : ""}`}>
-                      <span className="notif-inbox-msg">{n.msg}</span>
-                      <span className="notif-inbox-ts">{n.ts.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" })}</span>
+                  {notificaciones.notificaciones.map((n) => (
+                    <li
+                      key={n.id}
+                      className={`notif-inbox-item notif-info${n.leido ? " notif-read" : ""}`}
+                      onClick={() => !n.leido && void notificaciones.marcarLeida(n.id)}
+                      style={{ cursor: n.leido ? "default" : "pointer" }}
+                    >
+                      <span className="notif-inbox-msg">
+                        {n.tipo === "hito" ? "📅 " : "📝 "}{n.mensaje}
+                      </span>
+                      <span className="notif-inbox-ts">
+                        {new Date(n.created_at).toLocaleString("es-PE", { dateStyle: "short", timeStyle: "short" })}
+                      </span>
                     </li>
                   ))}
                 </ul>
               )}
-              {notifInbox.length > 0 && (
-                <button className="notif-inbox-clear" onClick={clearNotifs}>
-                  Limpiar bandeja
+              {notificaciones.unreadCount > 0 && (
+                <button className="notif-inbox-clear" onClick={() => void notificaciones.marcarTodasLeidas()}>
+                  Marcar todas como leídas
                 </button>
               )}
             </div>
