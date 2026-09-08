@@ -1,8 +1,11 @@
 "use client";
 
 import { RefObject } from "react";
-import { Upload, CheckCircle2, AlertTriangle, School, Loader, Info, Cpu, ShieldAlert } from "lucide-react";
-import { Panel, Kpi } from "@/components/ui/Primitives";
+import { Upload, CheckCircle2, AlertTriangle, School, Loader, Info, Cpu, ShieldAlert, Download } from "lucide-react";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} from "recharts";
+import { Panel, Kpi, EmptyState } from "@/components/ui/Primitives";
 import { ConfusionMatrix } from "@/components/charts/ConfusionMatrix";
 import { RocMiniChart } from "@/components/charts/RocMiniChart";
 import type { Metrics, Evaluation } from "@/types";
@@ -62,6 +65,12 @@ interface DatosViewProps {
     por_nivel: Record<string, number>;
     advertencias_carga: string[];
   } | null;
+  // HU024/HU025/HU026: histórico de reentrenamientos del colegio actual.
+  modelosVersiones: {
+    id: string; version: string; created_at: string;
+    n_alumnos: number | null; n_alto: number | null; n_medio: number | null; n_bajo: number | null;
+    accuracy: number | null; auc_roc: number | null;
+  }[];
 }
 
 export function DatosView({
@@ -78,6 +87,7 @@ export function DatosView({
   em2022Metrics,
   em2022Evaluation,
   colegioModelStats,
+  modelosVersiones,
 }: DatosViewProps) {
 
   // El panel de carga es exclusivo del superadmin: usa la IE que escribe.
@@ -332,6 +342,97 @@ export function DatosView({
               </>
             )}
           </div>
+        </Panel>
+      )}
+
+      {/* ── Panel: Histórico de reentrenamientos (HU024/HU025/HU026/HU034) ── */}
+      {colegioModelStats && !isEM2022 && (
+        <Panel title="Histórico de reentrenamientos">
+          {modelosVersiones.length === 0 ? (
+            <EmptyState message="Aún no hay versiones registradas. Cada vez que se cargue un Excel nuevo, quedará un registro aquí." />
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ width: "100%", height: 220 }}>
+                <ResponsiveContainer>
+                  <LineChart
+                    data={[...modelosVersiones]
+                      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                      .map((v) => ({
+                        fecha: new Date(v.created_at).toLocaleDateString("es-PE", { day: "2-digit", month: "short" }),
+                        ALTO: v.n_alto,
+                        MEDIO: v.n_medio,
+                        BAJO: v.n_bajo,
+                      }))}
+                    margin={{ top: 4, right: 8, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="fecha" tick={{ fontSize: 10.5 }} />
+                    <YAxis tick={{ fontSize: 10.5 }} allowDecimals={false} />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Line type="monotone" dataKey="ALTO" stroke="#dc2626" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="MEDIO" stroke="#d97706" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="BAJO" stroke="#16a34a" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", color: "var(--text-muted)", borderBottom: "1px solid var(--border)" }}>
+                      <th style={{ padding: "6px 8px", fontWeight: 700 }}>Fecha</th>
+                      <th style={{ padding: "6px 8px", fontWeight: 700 }}>Versión</th>
+                      <th style={{ padding: "6px 8px", fontWeight: 700 }}>Alumnos</th>
+                      <th style={{ padding: "6px 8px", fontWeight: 700, color: "#dc2626" }}>Alto</th>
+                      <th style={{ padding: "6px 8px", fontWeight: 700, color: "#d97706" }}>Medio</th>
+                      <th style={{ padding: "6px 8px", fontWeight: 700, color: "#16a34a" }}>Bajo</th>
+                      <th style={{ padding: "6px 8px", fontWeight: 700 }}>AUC</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modelosVersiones.map((v) => (
+                      <tr key={v.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ padding: "6px 8px" }}>{new Date(v.created_at).toLocaleDateString("es-PE", { dateStyle: "medium" })}</td>
+                        <td style={{ padding: "6px 8px" }}>{v.version || "—"}</td>
+                        <td style={{ padding: "6px 8px" }}>{v.n_alumnos ?? "—"}</td>
+                        <td style={{ padding: "6px 8px", color: "#dc2626", fontWeight: 600 }}>{v.n_alto ?? "—"}</td>
+                        <td style={{ padding: "6px 8px", color: "#d97706", fontWeight: 600 }}>{v.n_medio ?? "—"}</td>
+                        <td style={{ padding: "6px 8px", color: "#16a34a", fontWeight: 600 }}>{v.n_bajo ?? "—"}</td>
+                        <td style={{ padding: "6px 8px" }}>{v.auc_roc != null ? v.auc_roc.toFixed(3) : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const header = "fecha,version,n_alumnos,n_alto,n_medio,n_bajo,accuracy,auc_roc";
+                  const rows = modelosVersiones.map((v) =>
+                    [v.created_at, v.version, v.n_alumnos, v.n_alto, v.n_medio, v.n_bajo, v.accuracy, v.auc_roc].join(",")
+                  );
+                  const csv = [header, ...rows].join("\n");
+                  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `historico_modelo_${colegioModelStats?.nombre_colegio || "colegio"}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, alignSelf: "flex-start",
+                  padding: "6px 12px", fontSize: 12, fontWeight: 600, color: "var(--navy)",
+                  background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8,
+                  cursor: "pointer",
+                }}
+              >
+                <Download size={14} /> Exportar CSV
+              </button>
+            </div>
+          )}
         </Panel>
       )}
 

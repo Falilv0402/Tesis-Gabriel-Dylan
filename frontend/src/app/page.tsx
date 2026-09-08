@@ -522,6 +522,7 @@ export default function Page() {
               em2022Metrics={modelData.metrics}
               em2022Evaluation={modelData.evaluation}
               colegioModelStats={admin.colegioModelStats}
+              modelosVersiones={admin.modelosVersiones}
             />
           )}
 
@@ -561,6 +562,7 @@ export default function Page() {
               onCreateUser={() => void admin.handleCreateUser(auth.translateAuthError, actionBusy, setActionBusy)}
               onDesactivar={(id) => void admin.desactivarUsuario(id)}
               onActivar={(id) => void admin.activarUsuario(id)}
+              onCambiarRol={(id, rol) => void admin.cambiarRolUsuario(id, rol)}
               onRefreshUsers={() => void admin.loadDbUsers()}
               onRefreshAudit={() => void admin.loadDbAudit()}
             />

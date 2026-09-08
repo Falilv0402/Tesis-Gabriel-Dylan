@@ -251,12 +251,35 @@ export function useAuth(
     setAuthBusy(false);
   }
 
-  async function handleLogout() {
-    abortLoadProfile.current = true; 
-    await insertAudit("Cierre de sesion");
+  async function handleLogout(motivo: string = "Cierre de sesion") {
+    abortLoadProfile.current = true;
+    await insertAudit(motivo);
     await supabase.auth.signOut();
     setSession(null);
   }
+
+  // ── Cierre de sesión por inactividad (30 min) ────────────────────────────
+  // Sin actividad del usuario (mouse, teclado, click, touch, scroll) por más
+  // de 30 minutos, la sesión se cierra automáticamente — HU003.
+  const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
+  useEffect(() => {
+    if (!session) return;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const reset = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        void handleLogout("Cierre de sesion por inactividad");
+      }, INACTIVITY_LIMIT_MS);
+    };
+    const eventos: (keyof WindowEventMap)[] = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"];
+    eventos.forEach((ev) => window.addEventListener(ev, reset, { passive: true }));
+    reset();
+    return () => {
+      clearTimeout(timeoutId);
+      eventos.forEach((ev) => window.removeEventListener(ev, reset));
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id]);
 
   // ── Effects ───────────────────────────────────────────────────────────────
   useEffect(() => {

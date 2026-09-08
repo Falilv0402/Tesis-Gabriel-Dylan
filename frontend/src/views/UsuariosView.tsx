@@ -61,6 +61,7 @@ interface UsuariosViewProps {
   onCreateUser: () => void;
   onDesactivar: (id: string) => void;
   onActivar: (id: string) => void;
+  onCambiarRol: (id: string, nuevoRol: string) => void;
   onRefreshUsers: () => void;
   onRefreshAudit: () => void;
 }
@@ -77,7 +78,7 @@ export function UsuariosView({
   newUserColegioIe, setNewUserColegioIe,
   distritosList, authBusy,
   colegiosList,
-  onCreateUser, onDesactivar, onActivar, onRefreshUsers, onRefreshAudit,
+  onCreateUser, onDesactivar, onActivar, onCambiarRol, onRefreshUsers, onRefreshAudit,
 }: UsuariosViewProps) {
   const isAdminIE = role === "admin"; // admin de colegio (no superadmin)
   return (
@@ -91,9 +92,25 @@ export function UsuariosView({
             <tr key={u.id}>
               <td>{u.nombre ?? "—"}</td>
               <td>{u.email}</td>
-              <td><span className={`role-tag ${u.rol}`}>
-                {u.rol === "superadmin" ? "Super Admin" : u.rol === "admin" ? "Admin IE" : u.rol === "director" ? "Director" : "Coordinador"}
-              </span></td>
+              <td>
+                {(role === "superadmin" || (role === "admin" && u.rol !== "superadmin")) && u.id !== session.id ? (
+                  <select
+                    className={`role-tag ${u.rol}`}
+                    style={{ border: "none", cursor: "pointer", fontFamily: "inherit" }}
+                    value={u.rol}
+                    onChange={(e) => onCambiarRol(u.id, e.target.value)}
+                  >
+                    <option value="director">Director</option>
+                    <option value="coordinador">Coordinador</option>
+                    <option value="admin">Admin IE</option>
+                    {role === "superadmin" && <option value="superadmin">Super Admin</option>}
+                  </select>
+                ) : (
+                  <span className={`role-tag ${u.rol}`}>
+                    {u.rol === "superadmin" ? "Super Admin" : u.rol === "admin" ? "Admin IE" : u.rol === "director" ? "Director" : "Coordinador"}
+                  </span>
+                )}
+              </td>
               <td>
                 {colegioNombre ? (
                   <span style={{ fontSize: 12, fontWeight: 600, color: "var(--navy)" }}>{colegioNombre}</span>
@@ -272,10 +289,21 @@ function getBadgeStyle(accion: string) {
 
 function AuditPanel({ dbAudit, onRefresh }: { dbAudit: AuditEvent[]; onRefresh: () => void }) {
   const [activeFilter, setActiveFilter] = useState<FilterId>("todos");
+  // HU006: filtrar auditoría por usuario (nombre o email) y rango de fechas.
+  const [usuarioQuery, setUsuarioQuery] = useState("");
+  const [fechaDesde,   setFechaDesde]   = useState("");
+  const [fechaHasta,   setFechaHasta]   = useState("");
 
-  const filtered = activeFilter === "todos"
-    ? dbAudit
-    : dbAudit.filter((e) => getFilterId(e.accion) === activeFilter);
+  const filtered = dbAudit
+    .filter((e) => activeFilter === "todos" || getFilterId(e.accion) === activeFilter)
+    .filter((e) => {
+      if (!usuarioQuery.trim()) return true;
+      const q = usuarioQuery.trim().toLowerCase();
+      return (e.usuario_nombre ?? "").toLowerCase().includes(q)
+        || (e.usuario_email ?? "").toLowerCase().includes(q);
+    })
+    .filter((e) => !fechaDesde || new Date(e.created_at) >= new Date(`${fechaDesde}T00:00:00`))
+    .filter((e) => !fechaHasta || new Date(e.created_at) <= new Date(`${fechaHasta}T23:59:59`));
 
   const counts = AUDIT_FILTERS.reduce((acc, f) => {
     acc[f.id] = f.id === "todos" ? dbAudit.length : dbAudit.filter((e) => getFilterId(e.accion) === f.id).length;
@@ -292,6 +320,39 @@ function AuditPanel({ dbAudit, onRefresh }: { dbAudit: AuditEvent[]; onRefresh: 
               border: "1px solid var(--border)", fontSize: 12, color: "var(--text-muted)" }}>
               <Activity size={13} />
               <span><strong style={{ color: "var(--text)" }}>{filtered.length}</strong> de <strong style={{ color: "var(--text)" }}>{dbAudit.length}</strong> eventos</span>
+            </div>
+
+            {/* Filtro por usuario y rango de fechas */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+              <input
+                type="text"
+                placeholder="Buscar por usuario o email..."
+                value={usuarioQuery}
+                onChange={(e) => setUsuarioQuery(e.target.value)}
+                style={{ flex: "1 1 180px", fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid var(--border)" }}
+              />
+              <input
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => setFechaDesde(e.target.value)}
+                title="Desde"
+                style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid var(--border)" }}
+              />
+              <input
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => setFechaHasta(e.target.value)}
+                title="Hasta"
+                style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid var(--border)" }}
+              />
+              {(usuarioQuery || fechaDesde || fechaHasta) && (
+                <button
+                  onClick={() => { setUsuarioQuery(""); setFechaDesde(""); setFechaHasta(""); }}
+                  style={{ fontSize: 11, color: "var(--text-muted)", padding: "3px 10px", border: "1px solid var(--border)", borderRadius: 20, background: "transparent", cursor: "pointer" }}
+                >
+                  Limpiar
+                </button>
+              )}
             </div>
 
             {/* Chips de filtro */}

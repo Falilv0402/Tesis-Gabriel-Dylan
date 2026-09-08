@@ -37,10 +37,12 @@ SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 async def require_admin_de_colegio(
     codigo_ie: str = Depends(_validate_ie),
     authorization: str = Header(default=""),
-) -> str:
+) -> dict:
     """Verifica que quien llama sea admin/superadmin activo y, si es admin de
     un colegio específico, que coincida con el `codigo_ie` que intenta subir.
-    Devuelve el `codigo_ie` validado (para encadenar como dependencia)."""
+    Devuelve {codigo_ie, token} — el token se reutiliza para consultar a los
+    destinatarios de la alerta proactiva (HU019) respetando RLS, sin
+    necesitar ningún secreto adicional en el backend."""
     if not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Falta el token de autenticación.")
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
@@ -73,7 +75,7 @@ async def require_admin_de_colegio(
         perfil_ie = str(perfil.get("codigo_ie") or "")
         if perfil_ie.lstrip("0") != codigo_ie.lstrip("0"):
             raise HTTPException(status_code=403, detail="Solo puedes cargar datos de tu propio colegio.")
-    return codigo_ie
+    return {"codigo_ie": codigo_ie, "token": token}
 
 # Resolución robusta de rutas: funciona tanto en Docker (WORKDIR=/app, código
 # en /app/app → parents[2] = /app) como en desarrollo local (código en
@@ -207,9 +209,126 @@ def get_resumen(codigo_ie: str = Depends(_validate_ie)):
 
 # ─── POST /v1/colegio/{codigo_ie}/procesar ────────────────────────────────────
 
+def _nivel_por_alumno(art: dict) -> dict[str, str]:
+    """{'<codigo_ie>-<salon>-<n_alumno>': nivel_riesgo} para comparar entre versiones."""
+    out: dict[str, str] = {}
+    for p in art.get("predicciones", []):
+        clave = f"{p.get('codigo_ie')}-{p.get('salon')}-{p.get('n_alumno')}"
+        out[clave] = p.get("nivel_riesgo", "")
+    return out
+
+
+async def _alertar_nuevos_alto(codigo_ie: str, token: str, antes: dict[str, str]) -> int:
+    """HU019: tras reentrenar, compara contra el nivel de riesgo previo y
+    avisa por correo (vía la misma Edge Function que usa el front) a
+    admin/director/coordinador del colegio si aparecen alumnos NUEVOS en
+    ALTO — no requiere que nadie entre a revisar manualmente el dashboard."""
+    try:
+        art_nuevo = _load_artefacto(codigo_ie)
+    except HTTPException:
+        return 0
+    despues = _nivel_por_alumno(art_nuevo)
+    nuevos_alto = [
+        clave for clave, nivel in despues.items()
+        if nivel == "ALTO" and antes.get(clave) != "ALTO"
+    ]
+    if not nuevos_alto or not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        return len(nuevos_alto)
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        # RLS ya limita esto a los perfiles del mismo colegio (o todos, si
+        # quien sube es superadmin) — reutiliza el token de quien disparó
+        # el reentrenamiento, sin necesitar ningún secreto extra.
+        dest_res = await client.get(
+            f"{SUPABASE_URL}/rest/v1/profiles",
+            params={
+                "codigo_ie": f"eq.{codigo_ie}",
+                "rol": "in.(admin,director,coordinador)",
+                "activo": "eq.true",
+                "select": "email,nombre",
+            },
+            headers={"Authorization": f"Bearer {token}", "apikey": SUPABASE_ANON_KEY},
+        )
+        destinatarios = [d["email"] for d in dest_res.json()] if dest_res.status_code == 200 else []
+        if not destinatarios:
+            return len(nuevos_alto)
+
+        nombre_colegio = art_nuevo.get("nombre_colegio", codigo_ie)
+        html = (
+            f"<div style='font-family:Arial,sans-serif;max-width:560px'>"
+            f"<h2 style='color:#dc2626'>⚠️ Nuevos alumnos en riesgo ALTO</h2>"
+            f"<p>El modelo de <strong>{nombre_colegio}</strong> se acaba de actualizar y detectó "
+            f"<strong>{len(nuevos_alto)}</strong> alumno(s) que ahora está(n) en nivel de riesgo "
+            f"<strong style='color:#dc2626'>ALTO</strong> y antes no lo estaban.</p>"
+            f"<p>Ingresa a SATRA para revisar el detalle y registrar intervenciones.</p>"
+            f"<p style='color:#64748b;font-size:12px'>SATRA · Alerta automática de reentrenamiento</p>"
+            f"</div>"
+        )
+        try:
+            await client.post(
+                f"{SUPABASE_URL}/functions/v1/send-alert",
+                json={
+                    "to": destinatarios,
+                    "subject": f"[SATRA] {len(nuevos_alto)} nuevo(s) alumno(s) en riesgo ALTO — {nombre_colegio}",
+                    "html": html,
+                },
+                headers={"Authorization": f"Bearer {token}", "apikey": SUPABASE_ANON_KEY},
+            )
+        except Exception:
+            pass  # la alerta es best-effort; no debe romper la respuesta del entrenamiento
+    return len(nuevos_alto)
+
+
+async def _registrar_version_modelo(codigo_ie: str, token: str, art: dict) -> None:
+    """HU034: cada reentrenamiento queda como una fila en modelos_versiones
+    (antes la tabla existía en el schema pero nunca se escribía en ella —
+    no había forma de ver el historial de cambios del modelo). También sirve
+    de base para el seguimiento histórico de riesgo en el tiempo (HU024/026):
+    cada fila es una foto de la distribución de riesgo en ese momento.
+    Best-effort: si la migración 0012 (columnas nuevas) todavía no se aplicó,
+    o la tabla no existe, esto falla en silencio y no rompe la respuesta.
+    """
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        return
+    m = art.get("metricas", {})
+    por_nivel: dict[str, int] = {}
+    for p in art.get("predicciones", []):
+        nivel = p.get("nivel_riesgo", "BAJO")
+        por_nivel[nivel] = por_nivel.get(nivel, 0) + 1
+    payload = {
+        "version":         art.get("trained_at") or codigo_ie,
+        "codigo_ie":       codigo_ie,
+        "nombre_colegio":  art.get("nombre_colegio"),
+        "accuracy":        m.get("accuracy_train"),
+        "precision_score": m.get("precision_train"),
+        "recall":          m.get("recall_train"),
+        "f1":              m.get("f1_train"),
+        "auc_roc":         m.get("auc_cv") or m.get("auc_train"),
+        "n_alumnos":       m.get("n_alumnos"),
+        "n_alto":          por_nivel.get("ALTO", 0),
+        "n_medio":         por_nivel.get("MEDIO", 0),
+        "n_bajo":          por_nivel.get("BAJO", 0),
+        "modo_prediccion": m.get("modo_prediccion"),
+        "activo":          True,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"{SUPABASE_URL}/rest/v1/modelos_versiones",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "apikey": SUPABASE_ANON_KEY,
+                    "Content-Type": "application/json",
+                },
+            )
+    except Exception:
+        pass
+
+
 @router.post("/{codigo_ie}/procesar")
 async def procesar_excels(
-    codigo_ie: str = Depends(require_admin_de_colegio),
+    auth_ctx: dict = Depends(require_admin_de_colegio),
     notas_files: list[UploadFile] = File(...),
     conducta_files: list[UploadFile] = File(default=[]),
 ):
@@ -217,8 +336,18 @@ async def procesar_excels(
     Recibe los Excel del colegio, los procesa y entrena el modelo de riesgo.
     Acepta múltiples archivos de notas y conducta.
     """
+    codigo_ie = auth_ctx["codigo_ie"]
     upload_dir = DATA_DIR / f"colegio_{codigo_ie}_upload"
     upload_dir.mkdir(parents=True, exist_ok=True)
+
+    # Estado ANTES de reentrenar (para detectar nuevos ALTO — HU019). Si no
+    # hay modelo previo (primera carga de este colegio), queda vacío y nadie
+    # se marca como "nuevo" — no tiene sentido alertar en la primera carga.
+    nivel_antes: dict[str, str] = {}
+    try:
+        nivel_antes = _nivel_por_alumno(_load_artefacto(codigo_ie))
+    except HTTPException:
+        pass
 
     # Guardar archivos subidos
     saved = []
@@ -248,11 +377,15 @@ async def procesar_excels(
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="Procesamiento tardó demasiado.")
 
+    n_nuevos_alto = await _alertar_nuevos_alto(codigo_ie, auth_ctx["token"], nivel_antes)
+
     # Devolver resumen
     art = _load_artefacto(codigo_ie)
+    await _registrar_version_modelo(codigo_ie, auth_ctx["token"], art)
     return {
         "status":    "ok",
         "codigo_ie": codigo_ie,
         "archivos_procesados": len(saved),
         "metricas":  art["metricas"],
+        "nuevos_alto": n_nuevos_alto,  # HU019: cuántos alumnos pasaron a ALTO recién ahora
     }

@@ -171,6 +171,27 @@ export function useAdmin(
   }
   const colegioFileRef = useRef<HTMLInputElement>(null);
 
+  // HU024/HU025/HU026: histórico de versiones del modelo por colegio — cada
+  // reentrenamiento queda como una fila en modelos_versiones (backend), esto
+  // solo la lee para graficar la evolución de riesgo en el tiempo.
+  const [modelosVersiones, setModelosVersiones] = useState<{
+    id: string; version: string; created_at: string;
+    n_alumnos: number | null; n_alto: number | null; n_medio: number | null; n_bajo: number | null;
+    accuracy: number | null; auc_roc: number | null;
+  }[]>([]);
+  async function loadModelosVersiones(codigoIe: string) {
+    if (!codigoIe) { setModelosVersiones([]); return; }
+    const ieNorm = String(parseInt(codigoIe, 10));
+    const { data, error } = await supabase
+      .from("modelos_versiones")
+      .select("id, version, created_at, n_alumnos, n_alto, n_medio, n_bajo, accuracy, auc_roc")
+      .eq("codigo_ie", ieNorm)
+      .order("created_at", { ascending: true });
+    // Si la migración 0012 todavía no se aplicó (columna codigo_ie no
+    // existe), el error se ignora y el panel simplemente no muestra nada.
+    setModelosVersiones(error ? [] : (data ?? []));
+  }
+
   const [scheduleFreq, setScheduleFreq] = useState("semanal");
   const [scheduleMsg, setScheduleMsg] = useState("");
   const [nextUpdate, setNextUpdate] = useState<string | null>(null);
@@ -344,8 +365,14 @@ export function useAdmin(
             ? `Modelo entrenado para ${m.nombre_colegio ?? ieCode}, con ${advertencias.length} advertencia(s) — revisa el detalle abajo.`
             : `Modelo entrenado correctamente para ${m.nombre_colegio ?? ieCode}.`
         );
-        await insertAudit("Cargar Excel del colegio", "colegio", { ie: ieCode, n_alumnos: m.n_alumnos, advertencias: advertencias.length });
+        await insertAudit("Cargar Excel del colegio", "colegio", { ie: ieCode, n_alumnos: m.n_alumnos, advertencias: advertencias.length, nuevos_alto: data.nuevos_alto ?? 0 });
         toast(`Datos de ${m.nombre_colegio ?? ieCode} cargados. ${m.n_alumnos} alumnos procesados.`, "success");
+        // HU019: si el reentrenamiento detectó alumnos NUEVOS en riesgo ALTO,
+        // el backend ya envió el correo automático — se lo confirmamos aquí
+        // a quien subió el Excel para que sepa que se avisó al equipo.
+        if (data.nuevos_alto > 0) {
+          toast(`⚠️ ${data.nuevos_alto} alumno(s) nuevo(s) en riesgo ALTO — se notificó por correo al equipo.`, "info");
+        }
       } else {
         const err = await res.json().catch(() => ({ detail: "Error desconocido" }));
         setColegioUploadStatus("error");
@@ -401,16 +428,30 @@ export function useAdmin(
   }
 
   async function desactivarUsuario(id: string) {
-    await supabase.from("profiles").update({ activo: false }).eq("id", id);
+    const { error } = await supabase.from("profiles").update({ activo: false }).eq("id", id);
+    if (error) { toast("No se pudo desactivar (sin permiso o usuario fuera de tu colegio).", "error"); return; }
     await insertAudit("Desactivar usuario", "profiles", { usuario_id: id });
     toast("Usuario desactivado correctamente.");
     void loadDbUsers();
   }
 
   async function activarUsuario(id: string) {
-    await supabase.from("profiles").update({ activo: true }).eq("id", id);
+    const { error } = await supabase.from("profiles").update({ activo: true }).eq("id", id);
+    if (error) { toast("No se pudo activar (sin permiso o usuario fuera de tu colegio).", "error"); return; }
     await insertAudit("Activar usuario", "profiles", { usuario_id: id });
     toast("Usuario activado correctamente.", "success");
+    void loadDbUsers();
+  }
+
+  // HU005: cambiar el rol de un usuario ya existente (antes solo se podía
+  // elegir el rol al crearlo). RLS ya restringe quién puede tocar a quién
+  // (admin: solo su propia IE; superadmin: todos) — este handler solo
+  // reporta si el update no tuvo efecto.
+  async function cambiarRolUsuario(id: string, nuevoRol: string) {
+    const { error } = await supabase.from("profiles").update({ rol: nuevoRol }).eq("id", id);
+    if (error) { toast("No se pudo cambiar el rol (sin permiso).", "error"); return; }
+    await insertAudit("Cambiar rol de usuario", "profiles", { usuario_id: id, nuevo_rol: nuevoRol });
+    toast(`Rol actualizado a ${nuevoRol}.`, "success");
     void loadDbUsers();
   }
 
@@ -445,6 +486,7 @@ export function useAdmin(
     if (isAdminRole && tab === "datos" && profileCodigoIe) {
       const ie = String(parseInt(profileCodigoIe, 10));
       void loadColegioModelStats(ie);
+      void loadModelosVersiones(ie);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, tab, profileCodigoIe]);
@@ -470,8 +512,9 @@ export function useAdmin(
     colegioUploadStatus, colegioUploadMsg, colegioUploadResult,
     colegioFileRef, uploadColegioExcels,
     colegioModelStats, loadColegioModelStats,
+    modelosVersiones, loadModelosVersiones,
     loadDbUsers, loadDbAudit,
     handleCreateUser, validateCsv, saveSchedule,
-    desactivarUsuario, activarUsuario, updateEstadoIntervencion,
+    desactivarUsuario, activarUsuario, cambiarRolUsuario, updateEstadoIntervencion,
   };
 }
