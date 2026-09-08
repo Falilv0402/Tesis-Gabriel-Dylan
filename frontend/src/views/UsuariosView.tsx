@@ -181,7 +181,7 @@ export function UsuariosView({
                         <option value="">Sin colegio específico (usa el modelo nacional EM2022)</option>
                         {colegiosList.map((c) => (
                           <option key={c.id_ie} value={c.id_ie}>
-                            {c.nombre_ie ? `${c.nombre_ie} — ${c.distrito}` : `IE ${c.id_ie} — ${c.distrito}`}
+                            {c.nombre_ie ? `${c.nombre_ie} · IE ${c.id_ie} — ${c.distrito}` : `IE ${c.id_ie} — ${c.distrito}`}
                           </option>
                         ))}
                       </select>
@@ -206,7 +206,7 @@ export function UsuariosView({
                         <option value="">Selecciona un colegio...</option>
                         {colegiosList.map((c) => (
                           <option key={c.id_ie} value={c.id_ie}>
-                            {c.nombre_ie ? `${c.nombre_ie} — ${c.distrito}` : `IE ${c.id_ie} — ${c.distrito}`}
+                            {c.nombre_ie ? `${c.nombre_ie} · IE ${c.id_ie} — ${c.distrito}` : `IE ${c.id_ie} — ${c.distrito}`}
                           </option>
                         ))}
                       </select>

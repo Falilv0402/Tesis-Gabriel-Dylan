@@ -59,7 +59,7 @@ FEATURES_PP = [
 ]
 
 
-def train(carpeta: str, codigo_ie: str) -> None:
+def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
     model_dir = Path(__file__).resolve().parents[1] / "model"
     model_dir.mkdir(exist_ok=True)
     output_path = model_dir / f"colegio_{codigo_ie}.pkl"
@@ -287,6 +287,10 @@ def train(carpeta: str, codigo_ie: str) -> None:
     artefacto = {
         "codigo_ie":      codigo_ie,
         "nombre_colegio": nombre_colegio,
+        # Distrito opcional: permite que este colegio aparezca en el selector
+        # "Colegio asignado" (crear usuario / autoregistro) aunque no forme
+        # parte del dataset EM2022 — ver get_colegios() en prediction_service.py.
+        "distrito":       distrito,
         "modelo":         modelo,
         "features":       available,
         "predicciones":   predicciones,
@@ -339,7 +343,8 @@ def train(carpeta: str, codigo_ie: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ie",      default="0249", help="Código IE del colegio")
-    parser.add_argument("--carpeta", default=".",    help="Carpeta con los Excel")
+    parser.add_argument("--ie",       default="0249", help="Código IE del colegio")
+    parser.add_argument("--carpeta",  default=".",    help="Carpeta con los Excel")
+    parser.add_argument("--distrito", default=None,   help="Distrito (opcional, para el selector de colegios)")
     args = parser.parse_args()
-    train(args.carpeta, args.ie)
+    train(args.carpeta, args.ie, args.distrito)

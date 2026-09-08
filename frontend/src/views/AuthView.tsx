@@ -174,7 +174,7 @@ export function AuthView({
                   <option value="">{regDistrito ? "Todos los colegios del distrito" : "Primero selecciona un distrito"}</option>
                   {regColegiosList.map((c) => (
                     <option key={c.id_ie} value={c.id_ie}>
-                      {c.nombre_ie ? `${c.nombre_ie} · ${c.total_estudiantes} alumnos` : `IE ${c.id_ie} · ${c.total_estudiantes} alumnos`}
+                      {c.nombre_ie ? `${c.nombre_ie} · IE ${c.id_ie} · ${c.total_estudiantes} alumnos` : `IE ${c.id_ie} · ${c.total_estudiantes} alumnos`}
                     </option>
                   ))}
                 </select>

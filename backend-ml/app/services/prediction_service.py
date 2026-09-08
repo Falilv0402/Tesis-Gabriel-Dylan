@@ -136,31 +136,58 @@ class PredictionService:
                 "facets": {"distrito": counts("distrito"), "sexo": counts("sexo"), "nivel": counts("nivel_riesgo")}}
 
     def get_colegios(self):
-        if not self._loader.dataset_path.exists():
-            return []
-        df = self._loader.load_dataset_raw()
-        result = (
-            df.groupby(["Distrito", "ID_IE"]).size()
-            .reset_index(name="total_estudiantes")
-            .sort_values(["Distrito", "ID_IE"])
-        )
-        records = result.rename(columns={"Distrito": "distrito", "ID_IE": "id_ie"}).to_dict(orient="records")
+        import joblib as _jl
 
-        # Enriquecer con nombre del colegio si existe modelo entrenado (pkl)
         model_dir = self._loader.model_path.parent
-        for rec in records:
-            ie_code = str(int(rec["id_ie"]))
-            # Buscar pkl con y sin cero inicial
-            for code in [ie_code, ie_code.zfill(4)]:
-                pkl_path = model_dir / f"colegio_{code}.pkl"
-                if pkl_path.exists():
-                    try:
-                        import joblib as _jl
-                        art = _jl.load(pkl_path)
-                        rec["nombre_ie"] = art.get("nombre_colegio", "")
-                    except Exception:
-                        pass
-                    break
+        records: list[dict] = []
+        cubiertos: set[str] = set()  # códigos IE ya representados (normalizados, sin ceros)
+
+        if self._loader.dataset_path.exists():
+            df = self._loader.load_dataset_raw()
+            result = (
+                df.groupby(["Distrito", "ID_IE"]).size()
+                .reset_index(name="total_estudiantes")
+                .sort_values(["Distrito", "ID_IE"])
+            )
+            records = result.rename(columns={"Distrito": "distrito", "ID_IE": "id_ie"}).to_dict(orient="records")
+
+            # Enriquecer con nombre del colegio si existe modelo entrenado (pkl)
+            for rec in records:
+                ie_code = str(int(rec["id_ie"]))
+                cubiertos.add(ie_code)
+                # Buscar pkl con y sin cero inicial
+                for code in [ie_code, ie_code.zfill(4), ie_code.zfill(7)]:
+                    pkl_path = model_dir / f"colegio_{code}.pkl"
+                    if pkl_path.exists():
+                        try:
+                            art = _jl.load(pkl_path)
+                            rec["nombre_ie"] = art.get("nombre_colegio", "")
+                        except Exception:
+                            pass
+                        break
+
+        # Colegios con modelo propio (CUBICOL / "Reporte consolidado") que NO
+        # están en el dataset EM2022 — sin esto, no aparecen en el selector
+        # "Colegio asignado" al crear usuarios ni en el autoregistro, aunque
+        # el modelo ya funcione y responda en /v1/colegio/{ie}/resumen.
+        if model_dir.exists():
+            for pkl_path in sorted(model_dir.glob("colegio_*.pkl")):
+                codigo_ie = pkl_path.stem.removeprefix("colegio_")
+                codigo_norm = codigo_ie.lstrip("0") or "0"
+                if codigo_norm in cubiertos:
+                    continue
+                try:
+                    art = _jl.load(pkl_path)
+                except Exception:
+                    continue
+                cubiertos.add(codigo_norm)
+                m = art.get("metricas", {})
+                records.append({
+                    "distrito":          art.get("distrito") or "Sin distrito asignado",
+                    "id_ie":             int(codigo_norm) if codigo_norm.isdigit() else codigo_ie,
+                    "total_estudiantes": m.get("n_alumnos", 0),
+                    "nombre_ie":         art.get("nombre_colegio", f"IE {codigo_ie}"),
+                })
 
         return records
 
