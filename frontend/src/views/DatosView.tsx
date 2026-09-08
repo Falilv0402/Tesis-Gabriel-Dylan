@@ -3,7 +3,6 @@
 import { RefObject } from "react";
 import { Upload, CheckCircle2, AlertTriangle, School, Loader, Info, Cpu, ShieldAlert } from "lucide-react";
 import { Panel, Kpi } from "@/components/ui/Primitives";
-import { isLocalBackend } from "@/lib/env";
 import { ConfusionMatrix } from "@/components/charts/ConfusionMatrix";
 import { RocMiniChart } from "@/components/charts/RocMiniChart";
 import type { Metrics, Evaluation } from "@/types";
@@ -325,25 +324,13 @@ export function DatosView({
       )}
 
       {/* ── Panel 1: Carga Excel del colegio (solo Super Admin) ───────────── */}
-      {/* El admin de colegio solo monitorea; el entrenamiento es tarea del superadmin */}
+      {/* El admin de colegio solo monitorea; el entrenamiento es tarea del superadmin.
+          El servidor de producción (Hetzner) tiene disco persistente y el endpoint
+          /procesar valida el rol contra la sesión de Supabase, así que ya no hace
+          falta restringir esto a localhost como cuando el plan era Railway
+          (filesystem efímero) — ver docs/ROADMAP_CARGA_EXCEL_COLEGIO.md. */}
       {role === "superadmin" && (
       <Panel title="Datos del colegio — Excel interno">
-        {!isLocalBackend() && (
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 8,
-            padding: "10px 12px", background: "#fffbeb", border: "1px solid #fde68a",
-            borderRadius: 8, fontSize: 12, color: "#92400e", marginBottom: 12 }}>
-            <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-            <div>
-              <strong>Actualización de datos desactivada en producción.</strong>
-              <p style={{ margin: "3px 0 0", fontSize: 11, lineHeight: 1.4 }}>
-                Para actualizar los datos del colegio, entrena el modelo localmente y
-                haz <code style={{ background: "#fef3c7", padding: "1px 4px", borderRadius: 3 }}>git push</code>.
-                El despliegue actualizará automáticamente.
-              </p>
-            </div>
-          </div>
-        )}
-        {isLocalBackend() && (<>
         <p className="model-note" style={{ marginBottom: 12 }}>
           Sube los archivos Excel de notas y conducta del colegio (formato CUBICOL Académico).
           El sistema entrenará automáticamente el modelo de riesgo con las notas internas.
@@ -432,7 +419,6 @@ export function DatosView({
             </p>
           </div>
         )}
-        </>)}
       </Panel>
       )}
 

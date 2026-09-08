@@ -26,10 +26,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — permitir desde localhost (desarrollo) y Vercel (producción)
+# CORS — permitir desde localhost (desarrollo), Vercel (previews) y el dominio propio
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app",
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app|https://(www\.)?satraapp\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

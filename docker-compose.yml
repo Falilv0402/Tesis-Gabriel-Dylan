@@ -1,0 +1,31 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend-ml/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - backend-ml/.env.production
+    volumes:
+      # Persistente: los .pkl y datos sobreviven a rebuilds/restarts del container.
+      - ./modelo/model:/app/modelo/model
+      - ./modelo/data:/app/modelo/data
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+volumes:
+  caddy_data:
+  caddy_config:

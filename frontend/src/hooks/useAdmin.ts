@@ -312,8 +312,15 @@ export function useAdmin(
     conductaFiles.forEach(f => form.append("conducta_files", f, f.name));
 
     try {
+      // El backend valida el rol (admin/superadmin) contra este token de sesión
+      // de Supabase — sin él, cualquiera que alcance la URL pública podría
+      // reentrenar el modelo de cualquier colegio con datos arbitrarios.
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
       const res = await fetch(`${apiUrl}/v1/colegio/${ieCode}/procesar`, {
         method: "POST",
+        headers: currentSession?.access_token
+          ? { Authorization: `Bearer ${currentSession.access_token}` }
+          : undefined,
         body: form,
       });
       if (res.ok) {

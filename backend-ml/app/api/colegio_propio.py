@@ -2,9 +2,11 @@
 colegio_propio.py — Endpoints para el módulo "Mi Colegio".
 Sirve predicciones de riesgo basadas en los datos internos del colegio.
 """
+import os
 import re
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File
+import httpx
 import joblib
 import shutil
 import subprocess
@@ -18,6 +20,60 @@ def _validate_ie(codigo_ie: str) -> str:
     return codigo_ie
 
 router = APIRouter(prefix="/colegio", tags=["Mi Colegio"])
+
+
+# ─── Autenticación para endpoints que MUTAN datos (entrenar modelo) ───────────
+# El resto del backend no valida sesión (los endpoints de lectura no exponen
+# datos sensibles fuera del propio front autenticado por Supabase), pero
+# "/procesar" ejecuta un entrenamiento con los datos que se le suban — sin
+# esta verificación, cualquiera que alcance la URL pública podría reentrenar
+# el modelo de cualquier colegio con datos arbitrarios. Reutiliza la sesión de
+# Supabase ya emitida al usuario (no requiere ningún secreto nuevo: la anon key
+# es pública por diseño, y RLS ya permite que cada usuario lea su propio perfil).
+SUPABASE_URL      = os.environ.get("SUPABASE_URL", "")
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
+
+
+async def require_admin_de_colegio(
+    codigo_ie: str = Depends(_validate_ie),
+    authorization: str = Header(default=""),
+) -> str:
+    """Verifica que quien llama sea admin/superadmin activo y, si es admin de
+    un colegio específico, que coincida con el `codigo_ie` que intenta subir.
+    Devuelve el `codigo_ie` validado (para encadenar como dependencia)."""
+    if not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Falta el token de autenticación.")
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        raise HTTPException(status_code=500, detail="Backend sin configurar (SUPABASE_URL/ANON_KEY).")
+    token = authorization.split(" ", 1)[1].strip()
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        user_res = await client.get(
+            f"{SUPABASE_URL}/auth/v1/user",
+            headers={"Authorization": f"Bearer {token}", "apikey": SUPABASE_ANON_KEY},
+        )
+        if user_res.status_code != 200:
+            raise HTTPException(status_code=401, detail="Sesión inválida o expirada.")
+        user_id = user_res.json().get("id")
+
+        prof_res = await client.get(
+            f"{SUPABASE_URL}/rest/v1/profiles",
+            params={"id": f"eq.{user_id}", "select": "rol,codigo_ie,activo"},
+            headers={"Authorization": f"Bearer {token}", "apikey": SUPABASE_ANON_KEY},
+        )
+    perfiles = prof_res.json() if prof_res.status_code == 200 else []
+    if not perfiles:
+        raise HTTPException(status_code=403, detail="Perfil no encontrado.")
+    perfil = perfiles[0]
+    if not perfil.get("activo", True):
+        raise HTTPException(status_code=403, detail="Cuenta inactiva.")
+    if perfil.get("rol") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Requiere rol de administrador.")
+    if perfil.get("rol") == "admin":
+        perfil_ie = str(perfil.get("codigo_ie") or "")
+        if perfil_ie.lstrip("0") != codigo_ie.lstrip("0"):
+            raise HTTPException(status_code=403, detail="Solo puedes cargar datos de tu propio colegio.")
+    return codigo_ie
 
 # Resolución robusta de rutas: funciona tanto en Docker (WORKDIR=/app, código
 # en /app/app → parents[2] = /app) como en desarrollo local (código en
@@ -146,7 +202,7 @@ def get_resumen(codigo_ie: str = Depends(_validate_ie)):
 
 @router.post("/{codigo_ie}/procesar")
 async def procesar_excels(
-    codigo_ie: str,
+    codigo_ie: str = Depends(require_admin_de_colegio),
     notas_files: list[UploadFile] = File(...),
     conducta_files: list[UploadFile] = File(default=[]),
 ):

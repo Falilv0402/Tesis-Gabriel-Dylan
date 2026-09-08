@@ -20,6 +20,7 @@ COPY modelo/data ./modelo/data
 COPY modelo/em2022/train.py ./modelo/em2022/train.py
 COPY modelo/em2022/pipeline ./modelo/em2022/pipeline
 COPY modelo/em2022/__init__.py ./modelo/em2022/__init__.py
+COPY modelo/colegio ./modelo/colegio
 
 # Variables de entorno (rutas dentro del contenedor)
 ENV MODEL_PATH=./modelo/model/modelo_em.pkl
