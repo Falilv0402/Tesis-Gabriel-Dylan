@@ -61,3 +61,19 @@ export const AVATAR_COLORS = [
   "#dc2626",
   "#db2777",
 ];
+
+/** Materia que enseña el usuario (director/coordinador suelen ser también
+ * profesores de un curso específico) — mismas 8 áreas que pondera el modelo
+ * de colegio propio, más Tutoría (frecuente como "profesor jefe" de un
+ * salón) y una opción neutra para roles no docentes. */
+export const MATERIAS_PROFESOR = [
+  "Matemática",
+  "Comunicación",
+  "Ciencia y Tecnología",
+  "Personal Social",
+  "Inglés",
+  "Arte y Cultura",
+  "Educación Física",
+  "Tutoría",
+  "Otro / No aplica",
+];

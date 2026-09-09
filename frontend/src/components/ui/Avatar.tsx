@@ -7,14 +7,36 @@ export function Avatar({
   apellidos,
   email,
   color,
+  avatarUrl,
   size = 36,
 }: {
   nombre: string;
   apellidos: string;
   email: string;
   color: string;
+  avatarUrl?: string | null;
   size?: number;
 }) {
+  if (avatarUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- URL externa (Supabase Storage), no vale la pena el loader de next/image para un avatar chico
+      <img
+        src={avatarUrl}
+        alt={nombre || email}
+        width={size}
+        height={size}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "50%",
+          objectFit: "cover",
+          flexShrink: 0,
+          userSelect: "none",
+        }}
+      />
+    );
+  }
+
   const initials = getInitials(nombre, apellidos, email);
   const bg = getAvatarColor(email, color);
   return (

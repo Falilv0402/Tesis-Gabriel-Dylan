@@ -111,7 +111,7 @@ export function ColegioReportesView({
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* ── Filtros ──────────────────────────────────────────────────────── */}
       <section className="filters">
-        <Filter size={18} />
+        <span className="filters-icon"><Filter size={18} /></span>
         <label className="filter-field">Nivel de riesgo
           <select value={nivel} onChange={(e) => setNivel(e.target.value as typeof nivel)}>
             <option value="Todos">Todos</option>

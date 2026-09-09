@@ -14,10 +14,14 @@ export function useProfile(
   session:          User | null,
   profileAvatarColor: string,
   setProfileAvatarColor: (c: string) => void,
+  profileAvatarUrl:  string | null,
+  setProfileAvatarUrl: (v: string | null) => void,
   profileNombre:    string,
   setProfileNombre: (v: string) => void,
   profileApellidos: string,
   setProfileApellidos: (v: string) => void,
+  profileMateria:   string | null,
+  setProfileMateria: (v: string | null) => void,
   insertAudit:      (accion: string, tabla?: string, detalle?: object) => Promise<void>,
   toast:            (msg: string, type?: "success" | "error" | "info") => void,
 ) {
@@ -27,8 +31,10 @@ export function useProfile(
   const [editEmail,        setEditEmail]        = useState("");
   const [editPwd,          setEditPwd]          = useState("");
   const [editPwdConfirm,   setEditPwdConfirm]   = useState("");
+  const [editMateria,      setEditMateria]      = useState("");
   const [profileBusy,      setProfileBusy]      = useState(false);
   const [profileMsg,       setProfileMsg]       = useState<{ text: string; ok: boolean } | null>(null);
+  const [avatarUploading,  setAvatarUploading]  = useState(false);
 
   function openProfilePanel() {
     setEditNombre(profileNombre);
@@ -36,8 +42,52 @@ export function useProfile(
     setEditEmail(session?.email ?? "");
     setEditPwd("");
     setEditPwdConfirm("");
+    setEditMateria(profileMateria ?? "");
     setProfileMsg(null);
     setShowProfile(true);
+  }
+
+  /** Sube la foto de inmediato (no espera a "Guardar cambios") — misma
+   * lógica que cualquier avatar de app: se ve el resultado al toque. */
+  async function uploadAvatar(file: File) {
+    if (!session) return;
+    if (!file.type.startsWith("image/")) {
+      setProfileMsg({ text: "El archivo debe ser una imagen.", ok: false });
+      return;
+    }
+    const MAX_BYTES = 3 * 1024 * 1024; // 3MB, de sobra para una foto de perfil
+    if (file.size > MAX_BYTES) {
+      setProfileMsg({ text: "La imagen no puede pesar más de 3MB.", ok: false });
+      return;
+    }
+    setAvatarUploading(true);
+    setProfileMsg(null);
+    // Path fijo (no el nombre original) para que cada nueva foto reemplace la
+    // anterior en vez de acumular archivos sueltos en el bucket.
+    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${session.id}/avatar.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("avatars")
+      .upload(path, file, { upsert: true, cacheControl: "3600" });
+    if (upErr) {
+      setProfileMsg({ text: "Error al subir la foto: " + upErr.message, ok: false });
+      setAvatarUploading(false);
+      return;
+    }
+    const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+    // Cache-bust: la URL pública es siempre la misma para este usuario, así
+    // que sin esto el navegador podría seguir mostrando la foto vieja cacheada.
+    const url = `${pub.publicUrl}?v=${Date.now()}`;
+    const { error: dbErr } = await supabase.from("profiles").update({ avatar_url: url }).eq("id", session.id);
+    if (dbErr) {
+      setProfileMsg({ text: "Foto subida, pero no se pudo guardar en el perfil: " + dbErr.message, ok: false });
+      setAvatarUploading(false);
+      return;
+    }
+    setProfileAvatarUrl(url);
+    await insertAudit("Actualizar foto de perfil", "profiles");
+    toast("Foto de perfil actualizada.", "success");
+    setAvatarUploading(false);
   }
 
   async function saveProfile() {
@@ -51,6 +101,7 @@ export function useProfile(
       nombre:       editNombre.trim() || null,
       apellidos:    editApellidos.trim() || null,
       avatar_color: color,
+      materia:      editMateria || null,
     }).eq("id", session.id);
 
     if (profileError) {
@@ -62,6 +113,7 @@ export function useProfile(
     setProfileNombre(editNombre.trim());
     setProfileApellidos(editApellidos.trim());
     setProfileAvatarColor(color);
+    setProfileMateria(editMateria || null);
 
     if (editEmail.trim() && editEmail.trim() !== session.email) {
       const { error: emailError } = await supabase.auth.updateUser({ email: editEmail.trim() });
@@ -105,7 +157,9 @@ export function useProfile(
     editEmail, setEditEmail,
     editPwd, setEditPwd,
     editPwdConfirm, setEditPwdConfirm,
+    editMateria, setEditMateria,
     profileBusy, profileMsg,
+    avatarUploading, uploadAvatar,
     openProfilePanel, saveProfile,
   };
 }

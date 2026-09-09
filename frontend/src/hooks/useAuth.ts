@@ -39,6 +39,8 @@ export function useAuth(
   const [profileNombre,       setProfileNombre]       = useState<string>("");
   const [profileApellidos,    setProfileApellidos]    = useState<string>("");
   const [profileAvatarColor,  setProfileAvatarColor]  = useState<string>("");
+  const [profileAvatarUrl,    setProfileAvatarUrl]    = useState<string | null>(null);
+  const [profileMateria,      setProfileMateria]      = useState<string | null>(null);
 
 
   // ── Lists ─────────────────────────────────────────────────────────────────
@@ -76,8 +78,10 @@ export function useAuth(
   const profile = useProfile(
     session,
     profileAvatarColor, setProfileAvatarColor,
+    profileAvatarUrl, setProfileAvatarUrl,
     profileNombre, setProfileNombre,
     profileApellidos, setProfileApellidos,
+    profileMateria, setProfileMateria,
     insertAudit, toast,
   );
 
@@ -87,7 +91,7 @@ export function useAuth(
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("rol, distrito, codigo_ie, nombre, apellidos, avatar_color")
+      .select("rol, distrito, codigo_ie, nombre, apellidos, avatar_color, avatar_url, materia")
       .eq("id", userId)
       .single();
 
@@ -116,6 +120,8 @@ export function useAuth(
       }
       setProfileApellidos(data.apellidos ?? "");
       setProfileAvatarColor(data.avatar_color ?? "");
+      setProfileAvatarUrl(data.avatar_url ?? null);
+      setProfileMateria(data.materia ?? null);
 
       // Guardar en caché si tenemos distrito
       if (data.distrito) {
@@ -385,6 +391,7 @@ export function useAuth(
     profileNombreIe,
     profileNombre, profileApellidos,
     profileAvatarColor, setProfileAvatarColor,
+    profileAvatarUrl, profileMateria,
     distritosList, colegiosList,
     skipOnboardingRef,
     // profile panel

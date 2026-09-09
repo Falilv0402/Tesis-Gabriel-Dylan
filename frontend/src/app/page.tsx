@@ -305,7 +305,7 @@ export default function Page() {
               {notificaciones.unreadCount > 0 && <span className="notif-badge">{notificaciones.unreadCount}</span>}
             </button>
             <button className="user-badge-btn" onClick={auth.openProfilePanel} title="Editar perfil">
-              <Avatar nombre={auth.profileNombre} apellidos={auth.profileApellidos} email={auth.session.email ?? ""} color={auth.profileAvatarColor} size={32} />
+              <Avatar nombre={auth.profileNombre} apellidos={auth.profileApellidos} email={auth.session.email ?? ""} color={auth.profileAvatarColor} avatarUrl={auth.profileAvatarUrl} size={32} />
               <span className="user-badge-info">
                 <strong>{auth.profileNombre ? `${auth.profileNombre}${auth.profileApellidos ? " " + auth.profileApellidos : ""}` : (auth.session.email?.split("@")[0] ?? "usuario")}</strong>
                 <em>{auth.role}</em>
@@ -614,7 +614,11 @@ export default function Page() {
         editEmail={auth.editEmail} setEditEmail={auth.setEditEmail}
         editPwd={auth.editPwd} setEditPwd={auth.setEditPwd}
         editPwdConfirm={auth.editPwdConfirm} setEditPwdConfirm={auth.setEditPwdConfirm}
+        editMateria={auth.editMateria} setEditMateria={auth.setEditMateria}
         profileAvatarColor={auth.profileAvatarColor} setProfileAvatarColor={auth.setProfileAvatarColor}
+        profileAvatarUrl={auth.profileAvatarUrl}
+        avatarUploading={auth.avatarUploading}
+        onUploadAvatar={(file) => void auth.uploadAvatar(file)}
         profileBusy={auth.profileBusy} profileMsg={auth.profileMsg}
         onClose={() => auth.setShowProfile(false)}
         onSave={() => void auth.saveProfile()}

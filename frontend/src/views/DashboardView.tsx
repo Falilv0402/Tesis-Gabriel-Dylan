@@ -97,7 +97,7 @@ export function DashboardView({
       </section>
 
       <section className="filters">
-        <Filter size={18} />
+        <span className="filters-icon"><Filter size={18} /></span>
         <label className="filter-field">Nivel de riesgo
           <select value={risk} onChange={(e) => setRisk(e.target.value)}>
             <option>Todos</option><option>ALTO</option><option>MEDIO</option><option>BAJO</option>

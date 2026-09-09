@@ -110,7 +110,7 @@ export function ColegioEstudianteView({
     <section className="full-col">
       <Panel title="Buscar alumno — notas por materia">
         <section className="filters" style={{ marginBottom: 10 }}>
-          <Filter size={18} />
+          <span className="filters-icon"><Filter size={18} /></span>
           <label className="filter-field">Nivel de riesgo
             <select value={rNivel} onChange={(e) => setRNivel(e.target.value as typeof rNivel)}>
               <option value="Todos">Todos</option>
