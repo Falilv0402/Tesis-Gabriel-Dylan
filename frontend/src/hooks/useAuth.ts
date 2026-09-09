@@ -198,9 +198,21 @@ export function useAuth(
       password: authPassword,
       options:  { data: { nombre: authNombre, rol: rolNuevoUsuario } },
     });
+    // Supabase, por diseño, NO lanza error cuando el correo ya existe y está
+    // confirmado — es una medida anti-enumeración (evita que alguien use el
+    // registro para adivinar qué correos ya tienen cuenta). La única señal es
+    // esta: identities queda como arreglo vacío en vez de tener al menos una.
+    // Sin este chequeo, el flujo seguía de largo como si fuera una cuenta
+    // nueva, y recién fallaba (confuso, sin explicación) al intentar el
+    // auto-login con la contraseña "nueva" que en realidad no se guardó.
+    const correoYaExistia = !error && signUpData.user && signUpData.user.identities?.length === 0;
+
     if (error) {
       skipOnboardingRef.current = false;
       setAuthError(translateAuthError(error.message));
+    } else if (correoYaExistia) {
+      skipOnboardingRef.current = false;
+      setAuthError("Este correo ya tiene una cuenta registrada. Si es tuya, usa \"Recuperar contraseña\".");
     } else {
       const savedDistrito = regDistrito;
       const savedIe       = regColegioIe;
