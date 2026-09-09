@@ -126,6 +126,17 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 
 ## FASE 8 — QA final end-to-end
 
-- [ ] Probar cada rol (superadmin, admin, director, coordinador) en producción real
+- [~] Probar cada rol (superadmin, admin, director, coordinador) en producción real — Mathias probando en vivo, varios bugs reales encontrados y corregidos en el camino (ver Fase 10)
 - [ ] Probar con los Excel/datasets adicionales que compartas
 - [ ] Confirmar que alguien externo puede entrar al link, registrarse, y ver la app funcionando
+
+## FASE 10 — Bugs reales encontrados probando en producción (2026-09-09)
+
+- [x] **Fuga de datos en `intervenciones`**: la política RLS nunca se scopeó por colegio (mismo bug que 0009 ya había corregido en `profiles`) — un director de un colegio veía la bitácora completa de TODOS los colegios. Migración `0014_scope_intervenciones_rls.sql` (falta aplicar a mano).
+- [x] **Registro con correo ya existente confuso**: Supabase no lanza error cuando el correo ya tiene cuenta confirmada (anti-enumeración) — el flujo seguía de largo como si fuera cuenta nueva y fallaba después sin explicación. Ahora se detecta vía `identities: []` y se avisa de inmediato.
+- [x] **Mensaje engañoso post-registro**: decía "ya puedes iniciar sesión" sin importar si el auto-login realmente funcionó.
+- [x] **Materias de secundaria descartadas del modelo**: el "Reporte consolidado" usa nombres distintos por nivel (primaria: "Personal Social"/"Ciencia y Tecnología"; secundaria: "Ciencias Sociales"/"Biología"/"Física"/"Química"/etc.) — 8 nombres de materia no estaban mapeados y se perdían silenciosamente. Confirmado en los 3 colegios nuevos. Corregido en `parse_excels.py` y los 3 modelos reentrenados (ahora usan 29 features en vez de las que tenían antes).
+- [x] **Bimestre por defecto vacío**: el selector arrancaba fijo en "Bimestre 1" — si un colegio solo tenía cargado un bimestre distinto, la tabla se veía vacía sin explicación. Ahora elige el más reciente con datos reales.
+- [x] **Dos archivos de modelo por colegio**: `train_colegio_model.py` (CLI) y el endpoint `/procesar` (carga web) normalizaban el código IE de forma distinta (con/sin ceros iniciales), generando DOS `.pkl` para el mismo colegio — el backend servía el que encontraba primero, no el más reciente. Pasó de verdad con La Victoria (seguía sirviendo una carga de prueba parcial después de reentrenar). Corregido: ambos caminos normalizan igual ahora.
+- [x] Copy: "Registrar en base de datos" → "Registrar"
+- [ ] **Pendiente (pedido de Mathias, no implementado aún)**: mover la tabla detallada de notas por materia del Dashboard a la sección "Estudiante", y que el Dashboard principal muestre en su lugar un resumen simplificado tipo "para este bimestre, los estudiantes más críticos son..."
