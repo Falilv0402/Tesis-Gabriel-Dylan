@@ -143,3 +143,10 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 - [x] **Foto de perfil + materia del profesor** (2026-09-09): botón de cámara sobre el avatar en "Mi perfil" sube a Supabase Storage (bucket `avatars`, migración `0015`) y se aplica al instante; nuevo campo "Materia que enseñas"
 - [x] **Íconos corregidos**: embudo de filtros alineado con los `<select>` de al lado; campana de notificaciones con tratamiento visual más cuidado
 - [ ] **Migración `0015_avatar_foto_y_materia.sql` pendiente de aplicar** — correr a mano en el SQL Editor de Supabase
+
+## FASE 11 — Auditoría de cumplimiento HU/CP para presentar a Gabriel y Dylan (2026-09-09)
+
+- [x] **Auditoría honesta de las 36 HU contra sus 77 Casos de Prueba** (`P20261012_Historias de Usuario y Criterios de Validacion v1.2.xlsx` + `P20261012_Casos de Prueba v.1.1.xlsx`): cada CP contrastado contra el comportamiento real del sistema en producción, no contra la intención de diseño. Resultado: 49 Cumple / 21 Parcial / 7 No cumple (77% de cumplimiento ponderado).
+- [x] Entregable Excel (`docs/excel/Auditoria_Cumplimiento_HU_CP_2026-09.xlsx`): hoja "Resumen por HU" (rollup con % por historia) + hoja "Detalle por CP" (los 77 casos con estado y evidencia).
+- [x] Entregable Word (`docs/word/Auditoria_Cumplimiento_HU_CP_2026-09.docx`): mismo contenido en formato narrativo por épica → HU, con resumen ejecutivo, para presentar directamente a Gabriel y Dylan.
+- [x] Detectado y documentado (no corregido, es del archivo fuente del cliente): la columna "Descripción del Caso de Prueba" de la hoja maestra "LISTA CP" está desalineada para un rango de filas — se usó el criterio Contexto/Evento/Resultado de la hoja HU (confiable) como fuente autoritativa en su lugar.
