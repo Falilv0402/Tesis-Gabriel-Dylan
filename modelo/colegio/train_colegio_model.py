@@ -62,7 +62,15 @@ FEATURES_PP = [
 def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
     model_dir = Path(__file__).resolve().parents[1] / "model"
     model_dir.mkdir(exist_ok=True)
-    output_path = model_dir / f"colegio_{codigo_ie}.pkl"
+    # El archivo se guarda SIEMPRE sin ceros iniciales (misma normalización
+    # que usa el frontend al llamar /v1/colegio/{ie}/procesar, que hace
+    # String(parseInt(codigo_ie, 10))). Si esto no coincide, una carga vía
+    # web y una vía CLI para el mismo colegio terminan en DOS archivos
+    # distintos (p.ej. colegio_0864785.pkl y colegio_864785.pkl) y
+    # _load_artefacto() en el backend sirve el que encuentra primero — que
+    # puede no ser el más reciente. Pasó de verdad con La Victoria.
+    codigo_ie_archivo = codigo_ie.lstrip("0") or codigo_ie
+    output_path = model_dir / f"colegio_{codigo_ie_archivo}.pkl"
 
     print(f"\n{'='*60}")
     print(f"  MODELO DE RIESGO — IE {codigo_ie}")
