@@ -99,12 +99,19 @@ export function useInterventions(
     if (!selected || !session) return;
     setAuthBusy(true);
     const desc = descIntervencion.trim() || recommendation(selected);
+    // codigo_ie/distrito scopean la intervención a un colegio o distrito
+    // (migración 0014) para que un director de un colegio no vea la bitácora
+    // de otro. "Colegio" es el periodo que colegioToStudent() les pone a los
+    // alumnos de un colegio propio (ver lib/colegio.ts) — para EM2022 solo
+    // hay distrito, no codigo_ie de colegio propio.
     const { error } = await supabase.from("intervenciones").insert({
       codigo_estudiante: selected.id,
       tipo:             tipoIntervencion,
       descripcion:      desc,
       estado:           "pendiente",
       registrado_por:   session.id,
+      codigo_ie: selected.periodo === "Colegio" ? (selected.id_ie ?? null) : null,
+      distrito:  selected.distrito ?? null,
     });
     if (!error) {
       await insertAudit("Registrar intervencion", "intervenciones", { estudiante: selected.id, tipo: tipoIntervencion });
