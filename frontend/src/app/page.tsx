@@ -383,6 +383,7 @@ export default function Page() {
               onRefresh={() => void colegio.reload()}
               onSelect={(a) => { setSelectedColegioId(colegioStudentId(a)); setTab("estudiante"); }}
               onIntervenir={(a) => { setSelectedColegioId(colegioStudentId(a)); setTab("intervenciones"); }}
+              onVerListaCompleta={() => setTab("estudiante")}
             />
           )}
 
@@ -413,6 +414,8 @@ export default function Page() {
             <ColegioEstudianteView
               role={auth.role}
               alumno={colegioSelectedAlumno}
+              alumnos={colegio.alumnos}
+              onSelectAlumno={(id) => setSelectedColegioId(id)}
               annotations={interventions.annotations}
               annotationText={interventions.annotationText} setAnnotationText={interventions.setAnnotationText}
               isSavingAnnotation={interventions.isSavingAnnotation}

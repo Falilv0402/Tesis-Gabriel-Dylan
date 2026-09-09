@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, BarChart3, CalendarRange, CheckCircle2, MessageSquare, Pencil, Plus, Save, Users, TrendingUp,
+  Activity, BarChart3, CalendarRange, CheckCircle2, Filter, MessageSquare, Pencil, Plus, Save, Users, TrendingUp,
 } from "lucide-react";
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -10,7 +10,10 @@ import {
 import type { AlumnoColegio, Tab } from "@/types";
 import { Panel, EmptyState } from "@/components/ui/Primitives";
 import { pct, riskClass } from "@/lib/format";
-import { MATERIAS_COLEGIO, anioFromSalon, notaInfo, notaCelda, gradeCell, colegioStudentId, mejorBimestreConDatos, type Bimestre } from "@/lib/colegio";
+import {
+  MATERIAS_COLEGIO, anioFromSalon, aniosDeSalones, seccionFromSalon, seccionesDeSalones,
+  notaInfo, notaCelda, gradeCell, colegioStudentId, mejorBimestreConDatos, type Bimestre,
+} from "@/lib/colegio";
 
 interface Annotation { id: string; estudiante_id: string; contenido: string; created_at: string; autor_nombre?: string | null; autor_email?: string | null; es_propia?: boolean }
 interface Milestone  { id: string; texto: string; fecha: string; completado: boolean; autor_nombre?: string | null; autor_email?: string | null; es_propio?: boolean }
@@ -18,6 +21,9 @@ interface Milestone  { id: string; texto: string; fecha: string; completado: boo
 interface ColegioEstudianteViewProps {
   role: string;
   alumno: AlumnoColegio | undefined;
+  /** Roster completo del colegio, para el buscador/lista con notas por materia. */
+  alumnos: AlumnoColegio[];
+  onSelectAlumno: (id: string) => void;
   annotations: Annotation[];
   annotationText: string;
   setAnnotationText: (v: string) => void;
@@ -49,13 +55,44 @@ const LINE_COLORS: Record<string, string> = {
 };
 
 export function ColegioEstudianteView({
-  role, alumno,
+  role, alumno, alumnos, onSelectAlumno,
   annotations, annotationText, setAnnotationText, isSavingAnnotation,
   planMilestones, newMilestone, setNewMilestone, newMilestoneDate, setNewMilestoneDate,
   studentTab, setStudentTab, setTab,
   saveAnnotation, loadAnnotations, addMilestone, toggleMilestone, loadMilestones, isLoadingMilestones,
 }: ColegioEstudianteViewProps) {
   const canEditAll = role === "director";
+
+  // ── Buscador / lista completa con notas por materia (antes vivía en el
+  // Dashboard) — sirve para encontrar y seleccionar un alumno, con el mismo
+  // detalle de notas que antes se veía ahí. ─────────────────────────────────
+  const [rNivel,    setRNivel]    = useState<"Todos" | "ALTO" | "MEDIO" | "BAJO">("Todos");
+  const [rAnio,     setRAnio]     = useState<string>("Todos");
+  const [rSeccion,  setRSeccion]  = useState<string>("Todas");
+  const [rBimestre, setRBimestre] = useState<Bimestre>("1");
+  const rBimestreAutoElegido = useRef(false);
+  useEffect(() => {
+    if (!rBimestreAutoElegido.current && alumnos.length > 0) {
+      rBimestreAutoElegido.current = true;
+      setRBimestre(mejorBimestreConDatos(alumnos, MATERIAS_COLEGIO.map((m) => m.key)));
+    }
+  }, [alumnos]);
+
+  const rAnios     = useMemo(() => aniosDeSalones(alumnos), [alumnos]);
+  const rSecciones = useMemo(() => seccionesDeSalones(alumnos), [alumnos]);
+  const rFiltrados = useMemo(() => {
+    return alumnos
+      .filter((a) => rNivel === "Todos" || a.nivel_riesgo === rNivel)
+      .filter((a) => rAnio === "Todos" || anioFromSalon(a.salon).label === rAnio)
+      .filter((a) => rSeccion === "Todas" || seccionFromSalon(a.salon) === rSeccion)
+      .sort((a, b) => b.prob_riesgo - a.prob_riesgo);
+  }, [alumnos, rNivel, rAnio, rSeccion]);
+  const rHayNotaAnual = useMemo(
+    () => rFiltrados.some((a) => MATERIAS_COLEGIO.some((m) => gradeCell(a, m.key, rBimestre).anual)),
+    [rFiltrados, rBimestre]
+  );
+  const seleccionadoId = alumno ? colegioStudentId(alumno) : "";
+
   // Por defecto mostramos el Bimestre 4 (el que el modelo predice / resultado
   // final) — pero si ese alumno no tiene datos ahí (p.ej. el colegio todavía
   // no cargó el 4° bimestre), se ajusta al más reciente que sí tenga notas,
@@ -69,22 +106,135 @@ export function ColegioEstudianteView({
     }
   }, [alumno]);
 
+  const buscador = alumnos.length > 0 && (
+    <section className="full-col">
+      <Panel title="Buscar alumno — notas por materia">
+        <section className="filters" style={{ marginBottom: 10 }}>
+          <Filter size={18} />
+          <label className="filter-field">Nivel de riesgo
+            <select value={rNivel} onChange={(e) => setRNivel(e.target.value as typeof rNivel)}>
+              <option value="Todos">Todos</option>
+              <option value="ALTO">ALTO</option>
+              <option value="MEDIO">MEDIO</option>
+              <option value="BAJO">BAJO</option>
+            </select>
+          </label>
+          <label className="filter-field">Grado
+            <select value={rAnio} onChange={(e) => setRAnio(e.target.value)}>
+              <option value="Todos">Todos</option>
+              {rAnios.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </label>
+          <label className="filter-field">Sección
+            <select value={rSeccion} onChange={(e) => setRSeccion(e.target.value)}>
+              <option value="Todas">Todas</option>
+              {rSecciones.map((s) => <option key={s} value={s}>Sección {s}</option>)}
+            </select>
+          </label>
+          <label className="filter-field">Bimestre
+            <select value={rBimestre} onChange={(e) => setRBimestre(e.target.value as Bimestre)}>
+              <option value="1">Bimestre 1</option>
+              <option value="2">Bimestre 2</option>
+              <option value="3">Bimestre 3</option>
+              <option value="4">Bimestre 4</option>
+            </select>
+          </label>
+        </section>
+
+        {rFiltrados.length === 0 ? (
+          <EmptyState message="No hay alumnos con el filtro seleccionado." />
+        ) : (
+          <div style={{ overflowY: "auto", overflowX: "auto", maxHeight: 360, borderRadius: 10, border: "1px solid var(--border)" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: "var(--navy)", color: "#fff", position: "sticky", top: 0 }}>
+                  <th style={th}>Alumno</th>
+                  <th style={th}>Salón</th>
+                  <th style={th}>Nivel</th>
+                  <th style={{ ...th, textAlign: "right" }}>Prob.</th>
+                  {MATERIAS_COLEGIO.map((m) => (
+                    <th key={m.key} style={{ ...th, textAlign: "center" }}>{m.label}</th>
+                  ))}
+                  <th style={{ ...th, textAlign: "center" }} title="Promedio anual de conducta — también ponderado en el modelo de riesgo">Conducta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rFiltrados.map((a, i) => {
+                  const id = colegioStudentId(a);
+                  const esSeleccionado = id === seleccionadoId;
+                  return (
+                    <tr
+                      key={id}
+                      onClick={() => onSelectAlumno(id)}
+                      className={esSeleccionado ? "selected-row" : undefined}
+                      style={{
+                        background: esSeleccionado ? undefined : i % 2 === 0 ? "var(--surface)" : "transparent",
+                        borderBottom: "1px solid var(--border)",
+                        cursor: "pointer",
+                      }}
+                      title="Ver detalle del alumno"
+                    >
+                      <td style={{ ...td, fontWeight: 600 }}>{a.nombre}</td>
+                      <td style={td}>{a.salon}</td>
+                      <td style={td}>
+                        <span className={riskClass(a.nivel_riesgo)} style={{ fontSize: 11, padding: "2px 7px", borderRadius: 12 }}>
+                          {a.nivel_riesgo}
+                        </span>
+                      </td>
+                      <td style={{ ...td, textAlign: "right", fontWeight: 700,
+                        color: a.nivel_riesgo === "ALTO" ? "#dc2626" : a.nivel_riesgo === "MEDIO" ? "#d97706" : "#16a34a" }}>
+                        {(a.prob_riesgo * 100).toFixed(0)}%
+                      </td>
+                      {MATERIAS_COLEGIO.map((m) => {
+                        const g = gradeCell(a, m.key, rBimestre);
+                        return (
+                          <td key={m.key} style={{ ...td, textAlign: "center", fontWeight: 600, color: g.color }}>
+                            {g.label}
+                          </td>
+                        );
+                      })}
+                      {(() => {
+                        const c = notaInfo(a.conducta_promedio);
+                        return (
+                          <td style={{ ...td, textAlign: "center", fontWeight: 600, color: c.color }}>
+                            {c.label}
+                          </td>
+                        );
+                      })()}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, textAlign: "right" }}>
+          {rFiltrados.length.toLocaleString("es-PE")} de {alumnos.length.toLocaleString("es-PE")} alumnos · notas del Bimestre {rBimestre} (escala AD/A/B/C) · Conducta: promedio anual
+          {rHayNotaAnual && <> · <strong>ᵃ</strong> = nota anual (salón sin desglose por bimestre)</>}
+        </p>
+      </Panel>
+    </section>
+  );
+
   if (!alumno) {
     return (
-      <section className="full-col">
-        <Panel title="Detalle del alumno">
-          <div className="empty-state-large">
-            <Users size={48} style={{ opacity: 0.4, marginBottom: 12 }} />
-            <h3 style={{ margin: "0 0 6px" }}>No hay alumno seleccionado</h3>
-            <p className="model-note" style={{ marginBottom: 14 }}>
-              Ve al Dashboard o Reportes y haz clic en un alumno para ver su detalle aquí.
-            </p>
-            <button className="primary" onClick={() => setTab("dashboard")}>
-              <BarChart3 size={14} /> Ir al Dashboard
-            </button>
-          </div>
-        </Panel>
-      </section>
+      <>
+        {buscador}
+        <section className="full-col">
+          <Panel title="Detalle del alumno">
+            <div className="empty-state-large">
+              <Users size={48} style={{ opacity: 0.4, marginBottom: 12 }} />
+              <h3 style={{ margin: "0 0 6px" }}>No hay alumno seleccionado</h3>
+              <p className="model-note" style={{ marginBottom: 14 }}>
+                Elige un alumno de la lista de arriba para ver su detalle aquí.
+              </p>
+              <button className="primary" onClick={() => setTab("dashboard")}>
+                <BarChart3 size={14} /> Ir al Dashboard
+              </button>
+            </div>
+          </Panel>
+        </section>
+      </>
     );
   }
 
@@ -111,7 +261,9 @@ export function ColegioEstudianteView({
   const annsDeAlumno = annotations.filter((a) => a.estudiante_id === sid);
 
   return (
-    <section className="full-col">
+    <>
+      {buscador}
+      <section className="full-col">
       <Panel title={`${alumno.nombre} — Detalle del alumno`}>
         <div className="student-detail-page">
           {/* ── Acciones (arriba a la derecha del card) ───────────────────── */}
@@ -353,6 +505,16 @@ export function ColegioEstudianteView({
           </div>
         </div>
       </Panel>
-    </section>
+      </section>
+    </>
   );
 }
+
+// ── Estilos ───────────────────────────────────────────────────────────────────
+const th: React.CSSProperties = {
+  padding: "8px 10px", textAlign: "left", fontSize: 11,
+  fontWeight: 700, whiteSpace: "nowrap", letterSpacing: "0.03em",
+};
+const td: React.CSSProperties = {
+  padding: "7px 10px", whiteSpace: "nowrap",
+};
