@@ -233,7 +233,14 @@ export function useAuth(
         email: savedEmail, password: savedPassword,
       });
       if (loginError) {
-        setAuthMsg("Cuenta creada. Ya puedes iniciar sesion.");
+        // El mensaje anterior decía "ya puedes iniciar sesión" sin importar
+        // la causa real del fallo — si el proyecto exige confirmar el correo,
+        // el usuario creía que podía entrar y en realidad no, hasta confirmar.
+        setAuthMsg(
+          loginError.message.includes("Email not confirmed")
+            ? "Cuenta creada. Te enviamos un correo de confirmación — ábrelo y luego inicia sesión."
+            : "Cuenta creada. Ingresa tus datos para iniciar sesión."
+        );
         setAuthMode("login");
         skipOnboardingRef.current = false;
       }
