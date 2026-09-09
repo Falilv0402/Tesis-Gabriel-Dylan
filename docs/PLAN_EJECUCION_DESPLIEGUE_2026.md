@@ -140,3 +140,6 @@ Este documento se actualiza en vivo conforme se completan los pasos. Checklist:
 - [x] **Dos archivos de modelo por colegio**: `train_colegio_model.py` (CLI) y el endpoint `/procesar` (carga web) normalizaban el código IE de forma distinta (con/sin ceros iniciales), generando DOS `.pkl` para el mismo colegio — el backend servía el que encontraba primero, no el más reciente. Pasó de verdad con La Victoria (seguía sirviendo una carga de prueba parcial después de reentrenar). Corregido: ambos caminos normalizan igual ahora.
 - [x] Copy: "Registrar en base de datos" → "Registrar"
 - [x] **Rediseño del Dashboard hecho y verificado**: tabla simplificada "Estudiantes más críticos" (alumno, salón, nivel, probabilidad) en el Dashboard; buscador con notas por materia movido a "Estudiante" (con los mismos filtros, arriba del detalle del alumno seleccionado)
+- [x] **Foto de perfil + materia del profesor** (2026-09-09): botón de cámara sobre el avatar en "Mi perfil" sube a Supabase Storage (bucket `avatars`, migración `0015`) y se aplica al instante; nuevo campo "Materia que enseñas"
+- [x] **Íconos corregidos**: embudo de filtros alineado con los `<select>` de al lado; campana de notificaciones con tratamiento visual más cuidado
+- [ ] **Migración `0015_avatar_foto_y_materia.sql` pendiente de aplicar** — correr a mano en el SQL Editor de Supabase
