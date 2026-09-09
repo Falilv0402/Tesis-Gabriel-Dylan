@@ -73,6 +73,21 @@ export function notaAnual(a: AlumnoColegio, materia: string): number | null {
 }
 
 /**
+ * Bimestre "por defecto" a mostrar: el más reciente que tenga alguna nota
+ * real, no siempre "1". Sin esto, un colegio que solo cargó el Excel del
+ * 4° bimestre (p.ej. una carga de prueba parcial) mostraba la tabla vacía
+ * de entrada — el selector arrancaba en Bimestre 1, que no tenía ningún dato,
+ * y parecía que el sistema no había guardado nada.
+ */
+export function mejorBimestreConDatos(alumnos: AlumnoColegio[], materias: string[]): Bimestre {
+  for (const b of ["4", "3", "2", "1"] as const) {
+    const hayDato = alumnos.some((a) => materias.some((m) => notaBimestre(a, m, b) != null));
+    if (hayDato) return b;
+  }
+  return "1";
+}
+
+/**
  * Nota efectiva a mostrar en un bimestre. Si el alumno tiene la nota de ese
  * bimestre, se usa. Si el salón NO tiene desglose por bimestre en esa materia
  * (p.ej. el "consolidado anual" de 6° B) pero sí promedio anual, se usa el

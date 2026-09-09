@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Activity, BarChart3, CalendarRange, CheckCircle2, MessageSquare, Pencil, Plus, Save, Users, TrendingUp,
 } from "lucide-react";
@@ -10,7 +10,7 @@ import {
 import type { AlumnoColegio, Tab } from "@/types";
 import { Panel, EmptyState } from "@/components/ui/Primitives";
 import { pct, riskClass } from "@/lib/format";
-import { MATERIAS_COLEGIO, anioFromSalon, notaInfo, notaCelda, gradeCell, colegioStudentId, type Bimestre } from "@/lib/colegio";
+import { MATERIAS_COLEGIO, anioFromSalon, notaInfo, notaCelda, gradeCell, colegioStudentId, mejorBimestreConDatos, type Bimestre } from "@/lib/colegio";
 
 interface Annotation { id: string; estudiante_id: string; contenido: string; created_at: string; autor_nombre?: string | null; autor_email?: string | null; es_propia?: boolean }
 interface Milestone  { id: string; texto: string; fecha: string; completado: boolean; autor_nombre?: string | null; autor_email?: string | null; es_propio?: boolean }
@@ -56,8 +56,18 @@ export function ColegioEstudianteView({
   saveAnnotation, loadAnnotations, addMilestone, toggleMilestone, loadMilestones, isLoadingMilestones,
 }: ColegioEstudianteViewProps) {
   const canEditAll = role === "director";
-  // Por defecto mostramos el Bimestre 4 (el que el modelo predice / resultado final).
+  // Por defecto mostramos el Bimestre 4 (el que el modelo predice / resultado
+  // final) — pero si ese alumno no tiene datos ahí (p.ej. el colegio todavía
+  // no cargó el 4° bimestre), se ajusta al más reciente que sí tenga notas,
+  // para no abrir la vista con la tabla vacía. Solo se auto-elige una vez.
   const [bimestreDetalle, setBimestreDetalle] = useState<Bimestre>("4");
+  const bimestreAutoElegido = useRef(false);
+  useEffect(() => {
+    if (!bimestreAutoElegido.current && alumno) {
+      bimestreAutoElegido.current = true;
+      setBimestreDetalle(mejorBimestreConDatos([alumno], MATERIAS_COLEGIO.map((m) => m.key)));
+    }
+  }, [alumno]);
 
   if (!alumno) {
     return (

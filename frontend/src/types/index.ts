@@ -241,4 +241,9 @@ export type ColegioResumen = {
   por_nivel:       Record<"ALTO" | "MEDIO" | "BAJO", number>;
   por_salon:       Record<string, Record<string, number>>;
   trained_at?:     string;
+  metricas?: {
+    modo_prediccion?:    string;
+    nota_metodologica?:  string;
+    [key: string]: unknown;
+  };
 };

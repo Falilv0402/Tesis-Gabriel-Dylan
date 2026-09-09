@@ -90,7 +90,7 @@ export function IntervencionesView({
             />
           </label>
           <button className="primary" disabled={!selected || authBusy} onClick={onRegistrar}>
-            <CheckCircle2 size={17} /> {authBusy ? "Guardando..." : "Registrar en base de datos"}
+            <CheckCircle2 size={17} /> {authBusy ? "Guardando..." : "Registrar"}
           </button>
 
           {selected && (

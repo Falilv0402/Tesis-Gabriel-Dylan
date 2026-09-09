@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Filter, RefreshCcw, GraduationCap, AlertTriangle, Users } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { AlumnoColegio, ColegioResumen } from "@/types";
@@ -10,7 +10,7 @@ import { pct, riskClass } from "@/lib/format";
 import {
   MATERIAS_COLEGIO as MATERIAS, anioFromSalon, aniosDeSalones,
   seccionFromSalon, seccionesDeSalones,
-  notaInfo, gradeCell, colegioStudentId, type Bimestre,
+  notaInfo, gradeCell, colegioStudentId, mejorBimestreConDatos, type Bimestre,
 } from "@/lib/colegio";
 
 /**
@@ -43,6 +43,18 @@ export function ColegioDashboardView({
   const [anio,     setAnio]     = useState<string>("Todos");
   const [seccion,  setSeccion]  = useState<string>("Todas");
   const [bimestre, setBimestre] = useState<Bimestre>("1");
+
+  // Arranca en el bimestre más reciente que tenga datos reales, no siempre
+  // "1" — si el colegio solo cargó (por ahora) el Excel de un bimestre más
+  // avanzado, la tabla no debe verse vacía de entrada. Solo se auto-elige la
+  // primera vez que llegan alumnos, para no pisar una selección manual.
+  const bimestreAutoElegido = useRef(false);
+  useEffect(() => {
+    if (!bimestreAutoElegido.current && alumnos.length > 0) {
+      bimestreAutoElegido.current = true;
+      setBimestre(mejorBimestreConDatos(alumnos, MATERIAS.map((m) => m.key)));
+    }
+  }, [alumnos]);
 
   // Opciones de "Año de secundaria" y "Sección" derivadas de los salones presentes
   const anios     = useMemo(() => aniosDeSalones(alumnos), [alumnos]);
@@ -143,6 +155,21 @@ export function ColegioDashboardView({
           </span>
         </div>
       </div>
+
+      {/* ── Aviso: modelo con datos incompletos ─────────────────────────── */}
+      {resumen?.metricas?.modo_prediccion?.startsWith("descriptivo") && (
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px",
+          background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10,
+        }}>
+          <AlertTriangle size={16} style={{ color: "#92400e", flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 12.5, color: "#92400e", lineHeight: 1.5 }}>
+            <strong>Este colegio todavía no tiene los 4 bimestres cargados</strong> — el modelo está
+            operando con datos limitados (no está prediciendo, solo describiendo lo que hay). Algunas
+            materias o bimestres pueden verse sin nota hasta que se suban los Excel faltantes.
+          </div>
+        </div>
+      )}
 
       {/* ── KPIs ───────────────────────────────────────────────────────── */}
       <section className="kpi-grid">

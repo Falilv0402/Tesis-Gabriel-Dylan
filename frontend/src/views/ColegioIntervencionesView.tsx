@@ -97,7 +97,7 @@ export function ColegioIntervencionesView({
               placeholder="Describe la acción a tomar..." rows={3} />
           </label>
           <button className="primary" disabled={!selectedAlumno || authBusy} onClick={onRegistrar}>
-            <CheckCircle2 size={17} /> {authBusy ? "Guardando..." : "Registrar en base de datos"}
+            <CheckCircle2 size={17} /> {authBusy ? "Guardando..." : "Registrar"}
           </button>
 
           {selectedAlumno && (

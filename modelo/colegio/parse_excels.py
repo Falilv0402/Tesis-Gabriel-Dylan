@@ -313,11 +313,30 @@ MATERIAS_REPORTE_CONSOLIDADO: dict[str, str] = {
     "GEOMETRÍA": "matematica", "GEOMETRIA": "matematica",
     "RAZONAMIENTO MATEMÁTICO": "matematica", "RAZONAMIENTO MATEMATICO": "matematica",
     "MATEMÁTICA": "matematica", "MATEMATICA": "matematica",
+    # Trigonometría se suma recién en secundaria alta (4°-5°) — es parte del
+    # área de matemática, no de ciencias, pese a estar cerca de Física/Química
+    # en la hoja de notas.
+    "TRIGONOMETRÍA": "matematica", "TRIGONOMETRIA": "matematica",
     "COMUNICACIÓN": "comunicacion", "COMUNICACION": "comunicacion",
     "PLAN LECTOR": "comunicacion",
     "RAZONAMIENTO VERBAL": "comunicacion",
     "PERSONAL SOCIAL": "personal_social",
+    # Primaria reporta "Personal Social" como una sola materia; secundaria la
+    # reemplaza por "Ciencias Sociales" (y a veces suma DPCC como materia
+    # aparte) — mismo área pedagógica, nombre distinto por nivel.
+    "CIENCIAS SOCIALES": "personal_social",
+    "DESARROLLO PERSONAL CIUDADANÍA Y CÍVICA": "personal_social",
+    "DESARROLLO PERSONAL CIUDADANIA Y CIVICA": "personal_social",
     "CIENCIA Y TECNOLOGÍA": "cta", "CIENCIA Y TECNOLOGIA": "cta",
+    # Igual que Personal Social: primaria tiene una sola materia "Ciencia y
+    # Tecnología"; secundaria la desdobla en Ciencias Naturales (1°-2°) o en
+    # Biología/Física/Química/Anatomía (3°-5°) — todas caen en la misma área
+    # ponderada del modelo (se promedian si un alumno tiene varias).
+    "CIENCIAS NATURALES": "cta",
+    "BIOLOGÍA": "cta", "BIOLOGIA": "cta",
+    "FÍSICA": "cta", "FISICA": "cta",
+    "QUÍMICA": "cta", "QUIMICA": "cta",
+    "ANATOMÍA": "cta", "ANATOMIA": "cta",
     "INGLÉS": "english", "INGLES": "english",
     "EDUCACIÓN FÍSICA": "ed_fisica", "EDUCACION FISICA": "ed_fisica",
     "DANZA": "arte",
