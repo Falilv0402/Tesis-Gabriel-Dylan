@@ -163,8 +163,23 @@ export function useAuth(
   // ── Auth actions ──────────────────────────────────────────────────────────
   async function handleLogin() {
     setAuthBusy(true); setAuthError(""); setAuthMsg("");
-    const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
-    if (error) setAuthError(translateAuthError(error.message));
+    const { data, error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+    if (error) {
+      setAuthError(translateAuthError(error.message));
+    } else if (data.user) {
+      // HU002/CP006: una cuenta desactivada por un admin no debe poder
+      // entrar, aunque la contraseña sea correcta -- antes solo se bloqueaba
+      // el acceso a los datos vía RLS, pero el login en sí lo dejaba pasar.
+      const { data: perfil } = await supabase
+        .from("profiles")
+        .select("activo")
+        .eq("id", data.user.id)
+        .single();
+      if (perfil?.activo === false) {
+        await supabase.auth.signOut();
+        setAuthError("Cuenta inactiva. Contacta a tu administrador.");
+      }
+    }
     setAuthBusy(false);
   }
 
