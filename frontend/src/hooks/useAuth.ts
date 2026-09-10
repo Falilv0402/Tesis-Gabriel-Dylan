@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type { UserRole } from "@/types";
-import { apiUrl } from "@/lib/constants";
+import { apiUrl, EM2022_HABILITADO } from "@/lib/constants";
 import { useProfile } from "@/hooks/useProfile";
 
 export function useAuth(
@@ -185,7 +185,14 @@ export function useAuth(
 
   async function handleRegister() {
     if (!authNombre.trim()) { setAuthError("Ingresa tu nombre completo."); return; }
-    if (!regDistrito)        { setAuthError("Selecciona tu distrito para continuar."); return; }
+    if (!EM2022_HABILITADO) {
+      // El distrito se deriva del colegio elegido (ver el efecto en este
+      // mismo hook) -- aquí solo se exige el colegio.
+      if (!regColegioIe) { setAuthError("Selecciona tu colegio para continuar."); return; }
+    } else if (!regDistrito) {
+      setAuthError("Selecciona tu distrito para continuar.");
+      return;
+    }
 
     // Validar correo institucional
     const blockedDomains = [
@@ -353,23 +360,57 @@ export function useAuth(
 
   useEffect(() => { void loadDistritos(); }, []);
 
+  // /v1/colegios mezcla los ~miles de colegios del censo EM2022 (sin modelo
+  // propio) con los que sí tienen un modelo CUBICOL entrenado -- solo estos
+  // últimos traen `nombre_ie`. Con EM2022 apagado (de momento), solo se
+  // ofrecen esos para no dejar elegir un colegio que caería al fallback
+  // nacional ya deshabilitado.
+  const soloColegiosConModeloPropio = (
+    data: { distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[]
+  ) => EM2022_HABILITADO ? data : data.filter((c) => !!c.nombre_ie);
+
   // Precargar TODOS los colegios al inicio (necesario para el dropdown en UsuariosView)
   useEffect(() => {
     fetch(`${apiUrl}/v1/colegios`)
       .then(r => r.ok ? r.json() : [])
       .then((data: { distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[]) => {
-        setColegiosList(data);
+        setColegiosList(soloColegiosConModeloPropio(data));
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    if (EM2022_HABILITADO) return;
+    // Con EM2022 apagado solo existen los colegios con modelo propio (unos
+    // pocos) -- se muestran todos de una, sin depender de elegir antes un
+    // distrito del censo EM2022 (varios de estos colegios ni siquiera tienen
+    // un distrito real asignado todavía).
+    fetch(`${apiUrl}/v1/colegios`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: { distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[]) => {
+        setRegColegiosList(soloColegiosConModeloPropio(data));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (EM2022_HABILITADO) return;
+    // El distrito se deriva del colegio elegido (no al revés) -- sigue
+    // guardándose en el perfil por si algo más lo necesita (p.ej. alertas
+    // de equipo), pero deja de ser un paso previo obligatorio para el usuario.
+    const colegio = regColegiosList.find((c) => c.id_ie === regColegioIe);
+    setRegDistrito(colegio?.distrito ?? "");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regColegioIe]);
+
+  useEffect(() => {
+    if (!EM2022_HABILITADO) return; // con EM2022 apagado, ver los 2 efectos anteriores
     if (!regDistrito) { setRegColegiosList([]); setRegColegioIe(""); return; }
     fetch(`${apiUrl}/v1/colegios`)
       .then((r) => r.ok ? r.json() : [])
       .then((data: { distrito: string; id_ie: string; total_estudiantes: number; nombre_ie?: string }[]) => {
-        setRegColegiosList(data.filter((c) => c.distrito === regDistrito));
+        setRegColegiosList(soloColegiosConModeloPropio(data).filter((c) => c.distrito === regDistrito));
         setRegColegioIe("");
       })
       .catch(() => {});

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CheckCircle2, Circle, Eye, EyeOff, KeyRound, Mail, ShieldCheck } from "lucide-react";
+import { EM2022_HABILITADO } from "@/lib/constants";
 
 // ── Validaciones ──────────────────────────────────────────────────────────────
 
@@ -162,16 +163,26 @@ export function AuthView({
                 textTransform: "uppercase", letterSpacing: "0.04em" }}>
                 Tu institución educativa
               </p>
-              <label>Distrito <span style={{ color: "#ef4444" }}>*</span>
-                <select value={regDistrito} onChange={(e) => setRegDistrito(e.target.value)}>
-                  <option value="">Selecciona tu distrito...</option>
-                  {distritosList.map((d) => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </label>
-              <label style={{ opacity: regDistrito ? 1 : 0.5 }}>
-                Colegio
-                <select value={regColegioIe} onChange={(e) => setRegColegioIe(e.target.value)} disabled={!regDistrito}>
-                  <option value="">{regDistrito ? "Todos los colegios del distrito" : "Primero selecciona un distrito"}</option>
+              {EM2022_HABILITADO && (
+                <label>Distrito <span style={{ color: "#ef4444" }}>*</span>
+                  <select value={regDistrito} onChange={(e) => setRegDistrito(e.target.value)}>
+                    <option value="">Selecciona tu distrito...</option>
+                    {distritosList.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </label>
+              )}
+              <label style={{ opacity: EM2022_HABILITADO && !regDistrito ? 0.5 : 1 }}>
+                Colegio <span style={{ color: "#ef4444" }}>*</span>
+                <select
+                  value={regColegioIe}
+                  onChange={(e) => setRegColegioIe(e.target.value)}
+                  disabled={EM2022_HABILITADO && !regDistrito}
+                >
+                  <option value="">
+                    {EM2022_HABILITADO
+                      ? (!regDistrito ? "Primero selecciona un distrito" : "Todos los colegios del distrito")
+                      : "Selecciona tu colegio..."}
+                  </option>
                   {regColegiosList.map((c) => (
                     <option key={c.id_ie} value={c.id_ie}>
                       {c.nombre_ie ? `${c.nombre_ie} · IE ${c.id_ie} · ${c.total_estudiantes} alumnos` : `IE ${c.id_ie} · ${c.total_estudiantes} alumnos`}
@@ -179,6 +190,15 @@ export function AuthView({
                   ))}
                 </select>
               </label>
+
+              {!EM2022_HABILITADO && regColegiosList.length === 0 && (
+                <div style={{
+                  padding: "8px 10px", borderRadius: 8, fontSize: 12,
+                  background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b",
+                }}>
+                  Todavía no hay ningún colegio con modelo propio disponible. Contacta al administrador.
+                </div>
+              )}
 
               {/* Aviso si el colegio ya tiene director */}
               {regColegioIe && ieHasDirector && (

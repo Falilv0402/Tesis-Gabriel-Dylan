@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { DatasetSummary, Diagnostico, Evaluation, Importance, Metrics } from "@/types";
-import { apiUrl } from "@/lib/constants";
+import { apiUrl, EM2022_HABILITADO } from "@/lib/constants";
 
 interface LiveMetrics {
   tp: number; fp: number; tn: number; fn: number;
@@ -27,6 +27,21 @@ export function useModelData(
   const [isLoadingModel,  setIsLoadingModel]  = useState(true);
 
   async function loadModelMetrics() {
+    // EM2022 apagado de momento (EM2022_HABILITADO en lib/constants.ts) --
+    // sin esto, la app hacía 5 fetches al modelo nacional en cada carga
+    // aunque nadie fuera a ver esos datos. El indicador "Backend conectado"
+    // dependía de esos mismos fetches, así que aquí se revisa por separado
+    // con /v1/health para no perder esa señal.
+    if (!EM2022_HABILITADO) {
+      setIsLoadingModel(false);
+      try {
+        const res = await fetch(`${apiUrl}/v1/health`);
+        setApiConnected(res.ok);
+      } catch {
+        setApiConnected(false);
+      }
+      return;
+    }
     setIsLoadingModel(true);
     let anySuccess = false;
 

@@ -9,6 +9,7 @@ import { Panel, Kpi, EmptyState } from "@/components/ui/Primitives";
 import { ConfusionMatrix } from "@/components/charts/ConfusionMatrix";
 import { RocMiniChart } from "@/components/charts/RocMiniChart";
 import type { Metrics, Evaluation } from "@/types";
+import { EM2022_HABILITADO } from "@/lib/constants";
 
 interface CsvValidation {
   total_filas: number;
@@ -151,8 +152,9 @@ export function DatosView({
                 No hay datos disponibles para esta IE
               </p>
               <p style={{ fontSize: 12, color: "#92400e", lineHeight: 1.5 }}>
-                El colegio IE <strong>{profileCodigoIe}</strong> no está en el dataset EM2022 ni tiene
-                un modelo CUBICOL propio. Contacta al Super Admin.
+                {EM2022_HABILITADO
+                  ? <>El colegio IE <strong>{profileCodigoIe}</strong> no está en el dataset EM2022 ni tiene un modelo CUBICOL propio. Contacta al Super Admin.</>
+                  : <>El colegio IE <strong>{profileCodigoIe}</strong> todavía no tiene un modelo propio entrenado. Sube el Excel de notas y conducta abajo, o contacta al Super Admin.</>}
               </p>
             </div>
           </div>

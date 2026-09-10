@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { DatasetSummary, Diagnostico, RiskLevel, ShapData, Student } from "@/types";
 import { supabase } from "@/lib/supabase";
-import { apiUrl } from "@/lib/constants";
+import { apiUrl, EM2022_HABILITADO } from "@/lib/constants";
 import type { DistrictRiskEntry } from "@/components/maps/LimaHeatmap";
 
 export function useStudents(
@@ -126,6 +126,11 @@ export function useStudents(
   }
 
   async function loadStudents() {
+    // EM2022 apagado de momento (EM2022_HABILITADO en lib/constants.ts) --
+    // este dataset solo lo consumían las vistas de respaldo (Dashboard,
+    // Estudiante, etc. cuando el colegio no tenía modelo propio), que ya
+    // no se renderizan.
+    if (!EM2022_HABILITADO) return;
     setPredictionsSaved(false);
     try {
       const summaryRes = await fetch(`${apiUrl}/v1/predicciones/resumen?${buildSummaryQuery()}`);

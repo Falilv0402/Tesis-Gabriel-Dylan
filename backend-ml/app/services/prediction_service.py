@@ -182,8 +182,13 @@ class PredictionService:
                     continue
                 cubiertos.add(codigo_norm)
                 m = art.get("metricas", {})
+                # Placeholder ÚNICO por colegio (no un string genérico
+                # compartido) -- si dos colegios sin distrito real cayeran
+                # bajo el mismo valor, una alerta de equipo "todo el distrito"
+                # (HU019) podría notificar por error al personal de OTRO
+                # colegio que nunca debió recibirla.
                 records.append({
-                    "distrito":          art.get("distrito") or "Sin distrito asignado",
+                    "distrito":          art.get("distrito") or f"Colegio propio IE {codigo_ie}",
                     "id_ie":             int(codigo_norm) if codigo_norm.isdigit() else codigo_ie,
                     "total_estudiantes": m.get("n_alumnos", 0),
                     "nombre_ie":         art.get("nombre_colegio", f"IE {codigo_ie}"),

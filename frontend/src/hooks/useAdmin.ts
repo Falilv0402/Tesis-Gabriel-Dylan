@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { Tab } from "@/types";
 import { supabase, createIsolatedClient } from "@/lib/supabase";
-import { apiUrl } from "@/lib/constants";
+import { apiUrl, EM2022_HABILITADO } from "@/lib/constants";
 
 export function useAdmin(
   session: User | null,
@@ -121,6 +121,10 @@ export function useAdmin(
       }
 
       // 2️⃣ Fallback: cargar stats del modelo nacional EM2022 para esta IE
+      // (de momento apagado -- EM2022_HABILITADO en lib/constants.ts. Sin
+      // modelo propio, colegioModelStats queda en null y DatosView ya
+      // muestra el panel "Sin datos disponibles" para ese caso.)
+      if (!EM2022_HABILITADO) { setColegioModelStats(null); return; }
       const emRes = await fetch(`${apiUrl}/v1/predicciones/resumen?id_ie=${ieNorm}`);
       if (emRes.ok) {
         const em = await emRes.json();
@@ -258,9 +262,13 @@ export function useAdmin(
     authBusy: boolean,
     setAuthBusy: (v: boolean) => void
   ) {
+    const rolEfectivo = newUserRol;
+    if (!EM2022_HABILITADO && (rolEfectivo === "director" || rolEfectivo === "coordinador") && !newUserColegioIe) {
+      toast("Selecciona un colegio para el nuevo usuario.", "error");
+      return;
+    }
     setAuthBusy(true);
 
-    const rolEfectivo = newUserRol;
     // Para "admin" newUserDistrito guarda el código de IE elegido (select
     // "Colegio asignado"); para "director"/"coordinador" guarda el DISTRITO,
     // y el colegio (opcional) viene del campo separado newUserColegioIe.

@@ -11,6 +11,14 @@ import {
 
 export const apiUrl = process.env.NEXT_PUBLIC_ML_API_URL ?? "http://127.0.0.1:8000";
 
+// Bandera maestra "de momento": apaga todo lo referente al modelo nacional
+// EM2022 en toda la app (registro, creación de usuarios, dashboards de
+// respaldo cuando un colegio no tiene modelo propio, y la pestaña "Modelo
+// ML"), dejando SOLO los colegios con modelo propio real entrenado. Un solo
+// `false` -> `true` revierte todo. Ver README/PLAN de despliegue para el
+// detalle de qué queda oculto.
+export const EM2022_HABILITADO = false;
+
 export const navItems: { id: Tab; label: string; icon: typeof Activity; roles: UserRole[] }[] = [
   { id: "dashboard",      label: "Dashboard",     icon: BarChart3,     roles: ["director", "coordinador"] },
   { id: "estudiante",     label: "Estudiante",    icon: UserCog,       roles: ["director", "coordinador"] },
@@ -18,7 +26,7 @@ export const navItems: { id: Tab; label: string; icon: typeof Activity; roles: U
   { id: "reportes",       label: "Reportes",      icon: FileText,      roles: ["director", "coordinador"] },
   { id: "usuarios",       label: "Usuarios",      icon: Users,         roles: ["superadmin", "admin", "director"] },
   { id: "datos",          label: "Datos",          icon: Database,      roles: ["superadmin", "admin", "director", "coordinador"] },
-  { id: "modelo",         label: "Modelo ML",     icon: Activity,      roles: ["superadmin"] },
+  ...(EM2022_HABILITADO ? [{ id: "modelo" as Tab, label: "Modelo ML", icon: Activity, roles: ["superadmin"] as UserRole[] }] : []),
 ];
 
 export const featureLabels: Record<string, string> = {

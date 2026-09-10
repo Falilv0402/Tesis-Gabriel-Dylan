@@ -4,6 +4,7 @@ import { useState } from "react";
 import { RefreshCcw, UserCog, Activity } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { Panel, EmptyState } from "@/components/ui/Primitives";
+import { EM2022_HABILITADO } from "@/lib/constants";
 
 interface DbUser {
   id: string; email: string; nombre: string | null; rol: string; activo: boolean;
@@ -204,9 +205,9 @@ export function UsuariosView({
                         {distritosList.map((d) => <option key={d} value={d}>{d}</option>)}
                       </select>
                     </label>
-                    <label>Colegio asignado (opcional)
+                    <label>Colegio asignado{!EM2022_HABILITADO && <span style={{ color: "#ef4444" }}> *</span>}{EM2022_HABILITADO && " (opcional)"}
                       <select value={newUserColegioIe} onChange={(e) => setNewUserColegioIe(e.target.value)}>
-                        <option value="">Sin colegio específico (usa el modelo nacional EM2022)</option>
+                        <option value="">{EM2022_HABILITADO ? "Sin colegio específico (usa el modelo nacional EM2022)" : "Selecciona un colegio..."}</option>
                         {colegiosList.map((c) => (
                           <option key={c.id_ie} value={c.id_ie}>
                             {c.nombre_ie ? `${c.nombre_ie} · IE ${c.id_ie} — ${c.distrito}` : `IE ${c.id_ie} — ${c.distrito}`}

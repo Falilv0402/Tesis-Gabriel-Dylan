@@ -14,10 +14,11 @@ import { useInterventions } from "@/hooks/useInterventions";
 import { useToast } from "@/hooks/useToast";
 import { useNotificaciones } from "@/hooks/useNotificaciones";
 
-import { navItems, apiUrl } from "@/lib/constants";
+import { navItems, apiUrl, EM2022_HABILITADO } from "@/lib/constants";
 import { exportCsv, exportXlsx, exportPdf } from "@/lib/exports";
 
 import { Avatar } from "@/components/ui/Avatar";
+import { SinModeloPropio } from "@/components/ui/SinModeloPropio";
 import { ComparatorModal } from "@/components/modals/ComparatorModal";
 import { IeProfileModal } from "@/components/modals/IeProfileModal";
 import { ProfilePanel } from "@/components/modals/ProfilePanel";
@@ -109,7 +110,7 @@ export default function Page() {
 
   const directorTabs   = ["dashboard", "estudiante", "reportes", "intervenciones", "datos"]; // también coordinador
   const adminTabs      = ["usuarios", "datos"];
-  const superadminTabs = ["usuarios", "datos", "modelo"];
+  const superadminTabs = EM2022_HABILITADO ? ["usuarios", "datos", "modelo"] : ["usuarios", "datos"];
 
   const isAdmin      = auth.role === "admin" || auth.role === "superadmin";
   const isSuperadmin = auth.role === "superadmin";
@@ -264,9 +265,12 @@ export default function Page() {
           <div>
             <h1>{navItems.find((item) => item.id === tab)?.label}</h1>
             <span>
-              {isAdmin ? "Configuracion del sistema" : "Seguimiento academico"} · {modelData.metrics.trained_at
-                ? new Date(modelData.metrics.trained_at).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" })
-                : "pendiente"}
+              {isAdmin ? "Configuracion del sistema" : "Seguimiento academico"}
+              {EM2022_HABILITADO && (
+                <> · {modelData.metrics.trained_at
+                  ? new Date(modelData.metrics.trained_at).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" })
+                  : "pendiente"}</>
+              )}
               &nbsp;·&nbsp;
               <span className={`api-dot ${admin.apiConnected === true ? "connected" : admin.apiConnected === false ? "disconnected" : "pending"}`} />
               {admin.apiConnected === true ? "Backend conectado" : admin.apiConnected === false ? "Backend desconectado" : "Verificando..."}
@@ -389,7 +393,11 @@ export default function Page() {
             />
           )}
 
-          {isDirectorRole && tab === "dashboard" && !colegio.hasModel && (
+          {isDirectorRole && tab === "dashboard" && !colegio.hasModel && !EM2022_HABILITADO && (
+            <SinModeloPropio setTab={setTab} />
+          )}
+
+          {isDirectorRole && tab === "dashboard" && !colegio.hasModel && EM2022_HABILITADO && (
             <DashboardView
               filtered={students.filtered} selected={students.selected}
               displayTotal={students.displayTotal} high={students.high} medium={students.medium} low={students.low}
@@ -435,7 +443,11 @@ export default function Page() {
             />
           )}
 
-          {isDirectorRole && tab === "estudiante" && !colegio.hasModel && (
+          {isDirectorRole && tab === "estudiante" && !colegio.hasModel && !EM2022_HABILITADO && (
+            <SinModeloPropio setTab={setTab} />
+          )}
+
+          {isDirectorRole && tab === "estudiante" && !colegio.hasModel && EM2022_HABILITADO && (
             <EstudianteView
               role={auth.role}
               selected={students.selected} shapData={students.shapData} shapLoading={students.shapLoading}
@@ -482,7 +494,11 @@ export default function Page() {
             />
           )}
 
-          {isDirectorRole && tab === "intervenciones" && !colegio.hasModel && (
+          {isDirectorRole && tab === "intervenciones" && !colegio.hasModel && !EM2022_HABILITADO && (
+            <SinModeloPropio setTab={setTab} />
+          )}
+
+          {isDirectorRole && tab === "intervenciones" && !colegio.hasModel && EM2022_HABILITADO && (
             <IntervencionesView
               role={auth.role}
               selected={students.selected} filtered={students.filtered}
@@ -510,7 +526,11 @@ export default function Page() {
             />
           )}
 
-          {isDirectorRole && tab === "reportes" && !colegio.hasModel && (
+          {isDirectorRole && tab === "reportes" && !colegio.hasModel && !EM2022_HABILITADO && (
+            <SinModeloPropio setTab={setTab} />
+          )}
+
+          {isDirectorRole && tab === "reportes" && !colegio.hasModel && EM2022_HABILITADO && (
             <ReportesView
               summary={students.summary}
               filtered={students.filtered}
