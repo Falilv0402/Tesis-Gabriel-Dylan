@@ -133,7 +133,7 @@ export function ColegioDashboardView({
           <h2>{nombreColegio}</h2>
           <span>
             Modelo interno del colegio · alerta temprana B1-B3 → B4
-            {resumen?.trained_at && ` · actualizado ${new Date(resumen.trained_at).toLocaleDateString("es-PE", { dateStyle: "medium" })}`}
+            {resumen?.trained_at && ` · actualizado ${new Date(resumen.trained_at).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" })}`}
           </span>
         </div>
       </div>

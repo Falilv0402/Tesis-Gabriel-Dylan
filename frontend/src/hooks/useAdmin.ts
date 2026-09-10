@@ -83,6 +83,7 @@ export function useAdmin(
     trained_at: string | null;
     por_nivel: Record<string, number>;
     advertencias_carga: string[];
+    importancia_variables: { variable: string; importancia: number }[] | null;
   } | null>(null);
 
   async function loadColegioModelStats(ieCode: string) {
@@ -114,6 +115,7 @@ export function useAdmin(
           trained_at:      data.trained_at ?? null,
           por_nivel:       data.por_nivel ?? {},
           advertencias_carga: m.advertencias_carga ?? [],
+          importancia_variables: m.importancia_variables ?? null,
         });
         return;
       }
@@ -161,6 +163,7 @@ export function useAdmin(
           trained_at:      null,
           por_nivel:       { ALTO: nAlto, MEDIO: nMedio, BAJO: nBajo },
           advertencias_carga: [],
+          importancia_variables: null,
         });
       } else {
         setColegioModelStats(null);
@@ -207,8 +210,8 @@ export function useAdmin(
       .select("id, email, nombre, rol, activo, codigo_ie, distrito")
       .order("created_at");
 
-    // Admin de colegio solo ve usuarios de su IE
-    if (role === "admin" && profileCodigoIe) {
+    // Admin o Director de colegio solo ve usuarios de su propia IE
+    if ((role === "admin" || role === "director") && profileCodigoIe) {
       query = query.eq("codigo_ie", profileCodigoIe);
     }
 
@@ -471,12 +474,15 @@ export function useAdmin(
   const stableLoadUsers = useCallback(() => void loadDbUsers(), [role, profileCodigoIe]); // eslint-disable-line react-hooks/exhaustive-deps
   const stableLoadAudit = useCallback(() => void loadDbAudit(), [role, profileCodigoIe]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load DB users/audit when superadmin or admin opens the tab
+  // Load DB users when superadmin, admin o director (de su propio colegio)
+  // abre la pestaña. La auditoría (audit_log) queda solo para admin/superadmin
+  // -- RLS todavía no le da acceso a esa tabla a un director.
   useEffect(() => {
-    const isAdminRole = role === "admin" || role === "superadmin";
-    if (isAdminRole && tab === "usuarios" && session) {
-      stableLoadUsers();
-      stableLoadAudit();
+    const puedeVerUsuarios = role === "admin" || role === "superadmin" || role === "director";
+    const puedeVerAuditoria = role === "admin" || role === "superadmin";
+    if (tab === "usuarios" && session) {
+      if (puedeVerUsuarios) stableLoadUsers();
+      if (puedeVerAuditoria) stableLoadAudit();
     }
   }, [role, tab, session, stableLoadUsers, stableLoadAudit]);
 

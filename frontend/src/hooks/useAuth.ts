@@ -194,7 +194,7 @@ export function useAuth(
     ];
     const emailDomain = authEmail.split("@")[1]?.toLowerCase() ?? "";
     if (blockedDomains.includes(emailDomain)) {
-      setAuthError("Usa un correo institucional (no Gmail, Hotmail, Yahoo, etc.).");
+      setAuthError("Usa tu correo institucional para registrarte.");
       return;
     }
 

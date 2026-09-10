@@ -203,6 +203,7 @@ def get_resumen(codigo_ie: str = Depends(_validate_ie)):
             "nota_metodologica": m.get("nota_metodologica"),
             "n_alumnos_modelo":  m.get("n_alumnos_modelo", m.get("n_alumnos", 0)),
             "advertencias_carga": m.get("advertencias_carga", []),
+            "importancia_variables": m.get("importancia_variables"),
         },
     }
 

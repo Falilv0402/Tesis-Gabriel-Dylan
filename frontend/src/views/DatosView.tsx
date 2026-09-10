@@ -65,6 +65,7 @@ interface DatosViewProps {
     modo_prediccion: string; salones: string[]; trained_at: string | null;
     por_nivel: Record<string, number>;
     advertencias_carga: string[];
+    importancia_variables: { variable: string; importancia: number }[] | null;
   } | null;
   // HU024/HU025/HU026: histórico de reentrenamientos del colegio actual.
   modelosVersiones: {
@@ -254,7 +255,7 @@ export function DatosView({
                   </span>
                   {em2022Metrics.trained_at && (
                     <span style={{ fontSize: 10, color: "#93c5fd", marginLeft: "auto" }}>
-                      {em2022Metrics.trained_at}
+                      {new Date(em2022Metrics.trained_at).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" })}
                     </span>
                   )}
                 </div>
@@ -329,7 +330,7 @@ export function DatosView({
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)" }}>
                     {colegioModelStats.salones.length > 0 && <span>Salones: {colegioModelStats.salones.join(" · ")}</span>}
                     {colegioModelStats.trained_at && (
-                      <span>Entrenado: {new Date(colegioModelStats.trained_at).toLocaleDateString("es-PE", { dateStyle: "medium" })}</span>
+                      <span>Entrenado: {new Date(colegioModelStats.trained_at).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" })}</span>
                     )}
                   </div>
                 )}
@@ -341,6 +342,39 @@ export function DatosView({
                     <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, color: "#92400e", lineHeight: 1.6 }}>
                       {colegioModelStats.advertencias_carga.map((a, i) => <li key={i}>{a}</li>)}
                     </ul>
+                  </div>
+                )}
+
+                {/* HU034: importancia global de variables del modelo propio del
+                    colegio (Random Forest — no SHAP: la muestra por colegio es
+                    muy chica para explicaciones por instancia confiables). */}
+                {colegioModelStats.importancia_variables && colegioModelStats.importancia_variables.length > 0 && (
+                  <div style={{ padding: "10px 12px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8 }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: "var(--navy)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      Importancia de variables — modelo propio de este colegio
+                    </p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {colegioModelStats.importancia_variables.slice(0, 8).map((d) => {
+                        const maxImp = colegioModelStats.importancia_variables![0].importancia || 1;
+                        const width = Math.max((d.importancia / maxImp) * 100, 3);
+                        return (
+                          <div key={d.variable} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 44px", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 11, color: "var(--text)" }}>{d.variable}</span>
+                            <div style={{ height: 8, borderRadius: 4, background: "var(--border)", overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${width}%`, background: "var(--accent)", borderRadius: 4 }} />
+                            </div>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textAlign: "right" }}>
+                              {(d.importancia * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 8, lineHeight: 1.5 }}>
+                      Ranking global (Random Forest) de qué tanto pesa cada variable en las predicciones de este colegio —
+                      no es SHAP por alumno (como en EM2022): con la cantidad de alumnos de un solo colegio, una
+                      explicación por instancia no sería confiable.
+                    </p>
                   </div>
                 )}
               </>

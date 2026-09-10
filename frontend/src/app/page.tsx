@@ -131,7 +131,7 @@ export default function Page() {
   // Redirige al primer tab visible cuando el rol carga y el tab actual no es accesible
   useEffect(() => {
     if (!auth.role) return;
-    const allowed = isSuperadmin ? superadminTabs : isAdmin ? adminTabs : directorTabs;
+    const allowed = isSuperadmin ? superadminTabs : isAdmin ? adminTabs : isDirector ? [...directorTabs, "usuarios"] : directorTabs;
     if (!allowed.includes(tab)) {
       setTab(allowed[0] as Tab);
     }
@@ -264,7 +264,9 @@ export default function Page() {
           <div>
             <h1>{navItems.find((item) => item.id === tab)?.label}</h1>
             <span>
-              {isAdmin ? "Configuracion del sistema" : "Seguimiento academico"} · {modelData.metrics.trained_at ?? "pendiente"}
+              {isAdmin ? "Configuracion del sistema" : "Seguimiento academico"} · {modelData.metrics.trained_at
+                ? new Date(modelData.metrics.trained_at).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" })
+                : "pendiente"}
               &nbsp;·&nbsp;
               <span className={`api-dot ${admin.apiConnected === true ? "connected" : admin.apiConnected === false ? "disconnected" : "pending"}`} />
               {admin.apiConnected === true ? "Backend conectado" : admin.apiConnected === false ? "Backend desconectado" : "Verificando..."}
@@ -570,7 +572,7 @@ export default function Page() {
             />
           )}
 
-          {isAdmin && tab === "usuarios" && (
+          {(isAdmin || isDirector) && tab === "usuarios" && (
             <UsuariosView
               session={auth.session}
               role={auth.role}

@@ -81,9 +81,18 @@ export function UsuariosView({
   onCreateUser, onDesactivar, onActivar, onCambiarRol, onRefreshUsers, onRefreshAudit,
 }: UsuariosViewProps) {
   const isAdminIE = role === "admin"; // admin de colegio (no superadmin)
+  const isDirector = role === "director";
+  // Un director solo puede alternar entre Director y Coordinador, y solo a
+  // otras cuentas de su propio colegio (ya vienen pre-filtradas en dbUsers).
+  const puedeCambiarRol = (u: DbUser) =>
+    u.id !== session.id && (
+      role === "superadmin"
+      || (role === "admin" && u.rol !== "superadmin")
+      || (isDirector && (u.rol === "director" || u.rol === "coordinador"))
+    );
   return (
     <section className="two-col">
-      <Panel title="Usuarios y roles">
+      <Panel title={isDirector ? "Mi equipo — cambiar rol" : "Usuarios y roles"}>
         <table><tbody>
           <tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Colegio / Distrito</th><th>Estado</th><th></th></tr>
           {dbUsers.map((u) => {
@@ -93,7 +102,7 @@ export function UsuariosView({
               <td>{u.nombre ?? "—"}</td>
               <td>{u.email}</td>
               <td>
-                {(role === "superadmin" || (role === "admin" && u.rol !== "superadmin")) && u.id !== session.id ? (
+                {puedeCambiarRol(u) ? (
                   <select
                     className={`role-tag ${u.rol}`}
                     style={{ border: "none", cursor: "pointer", fontFamily: "inherit" }}
@@ -102,7 +111,7 @@ export function UsuariosView({
                   >
                     <option value="director">Director</option>
                     <option value="coordinador">Coordinador</option>
-                    <option value="admin">Admin IE</option>
+                    {!isDirector && <option value="admin">Admin IE</option>}
                     {role === "superadmin" && <option value="superadmin">Super Admin</option>}
                   </select>
                 ) : (
@@ -148,11 +157,13 @@ export function UsuariosView({
           )}
         </tbody></table>
 
-        <button className="primary" onClick={() => setShowCreateUser((v) => !v)}>
-          <UserCog size={17} /> {showCreateUser ? "Cancelar" : "Crear usuario"}
-        </button>
+        {!isDirector && (
+          <button className="primary" onClick={() => setShowCreateUser((v) => !v)}>
+            <UserCog size={17} /> {showCreateUser ? "Cancelar" : "Crear usuario"}
+          </button>
+        )}
 
-        {showCreateUser && (
+        {!isDirector && showCreateUser && (
           <div className="create-user-form">
             {/* Aviso para admin de IE: solo puede crear directores de su colegio */}
             {isAdminIE && profileCodigoIe && (
@@ -246,7 +257,7 @@ export function UsuariosView({
         <button style={{ marginTop: "8px" }} onClick={onRefreshUsers}><RefreshCcw size={16} /> Actualizar lista</button>
       </Panel>
 
-      <AuditPanel dbAudit={dbAudit} onRefresh={onRefreshAudit} />
+      {!isDirector && <AuditPanel dbAudit={dbAudit} onRefresh={onRefreshAudit} />}
     </section>
   );
 }

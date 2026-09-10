@@ -126,6 +126,34 @@ export function colegioStudentId(a: AlumnoColegio): string {
   return `${a.codigo_ie}-${a.salon}-${a.n_alumno}`;
 }
 
+/**
+ * HU012: factores de riesgo de un alumno del modelo propio del colegio.
+ * No hay SHAP por instancia aquí (la muestra por colegio es muy chica para
+ * que una explicación por instancia sea confiable) -- en su lugar, se usa
+ * como proxy el promedio B1-B3 de cada área (las mismas features tempranas
+ * que usa el modelo real) y se muestran las más bajas, que es justamente lo
+ * que más eleva la probabilidad de riesgo.
+ */
+export function factoresRiesgoColegio(
+  a: AlumnoColegio,
+): { label: string; promedio: number | null; enRiesgo: boolean }[] {
+  const factores: { label: string; promedio: number | null; enRiesgo: boolean }[] = MATERIAS_COLEGIO.map((m) => {
+    const notas = (["1", "2", "3"] as const)
+      .map((b) => notaBimestre(a, m.key, b))
+      .filter((n): n is number => n != null);
+    const promedio = notas.length > 0
+      ? notas.reduce((s, n) => s + n, 0) / notas.length
+      : notaAnual(a, m.key);
+    return { label: m.label, promedio, enRiesgo: promedio != null && promedio <= 13 };
+  });
+  const conducta = a.conducta_promedio != null ? Number(a.conducta_promedio) : null;
+  factores.push({ label: "Conducta", promedio: conducta, enRiesgo: conducta != null && conducta <= 13 });
+
+  return factores
+    .filter((f) => f.promedio != null)
+    .sort((x, y) => (x.promedio ?? 99) - (y.promedio ?? 99));
+}
+
 /** Clasifica el tipo de riesgo del alumno de colegio según sus promedios. */
 export function tipoRiesgoColegio(a: AlumnoColegio): string {
   const mat = a.pp_matematica;

@@ -244,6 +244,7 @@ export type ColegioResumen = {
   metricas?: {
     modo_prediccion?:    string;
     nota_metodologica?:  string;
+    importancia_variables?: { variable: string; importancia: number }[] | null;
     [key: string]: unknown;
   };
 };

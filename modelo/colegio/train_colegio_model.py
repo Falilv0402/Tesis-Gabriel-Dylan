@@ -31,6 +31,28 @@ from sklearn.metrics import (
 
 from parse_excels import procesar_colegio, AREAS_ACADEMICAS
 
+# ─── Etiquetas legibles para las features, usadas en "Importancia de variables" ──
+_ETIQUETAS_AREA = {
+    "matematica": "Matemática", "comunicacion": "Comunicación", "cta": "Ciencia y Tecnología",
+    "personal_social": "Personal Social", "english": "Inglés", "arte": "Arte y Cultura",
+    "ed_fisica": "Educación Física", "lenguaje": "Comunicación", "mat_prim": "Matemática",
+}
+
+
+def _etiqueta_feature(nombre: str) -> str:
+    if nombre == "conducta_promedio":
+        return "Conducta (promedio)"
+    if nombre in ("n_materias_c", "promedio_materias"):
+        return {"n_materias_c": "N.º de cursos con C", "promedio_materias": "Promedio general"}[nombre]
+    if nombre.startswith("tend_temprana_"):
+        area = nombre.removeprefix("tend_temprana_")
+        return f"Tendencia B1→B3 en {_ETIQUETAS_AREA.get(area, area.title())}"
+    for prefijo, etiqueta_bimestre in (("b1_", "Bimestre 1"), ("b2_", "Bimestre 2"), ("b3_", "Bimestre 3"), ("pp_", "Promedio anual")):
+        if nombre.startswith(prefijo):
+            area = nombre.removeprefix(prefijo)
+            return f"{_ETIQUETAS_AREA.get(area, area.title())} ({etiqueta_bimestre})"
+    return nombre
+
 # ─── Enfoque predictivo: B1-B3 como features, B4/PP como target ──────────────
 #
 # El modelo usa los primeros 3 bimestres para predecir quién tendrá C
@@ -177,6 +199,7 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
         cm_train        = None
         fpr_train       = None
         tpr_train       = None
+        importancia_variables = None
     else:
         class_weight = {0: 1.0, 1: max(1.0, neg / max(pos, 1))}
 
@@ -241,6 +264,32 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
         # (ConfusionMatrix / RocMiniChart), con los datos propios del colegio.
         cm_train = confusion_matrix(y, y_pred).tolist()
         fpr_train, tpr_train, _ = roc_curve(y, y_prob)
+
+        # ── Importancia global de variables (HU034) ───────────────────────────
+        # El ensemble calibrado no expone una única "importancia" combinada, y
+        # SHAP por instancia (como en EM2022) no es confiable con muestras tan
+        # chicas por colegio. En vez de eso, se entrena aparte un Random Forest
+        # simple (mismas features, mismo class_weight) solo para leer su
+        # feature_importances_ -- una medida global estándar, estable incluso
+        # con pocos alumnos, que no participa en las predicciones reales.
+        pipe_rf_importancia = Pipeline([
+            ("scaler", StandardScaler()),
+            ("clf", RandomForestClassifier(
+                n_estimators=300, max_depth=6,
+                class_weight=class_weight, random_state=42, n_jobs=-1,
+            )),
+        ])
+        pipe_rf_importancia.fit(X, y)
+        importancias = pipe_rf_importancia.named_steps["clf"].feature_importances_
+        importancia_variables = sorted(
+            (
+                {"variable": _etiqueta_feature(f), "importancia": round(float(imp), 4)}
+                for f, imp in zip(available, importancias)
+            ),
+            key=lambda d: d["importancia"], reverse=True,
+        )
+        print(f"      Importancia de variables (top 3): "
+              f"{[(d['variable'], d['importancia']) for d in importancia_variables[:3]]}")
 
     # ── 4. Generar predicciones y guardar ─────────────────────────────────────
     print("\n[4/4] Generando predicciones y guardando artefacto...")
@@ -321,6 +370,7 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
             "confusion_matrix": cm_train,
             "roc_fpr": fpr_train.tolist() if fpr_train is not None else None,
             "roc_tpr": tpr_train.tolist() if tpr_train is not None else None,
+            "importancia_variables": importancia_variables,
             "nota_metodologica": (
                 f"MODO PREDICTIVO: features B1-B3, target B4. "
                 f"AUC CV {n_splits_used}-fold = {round(auc_cv,4) if not np.isnan(auc_cv) else 'N/A'}. "

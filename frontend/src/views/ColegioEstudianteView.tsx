@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, BarChart3, CalendarRange, CheckCircle2, Filter, MessageSquare, Pencil, Plus, Save, Users, TrendingUp,
+  Activity, BarChart3, CalendarRange, CheckCircle2, Filter, Lightbulb, MessageSquare, Pencil, Plus, Save, Users, TrendingUp,
 } from "lucide-react";
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -12,7 +12,7 @@ import { Panel, EmptyState } from "@/components/ui/Primitives";
 import { pct, riskClass } from "@/lib/format";
 import {
   MATERIAS_COLEGIO, anioFromSalon, aniosDeSalones, seccionFromSalon, seccionesDeSalones,
-  notaInfo, notaCelda, gradeCell, colegioStudentId, mejorBimestreConDatos, type Bimestre,
+  notaInfo, notaCelda, gradeCell, colegioStudentId, mejorBimestreConDatos, factoresRiesgoColegio, type Bimestre,
 } from "@/lib/colegio";
 
 interface Annotation { id: string; estudiante_id: string; contenido: string; created_at: string; autor_nombre?: string | null; autor_email?: string | null; es_propia?: boolean }
@@ -259,6 +259,7 @@ export function ColegioEstudianteView({
   });
 
   const annsDeAlumno = annotations.filter((a) => a.estudiante_id === sid);
+  const factores = factoresRiesgoColegio(alumno).slice(0, 3);
 
   return (
     <>
@@ -354,6 +355,43 @@ export function ColegioEstudianteView({
           <div className="student-tab-content">
             {studentTab === "resumen" && (
               <div className="shap-section">
+                {/* ── Factores de riesgo (HU012) ─────────────────────────────
+                    Sin SHAP por alumno (muestra por colegio muy chica para que
+                    sea confiable): se usa como proxy el promedio B1-B3 de cada
+                    área -- las mismas features tempranas del modelo real --
+                    mostrando las 3 más bajas, que es lo que más eleva el riesgo. */}
+                <div className="shap-section-title">
+                  <Lightbulb size={14} /> Factores de riesgo
+                </div>
+                {factores.length === 0 ? (
+                  <div className="model-note" style={{ marginBottom: 12 }}>
+                    Aún no hay notas de los bimestres 1-3 para estimar los factores de riesgo de este alumno.
+                  </div>
+                ) : (
+                  <>
+                    <div className="model-note" style={{ marginBottom: 8 }}>
+                      Las áreas con el promedio más bajo (Bimestre 1-3) — las mismas que usa el modelo para predecir el riesgo.
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+                      {factores.map((f) => {
+                        const width = Math.min(Math.max(((20 - (f.promedio ?? 20)) / 20) * 100, 4), 100);
+                        const color = f.enRiesgo ? "#dc2626" : f.promedio != null && f.promedio < 15 ? "#d97706" : "#16a34a";
+                        return (
+                          <div key={f.label} style={{ display: "grid", gridTemplateColumns: "110px 1fr 50px", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{f.label}</span>
+                            <div style={{ height: 8, borderRadius: 4, background: "var(--border)", overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${width}%`, background: color, borderRadius: 4 }} />
+                            </div>
+                            <span style={{ fontSize: 12, fontWeight: 700, color, textAlign: "right" }}>
+                              {f.promedio!.toFixed(1)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
                 {/* ── Detalle por bimestre ──────────────────────────────────
                     Tabla con la nota de cada materia (+ Conducta) para el
                     bimestre seleccionado — complementa la trayectoria con un
