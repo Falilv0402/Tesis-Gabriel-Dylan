@@ -10,12 +10,36 @@ Genera:
 
 import argparse
 import json
+import shutil
 import warnings
+from datetime import datetime
 from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
 import joblib
+
+# Cuántas copias de respaldo se conservan por colegio (la más vieja se borra
+# al guardar una nueva) -- ver _respaldar_modelo_anterior().
+MAX_BACKUPS_POR_COLEGIO = 5
+
+
+def _respaldar_modelo_anterior(output_path: Path) -> None:
+    """Antes de sobrescribir el .pkl de un colegio, guarda una copia con
+    timestamp en modelo/model/backups/colegio_{ie}/. Sin esto, un Excel malo
+    que produce un modelo peor (o roto) no tenía forma de revertirse: el
+    histórico de modelos_versiones solo guarda MÉTRICAS para graficar, no el
+    artefacto servible. Ver restaurar_backup_colegio.py para restaurar."""
+    if not output_path.exists():
+        return
+    backup_dir = output_path.parent / "backups" / output_path.stem
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    shutil.copy2(output_path, backup_dir / f"{timestamp}.pkl")
+
+    backups = sorted(backup_dir.glob("*.pkl"))
+    for viejo in backups[:-MAX_BACKUPS_POR_COLEGIO]:
+        viejo.unlink()
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
@@ -390,6 +414,7 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
         "trained_at": pd.Timestamp.now().isoformat(timespec="seconds"),
     }
 
+    _respaldar_modelo_anterior(output_path)
     joblib.dump(artefacto, output_path)
     print(f"  ✓ Artefacto guardado → {output_path}")
     print(f"\n  Distribución de riesgo:")

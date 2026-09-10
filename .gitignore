@@ -9,6 +9,7 @@ venv/
 
 # Archivos generados por entrenamiento (no deben versionarse)
 colegio_*_procesado.csv
+modelo/model/backups/
 
 # Node
 node_modules/
