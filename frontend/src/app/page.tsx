@@ -574,6 +574,9 @@ export default function Page() {
               em2022Evaluation={modelData.evaluation}
               colegioModelStats={admin.colegioModelStats}
               modelosVersiones={admin.modelosVersiones}
+              colegioRespaldo={admin.colegioRespaldo}
+              restaurandoModelo={admin.restaurandoModelo}
+              onRestaurarModelo={(ie) => void admin.restaurarModeloColegio(ie).then(() => colegio.reload())}
             />
           )}
 

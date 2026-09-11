@@ -86,8 +86,11 @@ export function AuthView({
   const pwdRules = checkPassword(authPassword);
   const pwdOk    = allPass(pwdRules);
   const emailOk  = authMode === "registro" ? isInstitutionalEmail(authEmail) : true;
+  // Con EM2022 apagado, el paso obligatorio es elegir COLEGIO (regDistrito
+  // se deriva de él, ver useAuth.ts); con EM2022 activo, es al revés.
   const canSubmit = authMode === "registro"
-    ? !authBusy && pwdOk && emailOk && !!regDistrito && !!authNombre.trim()
+    ? !authBusy && pwdOk && emailOk && !!authNombre.trim()
+      && !!(EM2022_HABILITADO ? regDistrito : regColegioIe)
     : !authBusy;
 
   const Rule = ({ ok, label }: { ok: boolean; label: string }) => (

@@ -399,7 +399,11 @@ export function useAuth(
     // El distrito se deriva del colegio elegido (no al revés) -- sigue
     // guardándose en el perfil por si algo más lo necesita (p.ej. alertas
     // de equipo), pero deja de ser un paso previo obligatorio para el usuario.
-    const colegio = regColegiosList.find((c) => c.id_ie === regColegioIe);
+    // String(c.id_ie): el backend devuelve id_ie como número (int en el JSON),
+    // pero regColegioIe viene del value de un <select> (siempre string) --
+    // sin la conversión, la comparación nunca coincide y el registro de
+    // colegio propio queda bloqueado (canSubmit exige regDistrito).
+    const colegio = regColegiosList.find((c) => String(c.id_ie) === regColegioIe);
     setRegDistrito(colegio?.distrito ?? "");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regColegioIe]);

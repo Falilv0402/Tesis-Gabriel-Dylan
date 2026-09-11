@@ -4,6 +4,8 @@ Sirve predicciones de riesgo basadas en los datos internos del colegio.
 """
 import os
 import re
+import shutil
+from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File
 import httpx
@@ -116,6 +118,74 @@ def _load_artefacto(codigo_ie: str) -> dict:
         detail=f"No hay modelo entrenado para la IE {codigo_ie}. "
                "El administrador debe subir los Excel del colegio primero."
     )
+
+
+# ─── Respaldo y restauración del modelo (HU039) ───────────────────────────────
+# train_colegio_model.py ya respalda el .pkl anterior antes de cada
+# reentrenamiento (ver _respaldar_modelo_anterior() en ese script) en
+# modelo/model/backups/colegio_{ie}/{timestamp}.pkl — pero hasta ahora la
+# única forma de restaurar un respaldo era un script de consola
+# (restaurar_backup_colegio.py) que alguien tenía que correr por SSH en el
+# servidor. Estos endpoints exponen esa misma lógica a la app, para que un
+# admin/director pueda revertir un reentrenamiento malo sin acceso al servidor.
+
+def _stem_canonico(codigo_ie: str) -> str:
+    # Mismo nombre de archivo que usa train_colegio_model.py al guardar
+    # (siempre sin ceros iniciales, ver train() en ese script).
+    sin_ceros = codigo_ie.lstrip("0") or codigo_ie
+    return f"colegio_{sin_ceros}"
+
+
+def _listar_backups(codigo_ie: str) -> list[Path]:
+    backup_dir = MODEL_DIR / "backups" / _stem_canonico(codigo_ie)
+    if not backup_dir.exists():
+        return []
+    # "antes_de_restaurar.pkl" es la copia de seguridad que se hace del
+    # modelo vigente justo antes de sobrescribirlo con una restauración —
+    # no es un respaldo "de un reentrenamiento" que deba ofrecerse como
+    # próximo candidato a restaurar.
+    return sorted(b for b in backup_dir.glob("*.pkl") if b.stem != "antes_de_restaurar")
+
+
+# ─── GET /v1/colegio/{codigo_ie}/respaldo ─────────────────────────────────────
+
+@router.get("/{codigo_ie}/respaldo")
+def get_respaldo(codigo_ie: str = Depends(_validate_ie)):
+    """Indica si hay un respaldo disponible para restaurar y de cuándo es."""
+    backups = _listar_backups(codigo_ie)
+    if not backups:
+        return {"disponible": False, "fecha": None}
+    ultimo = backups[-1]
+    try:
+        fecha = datetime.strptime(ultimo.stem, "%Y%m%d_%H%M%S").isoformat()
+    except ValueError:
+        fecha = None
+    return {"disponible": True, "fecha": fecha}
+
+
+# ─── POST /v1/colegio/{codigo_ie}/restaurar ───────────────────────────────────
+
+@router.post("/{codigo_ie}/restaurar")
+async def restaurar_modelo(auth_ctx: dict = Depends(require_admin_de_colegio)):
+    """Revierte el modelo del colegio al respaldo más reciente (deshace el
+    último reentrenamiento). El modelo vigente también se respalda antes de
+    ser reemplazado, por si la restauración misma fue un error."""
+    codigo_ie = auth_ctx["codigo_ie"]
+    backups = _listar_backups(codigo_ie)
+    if not backups:
+        raise HTTPException(status_code=404, detail="No hay un respaldo disponible para este colegio.")
+    elegido = backups[-1]
+    output_path = MODEL_DIR / f"{_stem_canonico(codigo_ie)}.pkl"
+    if output_path.exists():
+        shutil.copy2(output_path, elegido.parent / "antes_de_restaurar.pkl")
+    shutil.copy2(elegido, output_path)
+    art = _load_artefacto(codigo_ie)
+    return {
+        "status":         "ok",
+        "codigo_ie":      codigo_ie,
+        "nombre_colegio": art.get("nombre_colegio"),
+        "trained_at":     art.get("trained_at"),
+    }
 
 
 # ─── GET /v1/colegio/{codigo_ie}/predicciones ─────────────────────────────────

@@ -74,6 +74,10 @@ interface DatosViewProps {
     n_alumnos: number | null; n_alto: number | null; n_medio: number | null; n_bajo: number | null;
     accuracy: number | null; auc_roc: number | null;
   }[];
+  // HU039: respaldo y restauración del modelo.
+  colegioRespaldo: { disponible: boolean; fecha: string | null } | null;
+  restaurandoModelo: boolean;
+  onRestaurarModelo: (ie: string) => void;
 }
 
 export function DatosView({
@@ -91,6 +95,7 @@ export function DatosView({
   em2022Evaluation,
   colegioModelStats,
   modelosVersiones,
+  colegioRespaldo, restaurandoModelo, onRestaurarModelo,
 }: DatosViewProps) {
 
   // El superadmin escribe la IE a mano (puede cargar cualquier colegio);
@@ -388,6 +393,36 @@ export function DatosView({
       {/* ── Panel: Histórico de reentrenamientos (HU024/HU025/HU026/HU034) ── */}
       {colegioModelStats && !isEM2022 && (
         <Panel title="Histórico de reentrenamientos">
+          {/* HU039: si el último reentrenamiento quedó peor que el anterior,
+              puedeSubirExcel restaura ese respaldo sin necesitar el servidor. */}
+          {puedeSubirExcel && colegioRespaldo?.disponible && (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+              padding: "10px 14px", marginBottom: 12,
+              background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10,
+            }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                <ShieldAlert size={16} style={{ color: "#92400e", flexShrink: 0, marginTop: 1 }} />
+                <span style={{ fontSize: 12.5, color: "#92400e", lineHeight: 1.5 }}>
+                  Hay un respaldo del modelo anterior a la última carga
+                  {colegioRespaldo.fecha && ` (${new Date(colegioRespaldo.fecha).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" })})`}.
+                  Si el último Excel dejó el modelo peor, puedes revertirlo.
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={restaurandoModelo}
+                onClick={() => onRestaurarModelo(ieEfectiva)}
+                style={{
+                  flexShrink: 0, fontSize: 12, fontWeight: 600, padding: "6px 12px",
+                  color: "#92400e", background: "#fff", border: "1px solid #fde68a", borderRadius: 8,
+                  cursor: restaurandoModelo ? "default" : "pointer",
+                }}
+              >
+                {restaurandoModelo ? "Restaurando..." : "Restaurar modelo anterior"}
+              </button>
+            </div>
+          )}
           {modelosVersiones.length === 0 ? (
             <EmptyState message="Aún no hay versiones registradas. Cada vez que se cargue un Excel nuevo, quedará un registro aquí." />
           ) : (

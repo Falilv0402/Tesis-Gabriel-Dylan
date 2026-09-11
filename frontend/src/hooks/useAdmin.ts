@@ -199,6 +199,52 @@ export function useAdmin(
     setModelosVersiones(error ? [] : (data ?? []));
   }
 
+  // HU039: respaldo y restauración del modelo — train_colegio_model.py ya
+  // respalda el .pkl anterior antes de cada reentrenamiento; esto solo
+  // consulta si hay uno disponible y permite restaurarlo desde la app.
+  const [colegioRespaldo, setColegioRespaldo] = useState<{ disponible: boolean; fecha: string | null } | null>(null);
+  const [restaurandoModelo, setRestaurandoModelo] = useState(false);
+
+  async function loadColegioRespaldo(codigoIe: string) {
+    if (!codigoIe) { setColegioRespaldo(null); return; }
+    try {
+      const res = await fetch(`${apiUrl}/v1/colegio/${codigoIe}/respaldo`);
+      setColegioRespaldo(res.ok ? await res.json() : null);
+    } catch {
+      setColegioRespaldo(null);
+    }
+  }
+
+  async function restaurarModeloColegio(codigoIe: string) {
+    if (!codigoIe) return;
+    setRestaurandoModelo(true);
+    try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const res = await fetch(`${apiUrl}/v1/colegio/${codigoIe}/restaurar`, {
+        method: "POST",
+        headers: currentSession?.access_token
+          ? { Authorization: `Bearer ${currentSession.access_token}` }
+          : undefined,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        toast(`Modelo de ${data.nombre_colegio ?? codigoIe} restaurado al respaldo anterior.`, "success");
+        await insertAudit("Restaurar modelo anterior", "colegio", { ie: codigoIe });
+        await Promise.all([
+          loadColegioModelStats(codigoIe),
+          loadModelosVersiones(codigoIe),
+          loadColegioRespaldo(codigoIe),
+        ]);
+      } else {
+        const err = await res.json().catch(() => ({ detail: "Error desconocido" }));
+        toast(err.detail ?? "No se pudo restaurar el modelo.", "error");
+      }
+    } catch {
+      toast("Error de conexión con el backend.", "error");
+    }
+    setRestaurandoModelo(false);
+  }
+
   const [scheduleFreq, setScheduleFreq] = useState("semanal");
   const [scheduleMsg, setScheduleMsg] = useState("");
   const [nextUpdate, setNextUpdate] = useState<string | null>(null);
@@ -378,6 +424,9 @@ export function useAdmin(
         );
         await insertAudit("Cargar Excel del colegio", "colegio", { ie: ieCode, n_alumnos: m.n_alumnos, advertencias: advertencias.length, nuevos_alto: data.nuevos_alto ?? 0 });
         toast(`Datos de ${m.nombre_colegio ?? ieCode} cargados. ${m.n_alumnos} alumnos procesados.`, "success");
+        // El reentrenamiento que acaba de correr ya respaldó el modelo anterior
+        // (train_colegio_model.py) — refrescamos para que "Restaurar" aparezca.
+        void loadColegioRespaldo(ieCode);
         // HU019: si el reentrenamiento detectó alumnos NUEVOS en riesgo ALTO,
         // el backend ya envió el correo automático — se lo confirmamos aquí
         // a quien subió el Excel para que sepa que se avisó al equipo.
@@ -501,6 +550,7 @@ export function useAdmin(
       const ie = String(parseInt(profileCodigoIe, 10));
       void loadColegioModelStats(ie);
       void loadModelosVersiones(ie);
+      void loadColegioRespaldo(ie);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, tab, profileCodigoIe]);
@@ -527,6 +577,7 @@ export function useAdmin(
     colegioFileRef, uploadColegioExcels,
     colegioModelStats, loadColegioModelStats,
     modelosVersiones, loadModelosVersiones,
+    colegioRespaldo, restaurandoModelo, restaurarModeloColegio,
     loadDbUsers, loadDbAudit,
     handleCreateUser, validateCsv, saveSchedule,
     desactivarUsuario, activarUsuario, cambiarRolUsuario, updateEstadoIntervencion,

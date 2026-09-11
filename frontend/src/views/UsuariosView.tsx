@@ -219,7 +219,7 @@ export function UsuariosView({
                       <div style={{ padding: "8px 12px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, fontSize: 12, color: "#15803d" }}>
                         ✅ Verá el modelo propio de{" "}
                         <strong>
-                          {colegiosList.find(c => c.id_ie === newUserColegioIe)?.nombre_ie ?? `IE ${newUserColegioIe}`}
+                          {colegiosList.find(c => String(c.id_ie) === newUserColegioIe)?.nombre_ie ?? `IE ${newUserColegioIe}`}
                         </strong> (si tiene datos cargados).
                       </div>
                     )}
