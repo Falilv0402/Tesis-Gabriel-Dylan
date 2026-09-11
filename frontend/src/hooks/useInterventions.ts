@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import type { ShapData, Student } from "@/types";
+import type { AlumnoColegio, ShapData, Student } from "@/types";
 import { supabase } from "@/lib/supabase";
 import { recommendation, shortId } from "@/lib/format";
 import { generateStudentPdf } from "@/lib/studentPdfExport";
@@ -252,11 +252,11 @@ export function useInterventions(
   }
 
   // ── PDF export ───────────────────────────────────────────────────────────
-  async function exportStudentPdf(shapData: ShapData | null, sessionEmail: string) {
+  async function exportStudentPdf(shapData: ShapData | null, sessionEmail: string, alumnoColegio?: AlumnoColegio) {
     if (!selected) return;
     setIsGeneratingStudentPdf(true);
     try {
-      await generateStudentPdf(selected, shapData, annotationsHook.annotations, sessionEmail);
+      await generateStudentPdf(selected, shapData, annotationsHook.annotations, sessionEmail, alumnoColegio);
       await insertAudit("Exportar PDF individual", "reportes", { id_estudiante: selected.id });
       toast("Reporte individual generado", "success");
     } finally {

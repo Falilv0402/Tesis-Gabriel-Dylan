@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, BarChart3, CalendarRange, CheckCircle2, Filter, Lightbulb, MessageSquare, Pencil, Plus, Save, Users, TrendingUp,
+  Activity, BarChart3, CalendarRange, CheckCircle2, FileText, Filter, Lightbulb, MessageSquare, Pencil, Plus, Save, Users, TrendingUp,
 } from "lucide-react";
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -36,6 +36,8 @@ interface ColegioEstudianteViewProps {
   studentTab: "resumen" | "anotaciones" | "plan";
   setStudentTab: (v: "resumen" | "anotaciones" | "plan") => void;
   setTab: (tab: Tab) => void;
+  exportStudentPdf: () => void;
+  isGeneratingStudentPdf: boolean;
   saveAnnotation: () => void;
   loadAnnotations: (id: string) => void;
   addMilestone: () => void;
@@ -59,6 +61,7 @@ export function ColegioEstudianteView({
   annotations, annotationText, setAnnotationText, isSavingAnnotation,
   planMilestones, newMilestone, setNewMilestone, newMilestoneDate, setNewMilestoneDate,
   studentTab, setStudentTab, setTab,
+  exportStudentPdf, isGeneratingStudentPdf,
   saveAnnotation, loadAnnotations, addMilestone, toggleMilestone, loadMilestones, isLoadingMilestones,
 }: ColegioEstudianteViewProps) {
   const canEditAll = role === "director";
@@ -269,6 +272,15 @@ export function ColegioEstudianteView({
         <div className="student-detail-page">
           {/* ── Acciones (arriba a la derecha del card) ───────────────────── */}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 4 }}>
+            <button
+              className="btn-student-action"
+              onClick={() => void exportStudentPdf()}
+              disabled={isGeneratingStudentPdf}
+              title="Generar reporte PDF de 1 página"
+            >
+              <FileText size={14} />
+              {isGeneratingStudentPdf ? "Generando..." : "PDF"}
+            </button>
             <button className="btn-student-action" onClick={() => setTab("intervenciones")} title="Registrar intervención">
               <CheckCircle2 size={14} /> Intervenir
             </button>

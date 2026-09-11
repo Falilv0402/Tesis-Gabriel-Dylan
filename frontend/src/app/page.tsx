@@ -434,6 +434,8 @@ export default function Page() {
               newMilestoneDate={students.newMilestoneDate} setNewMilestoneDate={students.setNewMilestoneDate}
               studentTab={students.studentTab} setStudentTab={students.setStudentTab}
               setTab={setTab}
+              exportStudentPdf={() => void interventions.exportStudentPdf(null, auth.session?.email ?? "", colegioSelectedAlumno)}
+              isGeneratingStudentPdf={interventions.isGeneratingStudentPdf}
               saveAnnotation={() => void interventions.saveAnnotation()}
               loadAnnotations={(id) => void interventions.loadAnnotations(id)}
               addMilestone={() => void students.addMilestone()}
