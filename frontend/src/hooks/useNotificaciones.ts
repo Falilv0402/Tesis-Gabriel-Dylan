@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 
 export type NotificacionRow = {
   id: string;
-  tipo: "anotacion" | "hito";
+  tipo: "anotacion" | "hito" | "plan";
   estudiante_id: string | null;
   estudiante_nombre: string | null;
   mensaje: string;
@@ -17,7 +17,16 @@ export type NotificacionRow = {
 
 interface CrearNotificacionParams {
   codigoIe: string | null | undefined;
-  tipo: "anotacion" | "hito";
+  tipo: "anotacion" | "hito" | "plan";
+  estudianteId: string;
+  estudianteNombre: string;
+  mensaje: string;
+  autorNombre: string;
+}
+
+interface NotificarDirigidaParams {
+  codigoIe: string | null | undefined;
+  destinatarioId: string;
   estudianteId: string;
   estudianteNombre: string;
   mensaje: string;
@@ -108,5 +117,24 @@ export function useNotificaciones(session: User | null) {
     await supabase.from("notificaciones").insert(filas);
   }
 
-  return { notificaciones, unreadCount, loadNotificaciones: load, marcarLeida, marcarTodasLeidas, crearNotificacion };
+  /** Notifica a UN destinatario puntual (ej. avisar al Coordinador que
+   * envió un plan a revisión cuál fue la decisión del Director) -- a
+   * diferencia de crearNotificacion, que siempre le avisa a todo el equipo. */
+  async function notificarDirigida({
+    codigoIe, destinatarioId, estudianteId, estudianteNombre, mensaje, autorNombre,
+  }: NotificarDirigidaParams) {
+    if (!session || !codigoIe || !destinatarioId || destinatarioId === session.id) return;
+    await supabase.from("notificaciones").insert({
+      codigo_ie: codigoIe,
+      tipo: "plan",
+      estudiante_id: estudianteId,
+      estudiante_nombre: estudianteNombre,
+      mensaje,
+      autor_id: session.id,
+      autor_nombre: autorNombre,
+      destinatario_id: destinatarioId,
+    });
+  }
+
+  return { notificaciones, unreadCount, loadNotificaciones: load, marcarLeida, marcarTodasLeidas, crearNotificacion, notificarDirigida };
 }

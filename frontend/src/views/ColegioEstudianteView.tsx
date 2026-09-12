@@ -9,6 +9,7 @@ import {
 } from "recharts";
 import type { AlumnoColegio, Tab } from "@/types";
 import { Panel, EmptyState } from "@/components/ui/Primitives";
+import type { PlanEstadoRow } from "@/hooks/usePlanRevision";
 import { pct, riskClass } from "@/lib/format";
 import {
   MATERIAS_COLEGIO, anioFromSalon, aniosDeSalones, seccionFromSalon, seccionesDeSalones,
@@ -44,6 +45,13 @@ interface ColegioEstudianteViewProps {
   toggleMilestone: (id: string) => void;
   loadMilestones: (id: string) => void;
   isLoadingMilestones: boolean;
+  planEstado: PlanEstadoRow | null;
+  isLoadingPlanEstado: boolean;
+  loadPlanEstado: (id: string) => void;
+  onEnviarARevision: (estudianteId: string, codigoIe: string, estudianteNombre: string) => void;
+  isEnviandoRevision: boolean;
+  onDecidirPlan: (row: PlanEstadoRow, decision: "aprobado" | "rechazado", comentario: string) => void;
+  isDecidiendoPlan: boolean;
 }
 
 const LINE_COLORS: Record<string, string> = {
@@ -63,8 +71,12 @@ export function ColegioEstudianteView({
   studentTab, setStudentTab, setTab,
   exportStudentPdf, isGeneratingStudentPdf,
   saveAnnotation, loadAnnotations, addMilestone, toggleMilestone, loadMilestones, isLoadingMilestones,
+  planEstado, isLoadingPlanEstado, loadPlanEstado, onEnviarARevision, isEnviandoRevision,
+  onDecidirPlan, isDecidiendoPlan,
 }: ColegioEstudianteViewProps) {
   const canEditAll = role === "director";
+  const [showRechazoForm, setShowRechazoForm] = useState(false);
+  const [comentarioRechazo, setComentarioRechazo] = useState("");
 
   // ── Buscador / lista completa con notas por materia (antes vivía en el
   // Dashboard) — sirve para encontrar y seleccionar un alumno, con el mismo
@@ -358,7 +370,7 @@ export function ColegioEstudianteView({
               {annsDeAlumno.length > 0 && <span className="tab-badge">{annsDeAlumno.length}</span>}
             </button>
             <button role="tab" aria-selected={studentTab === "plan"} className={`student-tab${studentTab === "plan" ? " active" : ""}`}
-              onClick={() => { setStudentTab("plan"); void loadMilestones(sid); }}>
+              onClick={() => { setStudentTab("plan"); void loadMilestones(sid); void loadPlanEstado(sid); setShowRechazoForm(false); setComentarioRechazo(""); }}>
               <CheckCircle2 size={13} /> Plan
               {planMilestones.length > 0 && <span className="tab-badge">{planMilestones.length}</span>}
             </button>
@@ -518,6 +530,29 @@ export function ColegioEstudianteView({
             {studentTab === "plan" && (
               <div className="plan-panel">
                 <div className="model-note" style={{ marginBottom: 10 }}>Define hitos concretos con fechas tentativas para el seguimiento.</div>
+
+                {!isLoadingPlanEstado && (
+                  <PlanEstadoBanner
+                    planEstado={planEstado}
+                    role={role}
+                    tieneHitos={planMilestones.length > 0}
+                    isEnviandoRevision={isEnviandoRevision}
+                    isDecidiendoPlan={isDecidiendoPlan}
+                    showRechazoForm={showRechazoForm}
+                    setShowRechazoForm={setShowRechazoForm}
+                    comentarioRechazo={comentarioRechazo}
+                    setComentarioRechazo={setComentarioRechazo}
+                    onEnviar={() => onEnviarARevision(sid, alumno?.codigo_ie ?? "", alumno?.nombre ?? "Alumno")}
+                    onAprobar={() => planEstado && onDecidirPlan(planEstado, "aprobado", "")}
+                    onRechazar={() => {
+                      if (!planEstado) return;
+                      onDecidirPlan(planEstado, "rechazado", comentarioRechazo);
+                      setShowRechazoForm(false);
+                      setComentarioRechazo("");
+                    }}
+                  />
+                )}
+
                 {isLoadingMilestones ? (
                   <div className="annotations-empty">Cargando hitos...</div>
                 ) : planMilestones.length === 0 ? (
@@ -557,6 +592,124 @@ export function ColegioEstudianteView({
       </Panel>
       </section>
     </>
+  );
+}
+
+// ── Estado del plan: Coordinador propone, Director aprueba (o pide cambios) ────
+
+const ESTADO_INFO: Record<string, { label: string; bg: string; text: string; border: string }> = {
+  borrador:     { label: "Borrador",     bg: "var(--surface)", text: "var(--text-muted)", border: "var(--border)" },
+  en_revision:  { label: "En revisión",  bg: "#fffbeb", text: "#92400e", border: "#fde68a" },
+  aprobado:     { label: "Aprobado",     bg: "#f0fdf4", text: "#15803d", border: "#86efac" },
+  rechazado:    { label: "Rechazado",    bg: "#fef2f2", text: "#b91c1c", border: "#fca5a5" },
+};
+
+function PlanEstadoBanner({
+  planEstado, role, tieneHitos, isEnviandoRevision, isDecidiendoPlan,
+  showRechazoForm, setShowRechazoForm, comentarioRechazo, setComentarioRechazo,
+  onEnviar, onAprobar, onRechazar,
+}: {
+  planEstado: PlanEstadoRow | null;
+  role: string;
+  tieneHitos: boolean;
+  isEnviandoRevision: boolean;
+  isDecidiendoPlan: boolean;
+  showRechazoForm: boolean;
+  setShowRechazoForm: (v: boolean) => void;
+  comentarioRechazo: string;
+  setComentarioRechazo: (v: string) => void;
+  onEnviar: () => void;
+  onAprobar: () => void;
+  onRechazar: () => void;
+}) {
+  const estado = planEstado?.estado ?? "borrador";
+  const info = ESTADO_INFO[estado];
+  const esDirector = role === "director";
+  const puedeEnviar = (estado === "borrador" || estado === "rechazado") && tieneHitos;
+  const puedeDecidir = esDirector && estado === "en_revision";
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", gap: 8, marginBottom: 12,
+      padding: "10px 12px", borderRadius: 10, background: info.bg, border: `1px solid ${info.border}`,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: info.text, textTransform: "uppercase", letterSpacing: "0.4px" }}>
+            Plan: {info.label}
+          </span>
+          {estado === "en_revision" && planEstado?.enviado_por_nombre && (
+            <span style={{ fontSize: 11, color: info.text }}>enviado por {planEstado.enviado_por_nombre}</span>
+          )}
+          {estado === "aprobado" && planEstado?.revisado_por_nombre && (
+            <span style={{ fontSize: 11, color: info.text }}>por {planEstado.revisado_por_nombre}</span>
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 6 }}>
+          {puedeEnviar && (
+            <button
+              disabled={isEnviandoRevision}
+              onClick={onEnviar}
+              style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "#fff", background: "var(--navy)", border: "none", borderRadius: 8, cursor: isEnviandoRevision ? "default" : "pointer" }}
+            >
+              {isEnviandoRevision ? "Enviando..." : "Enviar a revisión"}
+            </button>
+          )}
+          {puedeDecidir && !showRechazoForm && (
+            <>
+              <button
+                disabled={isDecidiendoPlan}
+                onClick={onAprobar}
+                style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "#fff", background: "#16a34a", border: "none", borderRadius: 8, cursor: isDecidiendoPlan ? "default" : "pointer" }}
+              >
+                Aprobar
+              </button>
+              <button
+                disabled={isDecidiendoPlan}
+                onClick={() => setShowRechazoForm(true)}
+                style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "#b91c1c", background: "#fff", border: "1px solid #fca5a5", borderRadius: 8, cursor: isDecidiendoPlan ? "default" : "pointer" }}
+              >
+                Pedir cambios
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {estado === "rechazado" && planEstado?.comentario && (
+        <div style={{ fontSize: 12, color: info.text }}>
+          <strong>Cambios pedidos por {planEstado.revisado_por_nombre ?? "el Director"}:</strong> {planEstado.comentario}
+        </div>
+      )}
+
+      {puedeDecidir && showRechazoForm && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <textarea
+            value={comentarioRechazo}
+            onChange={(e) => setComentarioRechazo(e.target.value)}
+            placeholder="¿Qué cambios necesita este plan?"
+            rows={2}
+            style={{ fontSize: 12, padding: "6px 8px", borderRadius: 8, border: "1px solid var(--border)", resize: "vertical" }}
+          />
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              disabled={isDecidiendoPlan}
+              onClick={onRechazar}
+              style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "#fff", background: "#b91c1c", border: "none", borderRadius: 8, cursor: isDecidiendoPlan ? "default" : "pointer" }}
+            >
+              Confirmar
+            </button>
+            <button
+              onClick={() => { setShowRechazoForm(false); setComentarioRechazo(""); }}
+              style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "var(--text-muted)", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer" }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

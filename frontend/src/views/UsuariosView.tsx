@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCcw, UserCog, Activity } from "lucide-react";
+import { RefreshCcw, UserCog, Activity, ClipboardCheck } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { Panel, EmptyState } from "@/components/ui/Primitives";
 import { EM2022_HABILITADO } from "@/lib/constants";
+import type { PlanEstadoRow } from "@/hooks/usePlanRevision";
 
 interface DbUser {
   id: string; email: string; nombre: string | null; rol: string; activo: boolean;
@@ -65,6 +66,10 @@ interface UsuariosViewProps {
   onCambiarRol: (id: string, nuevoRol: string) => void;
   onRefreshUsers: () => void;
   onRefreshAudit: () => void;
+  planesPendientes: PlanEstadoRow[];
+  onVerPlan: (estudianteId: string) => void;
+  onAprobarPlan: (row: PlanEstadoRow) => void;
+  isDecidiendoPlan: boolean;
 }
 
 export function UsuariosView({
@@ -80,6 +85,7 @@ export function UsuariosView({
   distritosList, authBusy,
   colegiosList,
   onCreateUser, onDesactivar, onActivar, onCambiarRol, onRefreshUsers, onRefreshAudit,
+  planesPendientes, onVerPlan, onAprobarPlan, isDecidiendoPlan,
 }: UsuariosViewProps) {
   const isAdminIE = role === "admin"; // admin de colegio (no superadmin)
   const isDirector = role === "director";
@@ -259,7 +265,69 @@ export function UsuariosView({
       </Panel>
 
       {!isDirector && <AuditPanel dbAudit={dbAudit} onRefresh={onRefreshAudit} />}
+      {isDirector && (
+        <PlanesRevisionPanel
+          planes={planesPendientes}
+          onVer={onVerPlan}
+          onAprobar={onAprobarPlan}
+          isDecidiendoPlan={isDecidiendoPlan}
+        />
+      )}
     </section>
+  );
+}
+
+// ── Panel de planes a revisión (solo Director) ────────────────────────────────
+
+function PlanesRevisionPanel({
+  planes, onVer, onAprobar, isDecidiendoPlan,
+}: {
+  planes: PlanEstadoRow[];
+  onVer: (estudianteId: string) => void;
+  onAprobar: (row: PlanEstadoRow) => void;
+  isDecidiendoPlan: boolean;
+}) {
+  return (
+    <Panel title="Planes a revisión">
+      {planes.length === 0 ? (
+        <EmptyState message="No hay planes pendientes de revisión por ahora." />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {planes.map((p) => (
+            <div key={p.estudiante_id} style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+              padding: "10px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10,
+            }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
+                <ClipboardCheck size={16} style={{ color: "#92400e", flexShrink: 0, marginTop: 2 }} />
+                <div style={{ minWidth: 0 }}>
+                  <strong style={{ fontSize: 13, color: "#92400e" }}>{p.estudiante_nombre ?? "Alumno"}</strong>
+                  <div style={{ fontSize: 11, color: "#92400e" }}>
+                    Enviado por {p.enviado_por_nombre ?? "—"}
+                    {p.enviado_at && ` · ${new Date(p.enviado_at).toLocaleDateString("es-PE", { day: "2-digit", month: "short" })}`}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <button
+                  onClick={() => onVer(p.estudiante_id)}
+                  style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "var(--navy)", background: "#fff", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer" }}
+                >
+                  Ver plan
+                </button>
+                <button
+                  disabled={isDecidiendoPlan}
+                  onClick={() => onAprobar(p)}
+                  style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "#fff", background: "#16a34a", border: "none", borderRadius: 8, cursor: isDecidiendoPlan ? "default" : "pointer" }}
+                >
+                  Aprobar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
   );
 }
 

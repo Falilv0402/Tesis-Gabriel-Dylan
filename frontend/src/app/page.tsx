@@ -13,6 +13,7 @@ import { useStudents } from "@/hooks/useStudents";
 import { useInterventions } from "@/hooks/useInterventions";
 import { useToast } from "@/hooks/useToast";
 import { useNotificaciones } from "@/hooks/useNotificaciones";
+import { usePlanRevision } from "@/hooks/usePlanRevision";
 
 import { navItems, apiUrl, EM2022_HABILITADO } from "@/lib/constants";
 import { exportCsv, exportXlsx, exportPdf } from "@/lib/exports";
@@ -59,6 +60,10 @@ export default function Page() {
   const admin = useAdmin(auth.session, auth.role, tab, toast, auth.insertAudit, auth.profileCodigoIe);
   const modelData = useModelData(admin.apiConnected, admin.setApiConnected, toast);
   const notificaciones = useNotificaciones(auth.session);
+  const planRevision = usePlanRevision(
+    auth.session, toast, auth.insertAudit,
+    notificaciones.crearNotificacion, notificaciones.notificarDirigida,
+  );
   const autorNombreActual = auth.profileNombre
     ? `${auth.profileNombre}${auth.profileApellidos ? " " + auth.profileApellidos : ""}`
     : (auth.session?.email?.split("@")[0] ?? "Alguien");
@@ -124,10 +129,13 @@ export default function Page() {
   // siempre (no tienen Dashboard y necesitan el acceso a Salir).
   const ocultarTopbar = isDirectorRole && tab !== "dashboard";
 
-  // Filtrar navegación según el rol del usuario
-  const visibleNav = navItems.filter((item) =>
-    item.roles.includes(auth.role as UserRole)
-  );
+  // Filtrar navegación según el rol del usuario. Para Director, la pestaña
+  // "usuarios" (donde ya vive "Mi equipo") se muestra como "Equipo" -- es la
+  // única pestaña que Coordinador no ve, así que ahora también es donde
+  // aparecen los planes que le llegan a revisión.
+  const visibleNav = navItems
+    .filter((item) => item.roles.includes(auth.role as UserRole))
+    .map((item) => item.id === "usuarios" && isDirector ? { ...item, label: "Equipo" } : item);
 
   // Redirige al primer tab visible cuando el rol carga y el tab actual no es accesible
   useEffect(() => {
@@ -138,6 +146,14 @@ export default function Page() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.role]);
+
+  // Carga la cola de "Planes a revisión" cada vez que el Director abre "Equipo"
+  useEffect(() => {
+    if (isDirector && tab === "usuarios") {
+      void planRevision.loadPlanesPendientes(auth.profileCodigoIe);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirector, tab, auth.profileCodigoIe]);
 
   // Recarga datos del modelo cada vez que el superadmin entra al tab "modelo"
   useEffect(() => {
@@ -263,7 +279,7 @@ export default function Page() {
         {!ocultarTopbar && (
         <header className="topbar">
           <div>
-            <h1>{navItems.find((item) => item.id === tab)?.label}</h1>
+            <h1>{visibleNav.find((item) => item.id === tab)?.label}</h1>
             <span>
               {isAdmin ? "Configuracion del sistema" : "Seguimiento academico"}
               {EM2022_HABILITADO && (
@@ -442,6 +458,15 @@ export default function Page() {
               toggleMilestone={(id) => void students.toggleMilestone(id)}
               loadMilestones={(id) => void students.loadMilestones(id)}
               isLoadingMilestones={students.isLoadingMilestones}
+              planEstado={planRevision.planEstado}
+              isLoadingPlanEstado={planRevision.isLoadingPlanEstado}
+              loadPlanEstado={(id) => void planRevision.loadPlanEstado(id)}
+              onEnviarARevision={(estudianteId, codigoIe, estudianteNombre) =>
+                void planRevision.enviarARevision(estudianteId, codigoIe, estudianteNombre, autorNombreActual)}
+              isEnviandoRevision={planRevision.isEnviandoRevision}
+              onDecidirPlan={(row, decision, comentario) =>
+                void planRevision.decidirPlan(row, decision, comentario, autorNombreActual)}
+              isDecidiendoPlan={planRevision.isDecidiendoPlan}
             />
           )}
 
@@ -619,6 +644,16 @@ export default function Page() {
               onCambiarRol={(id, rol) => void admin.cambiarRolUsuario(id, rol)}
               onRefreshUsers={() => void admin.loadDbUsers()}
               onRefreshAudit={() => void admin.loadDbAudit()}
+              planesPendientes={planRevision.planesPendientes}
+              onVerPlan={(estudianteId) => {
+                setSelectedColegioId(estudianteId);
+                setTab("estudiante");
+                students.setStudentTab("plan");
+                void students.loadMilestones(estudianteId);
+                void planRevision.loadPlanEstado(estudianteId);
+              }}
+              onAprobarPlan={(row) => void planRevision.decidirPlan(row, "aprobado", "", autorNombreActual)}
+              isDecidiendoPlan={planRevision.isDecidiendoPlan}
             />
           )}
         </section>
