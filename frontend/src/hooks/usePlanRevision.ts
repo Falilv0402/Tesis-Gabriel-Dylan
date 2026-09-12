@@ -153,12 +153,15 @@ export function usePlanRevision(
 
   async function loadPlanesPendientes(codigoIe: string | null | undefined) {
     if (!codigoIe) { setPlanesPendientes([]); return; }
-    const ieNorm = String(parseInt(codigoIe, 10));
+    // Sin filtro de codigo_ie aquí a propósito: el codigo_ie de un alumno
+    // puede venir con o sin ceros a la izquierda respecto al del perfil
+    // (ver migración 0018), así que un .eq()/.or() por texto puede no
+    // encontrarlo. La política RLS de plan_estado ya normaliza eso (ltrim)
+    // y limita las filas a las del propio colegio -- es la fuente de verdad.
     const { data, error } = await supabase
       .from("plan_estado")
       .select("*")
       .eq("estado", "en_revision")
-      .or(`codigo_ie.eq.${codigoIe},codigo_ie.eq.${ieNorm}`)
       .order("enviado_at", { ascending: true });
     setPlanesPendientes(error ? [] : (data as PlanEstadoRow[]));
   }
