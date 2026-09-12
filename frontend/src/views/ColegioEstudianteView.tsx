@@ -597,11 +597,11 @@ export function ColegioEstudianteView({
 
 // ── Estado del plan: Coordinador propone, Director aprueba (o pide cambios) ────
 
-const ESTADO_INFO: Record<string, { label: string; bg: string; text: string; border: string }> = {
-  borrador:     { label: "Borrador",     bg: "var(--surface)", text: "var(--text-muted)", border: "var(--border)" },
-  en_revision:  { label: "En revisión",  bg: "#fffbeb", text: "#92400e", border: "#fde68a" },
-  aprobado:     { label: "Aprobado",     bg: "#f0fdf4", text: "#15803d", border: "#86efac" },
-  rechazado:    { label: "Rechazado",    bg: "#fef2f2", text: "#b91c1c", border: "#fca5a5" },
+const ESTADO_LABEL: Record<string, string> = {
+  borrador:    "Borrador",
+  en_revision: "En revisión",
+  aprobado:    "Aprobado",
+  rechazado:   "Rechazado",
 };
 
 function PlanEstadoBanner({
@@ -623,53 +623,35 @@ function PlanEstadoBanner({
   onRechazar: () => void;
 }) {
   const estado = planEstado?.estado ?? "borrador";
-  const info = ESTADO_INFO[estado];
   const esDirector = role === "director";
   const puedeEnviar = (estado === "borrador" || estado === "rechazado") && tieneHitos;
   const puedeDecidir = esDirector && estado === "en_revision";
 
   return (
-    <div style={{
-      display: "flex", flexDirection: "column", gap: 8, marginBottom: 12,
-      padding: "10px 12px", borderRadius: 10, background: info.bg, border: `1px solid ${info.border}`,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+    <div className={`plan-estado-banner is-${estado}`}>
+      <div className="plan-estado-header">
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: info.text, textTransform: "uppercase", letterSpacing: "0.4px" }}>
-            Plan: {info.label}
-          </span>
+          <span className="plan-estado-label">Plan: {ESTADO_LABEL[estado]}</span>
           {estado === "en_revision" && planEstado?.enviado_por_nombre && (
-            <span style={{ fontSize: 11, color: info.text }}>enviado por {planEstado.enviado_por_nombre}</span>
+            <span className="plan-estado-meta">enviado por {planEstado.enviado_por_nombre}</span>
           )}
           {estado === "aprobado" && planEstado?.revisado_por_nombre && (
-            <span style={{ fontSize: 11, color: info.text }}>por {planEstado.revisado_por_nombre}</span>
+            <span className="plan-estado-meta">por {planEstado.revisado_por_nombre}</span>
           )}
         </div>
 
-        <div style={{ display: "flex", gap: 6 }}>
+        <div className="plan-estado-actions">
           {puedeEnviar && (
-            <button
-              disabled={isEnviandoRevision}
-              onClick={onEnviar}
-              style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "#fff", background: "var(--navy)", border: "none", borderRadius: 8, cursor: isEnviandoRevision ? "default" : "pointer" }}
-            >
+            <button className="btn-enviar-revision" disabled={isEnviandoRevision} onClick={onEnviar}>
               {isEnviandoRevision ? "Enviando..." : "Enviar a revisión"}
             </button>
           )}
           {puedeDecidir && !showRechazoForm && (
             <>
-              <button
-                disabled={isDecidiendoPlan}
-                onClick={onAprobar}
-                style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "#fff", background: "#16a34a", border: "none", borderRadius: 8, cursor: isDecidiendoPlan ? "default" : "pointer" }}
-              >
-                Aprobar
+              <button className="btn-aprobar-plan" disabled={isDecidiendoPlan} onClick={onAprobar}>
+                <CheckCircle2 size={13} /> Aprobar
               </button>
-              <button
-                disabled={isDecidiendoPlan}
-                onClick={() => setShowRechazoForm(true)}
-                style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "#b91c1c", background: "#fff", border: "1px solid #fca5a5", borderRadius: 8, cursor: isDecidiendoPlan ? "default" : "pointer" }}
-              >
+              <button className="btn-pedir-cambios" disabled={isDecidiendoPlan} onClick={() => setShowRechazoForm(true)}>
                 Pedir cambios
               </button>
             </>
@@ -678,32 +660,24 @@ function PlanEstadoBanner({
       </div>
 
       {estado === "rechazado" && planEstado?.comentario && (
-        <div style={{ fontSize: 12, color: info.text }}>
+        <div className="plan-estado-meta">
           <strong>Cambios pedidos por {planEstado.revisado_por_nombre ?? "el Director"}:</strong> {planEstado.comentario}
         </div>
       )}
 
       {puedeDecidir && showRechazoForm && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div className="plan-rechazo-form">
           <textarea
             value={comentarioRechazo}
             onChange={(e) => setComentarioRechazo(e.target.value)}
             placeholder="¿Qué cambios necesita este plan?"
             rows={2}
-            style={{ fontSize: 12, padding: "6px 8px", borderRadius: 8, border: "1px solid var(--border)", resize: "vertical" }}
           />
-          <div style={{ display: "flex", gap: 6 }}>
-            <button
-              disabled={isDecidiendoPlan}
-              onClick={onRechazar}
-              style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "#fff", background: "#b91c1c", border: "none", borderRadius: 8, cursor: isDecidiendoPlan ? "default" : "pointer" }}
-            >
+          <div className="plan-rechazo-actions">
+            <button className="btn-confirmar-rechazo" disabled={isDecidiendoPlan} onClick={onRechazar}>
               Confirmar
             </button>
-            <button
-              onClick={() => { setShowRechazoForm(false); setComentarioRechazo(""); }}
-              style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "var(--text-muted)", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer" }}
-            >
+            <button className="btn-cancelar-rechazo" onClick={() => { setShowRechazoForm(false); setComentarioRechazo(""); }}>
               Cancelar
             </button>
           </div>

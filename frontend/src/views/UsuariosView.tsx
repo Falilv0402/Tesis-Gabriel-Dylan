@@ -294,32 +294,22 @@ function PlanesRevisionPanel({
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {planes.map((p) => (
-            <div key={p.estudiante_id} style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-              padding: "10px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10,
-            }}>
+            <div key={p.estudiante_id} className="plan-revision-item">
               <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
-                <ClipboardCheck size={16} style={{ color: "#92400e", flexShrink: 0, marginTop: 2 }} />
-                <div style={{ minWidth: 0 }}>
-                  <strong style={{ fontSize: 13, color: "#92400e" }}>{p.estudiante_nombre ?? "Alumno"}</strong>
-                  <div style={{ fontSize: 11, color: "#92400e" }}>
+                <ClipboardCheck size={16} className="plan-revision-item-icon" style={{ marginTop: 2 }} />
+                <div className="plan-revision-item-body">
+                  <strong>{p.estudiante_nombre ?? "Alumno"}</strong>
+                  <span>
                     Enviado por {p.enviado_por_nombre ?? "—"}
                     {p.enviado_at && ` · ${new Date(p.enviado_at).toLocaleDateString("es-PE", { day: "2-digit", month: "short" })}`}
-                  </div>
+                  </span>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                <button
-                  onClick={() => onVer(p.estudiante_id)}
-                  style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "var(--navy)", background: "#fff", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer" }}
-                >
+              <div className="plan-revision-actions">
+                <button className="btn-ver-plan" onClick={() => onVer(p.estudiante_id)}>
                   Ver plan
                 </button>
-                <button
-                  disabled={isDecidiendoPlan}
-                  onClick={() => onAprobar(p)}
-                  style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", color: "#fff", background: "#16a34a", border: "none", borderRadius: 8, cursor: isDecidiendoPlan ? "default" : "pointer" }}
-                >
+                <button className="btn-aprobar-rapido" disabled={isDecidiendoPlan} onClick={() => onAprobar(p)}>
                   Aprobar
                 </button>
               </div>
