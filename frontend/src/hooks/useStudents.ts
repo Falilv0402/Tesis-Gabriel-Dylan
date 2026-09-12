@@ -312,12 +312,17 @@ export function useStudents(
     );
 
     if (session && !id.startsWith("temp-")) {
-      const { error } = await supabase
+      // Sin .eq("autor_id", ...): la política "owner_or_director_update_hitos"
+      // (0006_coordinador_role.sql) ya permite que un Director edite cualquier
+      // hito de su equipo -- ese filtro de más lo bloqueaba en silencio (0 filas
+      // afectadas, sin error) aun cuando la UI (canEditAll) sí dejaba tocarlo.
+      // El .select() fuerza a detectar ese caso de 0 filas como error también.
+      const { data, error } = await supabase
         .from("plan_hitos")
         .update({ completado: nuevoEstado })
         .eq("id", id)
-        .eq("autor_id", session.id);
-      if (error) {
+        .select();
+      if (error || !data || data.length === 0) {
         // Roll back
         setPlanMilestones((prev) =>
           prev.map((m) => m.id === id ? { ...m, completado: !nuevoEstado } : m)
