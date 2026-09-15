@@ -431,6 +431,25 @@ export function useStudents(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, apiConnected]);
 
+  // Tiempo real: si otro Director/Coordinador agrega un hito o marca uno
+  // como completado en el mismo alumno mientras esta pantalla está abierta,
+  // se refleja sin recargar (requiere que `plan_hitos` esté en la
+  // publicación supabase_realtime -- Database > Publications en el dashboard).
+  useEffect(() => {
+    if (!session || !selected?.id) return;
+    const estudianteId = selected.id;
+    const channel = supabase
+      .channel(`plan_hitos-${estudianteId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "plan_hitos", filter: `estudiante_id=eq.${estudianteId}` },
+        () => void loadMilestones(estudianteId)
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, selected?.id]);
+
   return {
     students, totalStudents, summary, isLoadingMore,
     isSavingPredictions, predictionsSaved,

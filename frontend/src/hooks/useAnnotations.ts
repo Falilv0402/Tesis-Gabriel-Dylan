@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { Student } from "@/types";
 import { supabase } from "@/lib/supabase";
@@ -91,6 +91,25 @@ export function useAnnotations(
     }
     setIsSavingAnnotation(false);
   }
+
+  // Tiempo real: si otro Director/Coordinador agrega una anotación sobre el
+  // mismo alumno mientras esta pantalla está abierta, se refleja sin recargar
+  // (requiere que `anotaciones` esté agregada a la publicación
+  // supabase_realtime -- Database > Publications en el dashboard).
+  useEffect(() => {
+    if (!session || !selected?.id) return;
+    const estudianteId = selected.id;
+    const channel = supabase
+      .channel(`anotaciones-${estudianteId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "anotaciones", filter: `estudiante_id=eq.${estudianteId}` },
+        () => void loadAnnotations(estudianteId)
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, selected?.id]);
 
   return {
     annotations, setAnnotations,
