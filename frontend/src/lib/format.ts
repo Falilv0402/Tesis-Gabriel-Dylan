@@ -51,6 +51,17 @@ export function recommendation(student: Student): string {
     return "Intervencion prioritaria: refuerzo en lectura y ciencias, coordinacion con familia.";
   if (student.tipo_riesgo === "Contexto socioecon.")
     return "Considerar soporte socioeconomico y derivacion a programas de apoyo institucional.";
+  // Categorías del modelo de colegio propio (ver tipoRiesgoColegio en colegio.ts) —
+  // no coinciden con las de EM2022 de arriba, así que sin estas ramas todo
+  // alumno ALTO de colegio propio caía siempre al mensaje genérico de abajo.
+  if (student.tipo_riesgo === "Bajo en Matemática")
+    return "Refuerzo en Matematica: practica guiada y seguimiento semanal del progreso.";
+  if (student.tipo_riesgo === "Bajo en Comunicación")
+    return "Refuerzo en Comunicacion: plan de lectura y escritura con acompanamiento docente.";
+  if (student.tipo_riesgo === "Bajo en varias áreas")
+    return "Intervencion prioritaria: bajo rendimiento en varias areas — coordinar con tutor y familia.";
+  if (student.tipo_riesgo === "Seguimiento académico")
+    return "Riesgo detectado por otros factores (asistencia, conducta o promedio general) mas alla de una sola area — revisar el detalle del alumno antes de definir la accion.";
   return "Monitoreo academico continuo y revision periodica.";
 }
 

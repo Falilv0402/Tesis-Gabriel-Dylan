@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AlumnoColegio, ColegioResumen } from "@/types";
 import { apiUrl } from "@/lib/constants";
+import { supabase } from "@/lib/supabase";
 
 /**
  * Carga los datos del modelo INTERNO del colegio (IE con datos propios) para
@@ -25,9 +26,13 @@ export function useColegio(codigoIe: string | null) {
     setIsLoading(true);
     setError(null);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeaders = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : undefined;
       const [resRes, predRes] = await Promise.all([
-        fetch(`${apiUrl}/v1/colegio/${ie}/resumen`),
-        fetch(`${apiUrl}/v1/colegio/${ie}/predicciones`),
+        fetch(`${apiUrl}/v1/colegio/${ie}/resumen`, { headers: authHeaders }),
+        fetch(`${apiUrl}/v1/colegio/${ie}/predicciones`, { headers: authHeaders }),
       ]);
       if (resRes.status === 404 || predRes.status === 404) {
         setHasModel(false);

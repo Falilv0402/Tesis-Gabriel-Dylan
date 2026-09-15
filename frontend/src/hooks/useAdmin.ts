@@ -91,7 +91,12 @@ export function useAdmin(
     const ieNorm = String(parseInt(ieCode, 10)); // "0249" → "249"
     try {
       // 1️⃣ Intentar modelo CUBICOL propio del colegio
-      const res = await fetch(`${apiUrl}/v1/colegio/${ieNorm}/resumen`);
+      const { data: { session: statsSession } } = await supabase.auth.getSession();
+      const res = await fetch(`${apiUrl}/v1/colegio/${ieNorm}/resumen`, {
+        headers: statsSession?.access_token
+          ? { Authorization: `Bearer ${statsSession.access_token}` }
+          : undefined,
+      });
       if (res.ok) {
         const data = await res.json();
         const m = data.metricas ?? {};
@@ -208,7 +213,12 @@ export function useAdmin(
   async function loadColegioRespaldo(codigoIe: string) {
     if (!codigoIe) { setColegioRespaldo(null); return; }
     try {
-      const res = await fetch(`${apiUrl}/v1/colegio/${codigoIe}/respaldo`);
+      const { data: { session: respaldoSession } } = await supabase.auth.getSession();
+      const res = await fetch(`${apiUrl}/v1/colegio/${codigoIe}/respaldo`, {
+        headers: respaldoSession?.access_token
+          ? { Authorization: `Bearer ${respaldoSession.access_token}` }
+          : undefined,
+      });
       setColegioRespaldo(res.ok ? await res.json() : null);
     } catch {
       setColegioRespaldo(null);

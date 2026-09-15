@@ -23,14 +23,17 @@ def _validate_ie(codigo_ie: str) -> str:
 router = APIRouter(prefix="/colegio", tags=["Mi Colegio"])
 
 
-# ─── Autenticación para endpoints que MUTAN datos (entrenar modelo) ───────────
-# El resto del backend no valida sesión (los endpoints de lectura no exponen
-# datos sensibles fuera del propio front autenticado por Supabase), pero
-# "/procesar" ejecuta un entrenamiento con los datos que se le suban — sin
-# esta verificación, cualquiera que alcance la URL pública podría reentrenar
-# el modelo de cualquier colegio con datos arbitrarios. Reutiliza la sesión de
-# Supabase ya emitida al usuario (no requiere ningún secreto nuevo: la anon key
-# es pública por diseño, y RLS ya permite que cada usuario lea su propio perfil).
+# ─── Autenticación (lectura Y escritura) ──────────────────────────────────────
+# codigo_ie es el código MINEDU del colegio: público y fácil de adivinar, no
+# sirve como secreto. Por eso TODO endpoint bajo /colegio/{codigo_ie} exige la
+# sesión de Supabase del usuario y valida que pertenezca a ESE colegio (o sea
+# superadmin) — tanto para leer predicciones/resumen (nombres y riesgo de
+# alumnos reales) como para mutar (reentrenar, restaurar). Antes solo se exigía
+# en escritura; los endpoints de lectura quedaban públicos sin sesión, así que
+# cualquiera que conociera o adivinara un codigo_ie podía listar el alumnado en
+# riesgo de ese colegio sin loguearse. Reutiliza la sesión de Supabase ya
+# emitida al usuario (no requiere ningún secreto nuevo: la anon key es pública
+# por diseño, y RLS ya permite que cada usuario lea su propio perfil).
 SUPABASE_URL      = os.environ.get("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 
@@ -39,12 +42,14 @@ async def require_admin_de_colegio(
     codigo_ie: str = Depends(_validate_ie),
     authorization: str = Header(default=""),
 ) -> dict:
-    """Verifica que quien llama tenga un rol autorizado a cargar datos del
-    colegio (admin/director/coordinador de ESE colegio, o superadmin sin
-    restricción de IE) y esté activo. Devuelve {codigo_ie, token} — el token
-    se reutiliza para consultar a los destinatarios de la alerta proactiva
-    (HU019) respetando RLS, sin necesitar ningún secreto adicional en el
-    backend."""
+    """Verifica que quien llama tenga un rol interno (admin/director/
+    coordinador de ESE colegio, o superadmin sin restricción de IE) y esté
+    activo. Se usa tanto para leer (predicciones/resumen/respaldo) como para
+    mutar (procesar/restaurar) — los cuatro roles del sistema cubren a todo el
+    personal interno, así que no hace falta un rol "solo lectura" aparte.
+    Devuelve {codigo_ie, token} — el token se reutiliza para consultar a los
+    destinatarios de la alerta proactiva (HU019) respetando RLS, sin necesitar
+    ningún secreto adicional en el backend."""
     if not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Falta el token de autenticación.")
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
@@ -150,8 +155,9 @@ def _listar_backups(codigo_ie: str) -> list[Path]:
 # ─── GET /v1/colegio/{codigo_ie}/respaldo ─────────────────────────────────────
 
 @router.get("/{codigo_ie}/respaldo")
-def get_respaldo(codigo_ie: str = Depends(_validate_ie)):
+def get_respaldo(auth_ctx: dict = Depends(require_admin_de_colegio)):
     """Indica si hay un respaldo disponible para restaurar y de cuándo es."""
+    codigo_ie = auth_ctx["codigo_ie"]
     backups = _listar_backups(codigo_ie)
     if not backups:
         return {"disponible": False, "fecha": None}
@@ -191,11 +197,12 @@ async def restaurar_modelo(auth_ctx: dict = Depends(require_admin_de_colegio)):
 # ─── GET /v1/colegio/{codigo_ie}/predicciones ─────────────────────────────────
 
 @router.get("/{codigo_ie}/predicciones")
-def get_predicciones(codigo_ie: str = Depends(_validate_ie), salon: str | None = None, nivel: str | None = None):
+def get_predicciones(auth_ctx: dict = Depends(require_admin_de_colegio), salon: str | None = None, nivel: str | None = None):
     """
     Devuelve el ranking de riesgo de los estudiantes del colegio.
     Filtros opcionales: salon (ej: 5A, P6B), nivel (ALTO, MEDIO, BAJO).
     """
+    codigo_ie = auth_ctx["codigo_ie"]
     art = _load_artefacto(codigo_ie)
     preds = art["predicciones"]
 
@@ -221,8 +228,9 @@ def get_predicciones(codigo_ie: str = Depends(_validate_ie), salon: str | None =
 # ─── GET /v1/colegio/{codigo_ie}/resumen ──────────────────────────────────────
 
 @router.get("/{codigo_ie}/resumen")
-def get_resumen(codigo_ie: str = Depends(_validate_ie)):
+def get_resumen(auth_ctx: dict = Depends(require_admin_de_colegio)):
     """KPIs rápidos del colegio: totales por nivel."""
+    codigo_ie = auth_ctx["codigo_ie"]
     art = _load_artefacto(codigo_ie)
     m   = art["metricas"]
     preds = art["predicciones"]

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/constants";
+import { supabase } from "@/lib/supabase";
 
 export type ColegioModelSummary = {
   codigo_ie: string;
@@ -36,10 +37,15 @@ export function useColegioModels(enabled: boolean) {
       const colegios: { id_ie: string; nombre_ie?: string }[] = await res.json();
       const conModelo = colegios.filter((c) => c.nombre_ie); // solo los que tienen .pkl propio
 
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeaders = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : undefined;
+
       const out: ColegioModelSummary[] = [];
       for (const c of conModelo) {
         const ie = String(parseInt(String(c.id_ie), 10));
-        const r = await fetch(`${apiUrl}/v1/colegio/${ie}/resumen`);
+        const r = await fetch(`${apiUrl}/v1/colegio/${ie}/resumen`, { headers: authHeaders });
         if (!r.ok) continue;
         const d = await r.json();
         const m = d.metricas ?? {};
