@@ -7,11 +7,13 @@ import re
 import shutil
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, UploadFile, File
 import httpx
 import joblib
 import subprocess
 import sys
+
+from app.core.limiter import limiter
 
 
 def _validate_ie(codigo_ie: str) -> str:
@@ -172,7 +174,8 @@ def get_respaldo(auth_ctx: dict = Depends(require_admin_de_colegio)):
 # ─── POST /v1/colegio/{codigo_ie}/restaurar ───────────────────────────────────
 
 @router.post("/{codigo_ie}/restaurar")
-async def restaurar_modelo(auth_ctx: dict = Depends(require_admin_de_colegio)):
+@limiter.limit("10/minute")
+async def restaurar_modelo(request: Request, auth_ctx: dict = Depends(require_admin_de_colegio)):
     """Revierte el modelo del colegio al respaldo más reciente (deshace el
     último reentrenamiento). El modelo vigente también se respalda antes de
     ser reemplazado, por si la restauración misma fue un error."""
@@ -406,7 +409,9 @@ async def _registrar_version_modelo(codigo_ie: str, token: str, art: dict) -> No
 
 
 @router.post("/{codigo_ie}/procesar")
+@limiter.limit("5/minute")
 async def procesar_excels(
+    request: Request,
     auth_ctx: dict = Depends(require_admin_de_colegio),
     notas_files: list[UploadFile] = File(...),
     conducta_files: list[UploadFile] = File(default=[]),

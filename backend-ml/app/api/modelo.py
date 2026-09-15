@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from app.core.config import get_settings
+from app.core.limiter import limiter
 from app.schemas import FeatureImportance, MetricResponse, RetrainResponse
 from app.services.model_service import model_service
 
@@ -36,7 +37,8 @@ def diagnostico():
 
 @router.post("/reentrenamiento", response_model=RetrainResponse,
              dependencies=[Depends(verify_api_key)])
-def reentrenar():
+@limiter.limit("5/minute")
+def reentrenar(request: Request):
     try: output = model_service.retrain()
     except Exception as exc: raise HTTPException(status_code=500, detail=str(exc)) from exc
     return RetrainResponse(status="ok", detail=output[-1500:])
