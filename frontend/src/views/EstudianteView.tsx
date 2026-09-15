@@ -36,6 +36,7 @@ interface EstudianteViewProps {
   setIeProfileId: (id: string | null) => void;
   setShowIeProfile: (v: boolean) => void;
   addMilestone: () => void;
+  isAddingMilestone: boolean;
   toggleMilestone: (id: string) => void;
   loadMilestones: (id: string) => void;
   isLoadingMilestones: boolean;
@@ -52,7 +53,7 @@ export function EstudianteView({
   exportStudentPdf, saveAnnotation, loadAnnotations,
   toggleComparator, setShowComparator,
   setIeProfileId, setShowIeProfile,
-  addMilestone, toggleMilestone, loadMilestones, isLoadingMilestones,
+  addMilestone, isAddingMilestone, toggleMilestone, loadMilestones, isLoadingMilestones,
 }: EstudianteViewProps) {
   // Director puede editar anotaciones e hitos de cualquier usuario
   const canEditAll = role === "director";
@@ -298,6 +299,7 @@ export function EstudianteView({
                       value={newMilestone}
                       onChange={(e) => setNewMilestone(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && addMilestone()}
+                      disabled={isAddingMilestone}
                       placeholder="Nuevo hito (ej. Reunión con familia)"
                       aria-label="Nuevo hito"
                     />
@@ -306,11 +308,12 @@ export function EstudianteView({
                       className="plan-date-input"
                       value={newMilestoneDate}
                       onChange={(e) => setNewMilestoneDate(e.target.value)}
+                      disabled={isAddingMilestone}
                       aria-label="Fecha objetivo del hito"
                       title="Fecha objetivo del hito"
                     />
-                    <button className="primary" onClick={addMilestone} aria-label="Agregar hito">
-                      <Plus size={14} /> Agregar
+                    <button className="primary" disabled={isAddingMilestone || !newMilestone.trim()} onClick={addMilestone} aria-label="Agregar hito">
+                      <Plus size={14} /> {isAddingMilestone ? "Agregando..." : "Agregar"}
                     </button>
                   </div>
                   <div className="model-note" style={{ marginTop: 8, fontSize: 11 }}>

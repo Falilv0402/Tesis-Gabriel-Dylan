@@ -42,6 +42,7 @@ interface ColegioEstudianteViewProps {
   saveAnnotation: () => void;
   loadAnnotations: (id: string) => void;
   addMilestone: () => void;
+  isAddingMilestone: boolean;
   toggleMilestone: (id: string) => void;
   loadMilestones: (id: string) => void;
   isLoadingMilestones: boolean;
@@ -70,7 +71,7 @@ export function ColegioEstudianteView({
   planMilestones, newMilestone, setNewMilestone, newMilestoneDate, setNewMilestoneDate,
   studentTab, setStudentTab, setTab,
   exportStudentPdf, isGeneratingStudentPdf,
-  saveAnnotation, loadAnnotations, addMilestone, toggleMilestone, loadMilestones, isLoadingMilestones,
+  saveAnnotation, loadAnnotations, addMilestone, isAddingMilestone, toggleMilestone, loadMilestones, isLoadingMilestones,
   planEstado, isLoadingPlanEstado, loadPlanEstado, onEnviarARevision, isEnviandoRevision,
   onDecidirPlan, isDecidiendoPlan,
 }: ColegioEstudianteViewProps) {
@@ -581,9 +582,10 @@ export function ColegioEstudianteView({
                 )}
                 <div className="plan-add-row">
                   <input className="plan-text-input" value={newMilestone} onChange={(e) => setNewMilestone(e.target.value)}
+                    disabled={isAddingMilestone}
                     onKeyDown={(e) => e.key === "Enter" && addMilestone()} placeholder="Nuevo hito (ej. Reunión con familia)" aria-label="Nuevo hito" />
-                  <input type="date" className="plan-date-input" value={newMilestoneDate} onChange={(e) => setNewMilestoneDate(e.target.value)} aria-label="Fecha objetivo del hito" />
-                  <button className="primary" onClick={addMilestone} aria-label="Agregar hito"><Plus size={14} /> Agregar</button>
+                  <input type="date" className="plan-date-input" value={newMilestoneDate} onChange={(e) => setNewMilestoneDate(e.target.value)} disabled={isAddingMilestone} aria-label="Fecha objetivo del hito" />
+                  <button className="primary" disabled={isAddingMilestone || !newMilestone.trim()} onClick={addMilestone} aria-label="Agregar hito"><Plus size={14} /> {isAddingMilestone ? "Agregando..." : "Agregar"}</button>
                 </div>
               </div>
             )}

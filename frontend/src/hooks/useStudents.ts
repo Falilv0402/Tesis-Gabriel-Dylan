@@ -65,6 +65,7 @@ export function useStudents(
   const [newMilestoneDate,  setNewMilestoneDate]  = useState<string>(() =>
     new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10)
   );
+  const [isAddingMilestone, setIsAddingMilestone]  = useState(false);
   const [studentTab, setStudentTab] = useState<"resumen" | "anotaciones" | "plan">("resumen");
   const [isLoadingMilestones, setIsLoadingMilestones] = useState(false);
 
@@ -254,12 +255,18 @@ export function useStudents(
   }
 
   async function addMilestone() {
+    // Sin este guard, un doble clic (o una red lenta + un segundo clic por
+    // impaciencia) disparaba dos inserts con el mismo texto -- nada bloqueaba
+    // el botón ni la tecla Enter mientras el primero seguía en curso.
+    if (isAddingMilestone) return;
     const texto = newMilestone.trim();
     if (!texto) return;
     const fechaIso = newMilestoneDate || defaultMilestoneDate();
     const fecha = new Date(fechaIso + "T00:00:00").toLocaleDateString("es-PE", {
       day: "2-digit", month: "short", year: "numeric",
     });
+
+    setIsAddingMilestone(true);
 
     // Optimistic UI update
     const tempId = `temp-${Date.now()}`;
@@ -299,6 +306,7 @@ export function useStudents(
         toast("Error al guardar el hito.", "error");
       }
     }
+    setIsAddingMilestone(false);
   }
 
   async function toggleMilestone(id: string) {
@@ -468,6 +476,6 @@ export function useStudents(
     loadStudents, loadMoreStudents, fetchShap,
     savePredictionsToSupabase, toggleComparator,
     addMilestone, toggleMilestone, loadMilestones,
-    isLoadingMilestones, defaultMilestoneDate,
+    isLoadingMilestones, isAddingMilestone, defaultMilestoneDate,
   };
 }

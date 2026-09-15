@@ -455,6 +455,7 @@ export default function Page() {
               saveAnnotation={() => void interventions.saveAnnotation()}
               loadAnnotations={(id) => void interventions.loadAnnotations(id)}
               addMilestone={() => void students.addMilestone()}
+              isAddingMilestone={students.isAddingMilestone}
               toggleMilestone={(id) => void students.toggleMilestone(id)}
               loadMilestones={(id) => void students.loadMilestones(id)}
               isLoadingMilestones={students.isLoadingMilestones}
@@ -495,6 +496,7 @@ export default function Page() {
               setIeProfileId={students.setIeProfileId}
               setShowIeProfile={students.setShowIeProfile}
               addMilestone={() => void students.addMilestone()}
+              isAddingMilestone={students.isAddingMilestone}
               toggleMilestone={(id) => void students.toggleMilestone(id)}
               loadMilestones={(id) => void students.loadMilestones(id)}
               isLoadingMilestones={students.isLoadingMilestones}
