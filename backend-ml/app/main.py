@@ -1,9 +1,9 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -47,6 +47,22 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/v1")
+
+
+# api.satraapp.com es el backend, no la app -- no debe aparecer indexado en
+# Google (Search Console lo encontró y lo listó como página rastreada). El
+# robots.txt evita que se vuelva a rastrear, y el header en cada respuesta
+# hace que, si ya quedó indexado, se retire en el próximo paso de Google.
+@app.middleware("http")
+async def no_index_backend(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return response
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots() -> PlainTextResponse:
+    return PlainTextResponse("User-agent: *\nDisallow: /\n")
 
 
 @app.get("/", include_in_schema=False)
