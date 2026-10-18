@@ -220,6 +220,9 @@ export type AlumnoColegio = {
   nivel_riesgo:    "ALTO" | "MEDIO" | "BAJO";
   prob_riesgo:     number;
   riesgo:          number;
+  /** En cuántos de los bimestres cargados estuvo en riesgo (nota <= 13 en Matemática o Comunicación). */
+  bimestres_en_riesgo?: number;
+  bimestres_evaluados?: number;
   n_materias_c:    number;
   promedio_materias?: number | null;
   conducta_promedio?: number | null;
@@ -243,6 +246,11 @@ export type ColegioResumen = {
   trained_at?:     string;
   metricas?: {
     modo_prediccion?:    string;
+    /** Qué significan los porcentajes: pronóstico del siguiente bimestre, cierre de año (4 bimestres) o solo descriptivo. */
+    tipo_resultado?:        "pronostico" | "cierre_anual" | "descriptivo" | null;
+    bimestres_cargados?:    number[] | null;
+    bimestre_pronosticado?: number | null;
+    umbral_riesgo_nota?:    number | null;
     nota_metodologica?:  string;
     importancia_variables?: { variable: string; importancia: number }[] | null;
     [key: string]: unknown;

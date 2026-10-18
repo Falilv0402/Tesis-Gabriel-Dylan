@@ -440,6 +440,7 @@ export default function Page() {
             <ColegioEstudianteView
               role={auth.role}
               alumno={colegioSelectedAlumno}
+              resumen={colegio.resumen}
               alumnos={colegio.alumnos}
               onSelectAlumno={(id) => setSelectedColegioId(id)}
               annotations={interventions.annotations}

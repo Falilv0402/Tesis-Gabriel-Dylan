@@ -1,4 +1,4 @@
-import type { AlumnoColegio, RiskLevel, Student } from "@/types";
+import type { AlumnoColegio, ColegioResumen, RiskLevel, Student } from "@/types";
 
 /**
  * Materias del colegio que se muestran/grafican — las 7 áreas académicas
@@ -113,6 +113,129 @@ export function gradeCell(
   const { value, anual } = notaCelda(a, materia, bimestre);
   const info = notaInfo(value);
   return { label: anual && value != null ? `${info.label} ᵃ` : info.label, color: info.color, anual };
+}
+
+type MetricasColegio = ColegioResumen["metricas"];
+
+export type ResultadoModelo = {
+  tipo: "pronostico" | "cierre_anual" | "descriptivo" | "legacy";
+  /** Texto corto para el encabezado del colegio. */
+  titulo: string;
+  /** Líneas para el medidor del alumno (qué significa el porcentaje). */
+  gauge: [string, string];
+  /** Explicación en lenguaje llano de lo que está viendo el director. */
+  explicacion: string;
+  bimestreCargado: number;
+  bimestrePronosticado: number | null;
+};
+
+/**
+ * Traduce lo que el modelo del colegio hizo con los bimestres cargados a un
+ * texto que cualquier director entienda. Antes el encabezado decía siempre
+ * "alerta temprana B1-B3 → B4", aunque se hubieran subido los 4 bimestres (no
+ * queda nada que pronosticar) o uno solo (no se puede pronosticar nada): el
+ * sistema parecía describir lo ya ocurrido en vez de anticipar.
+ */
+export function describirResultado(m?: MetricasColegio | null): ResultadoModelo {
+  const cargados = m?.bimestres_cargados ?? [];
+  const k = cargados.length ? Math.max(...cargados) : 0;
+  const n = m?.bimestre_pronosticado ?? null;
+  const modo = m?.modo_prediccion ?? "";
+
+  if (m?.tipo_resultado === "pronostico" && n) {
+    return {
+      tipo: "pronostico", bimestreCargado: k, bimestrePronosticado: n,
+      titulo: `Pronóstico del ${n}.° bimestre · a partir de B1–B${k}`,
+      gauge: ["Riesgo en el", `${n}.° bimestre`],
+      explicacion:
+        `Estás viendo un pronóstico: el sistema usa las notas de B1–B${k} para estimar quién estará en riesgo ` +
+        `en el ${n}.° bimestre, cuando todavía hay tiempo de intervenir. Se confirma al subir las notas del ${n}.° bimestre.`,
+    };
+  }
+  if (m?.tipo_resultado === "cierre_anual") {
+    return {
+      tipo: "cierre_anual", bimestreCargado: 4, bimestrePronosticado: null,
+      titulo: "Cierre de año · B1–B4 cargados",
+      gauge: ["Riesgo del año", "(retrospectivo)"],
+      explicacion:
+        "Ya están los 4 bimestres, así que no queda un bimestre por pronosticar. El porcentaje indica qué tan consistente " +
+        "es el patrón de riesgo de cada alumno; en su ficha ves en cuántos bimestres estuvo realmente en riesgo.",
+    };
+  }
+  if (m?.tipo_resultado === "descriptivo" || modo.startsWith("descriptivo")) {
+    return {
+      tipo: "descriptivo", bimestreCargado: k, bimestrePronosticado: null,
+      titulo: "Situación actual · sin pronóstico",
+      gauge: ["Índice de riesgo", "(sin pronóstico)"],
+      explicacion:
+        "Todavía no se puede pronosticar: hacen falta al menos 2 bimestres cargados y suficientes alumnos con y sin riesgo. " +
+        "Mientras tanto, los porcentajes son un índice de las notas actuales, no una predicción.",
+    };
+  }
+  // Modelos entrenados antes de que se guardara el tipo de resultado.
+  return {
+    tipo: "legacy", bimestreCargado: k, bimestrePronosticado: null,
+    titulo: "alerta temprana B1-B3 → B4",
+    gauge: ["Probabilidad de", "riesgo"],
+    explicacion: "",
+  };
+}
+
+const AREAS_LECTURA = [
+  { label: "Matemática",   keys: ["matematica", "mat_prim"] },
+  { label: "Comunicación", keys: ["comunicacion", "lenguaje"] },
+] as const;
+
+export type LecturaAlumno = { titular: string; tendencias: string[]; nota: string };
+
+/**
+ * Lectura en lenguaje llano de la situación de un alumno: qué dice el modelo
+ * y en qué se apoya (en cuántos bimestres estuvo en riesgo y cómo van sus
+ * notas de Matemática y Comunicación). Hace visible que el sistema anticipa,
+ * no solo muestra notas.
+ */
+export function lecturaAlumno(a: AlumnoColegio, m?: MetricasColegio | null): LecturaAlumno {
+  const res = describirResultado(m);
+  const umbral = m?.umbral_riesgo_nota ?? 13;
+  const k = res.bimestreCargado || a.bimestres_evaluados || 0;
+  const enRiesgo = a.bimestres_en_riesgo;
+  const porc = `${Math.round(a.prob_riesgo * 100)}%`;
+
+  let titular: string;
+  if (res.tipo === "pronostico" && res.bimestrePronosticado) {
+    titular = `${porc} de probabilidad de estar en riesgo en el ${res.bimestrePronosticado}.° bimestre.`;
+    if (enRiesgo != null && k > 0) titular += ` Ya estuvo en riesgo en ${enRiesgo} de ${k} bimestres.`;
+  } else if (res.tipo === "cierre_anual" && enRiesgo != null && k > 0) {
+    if (enRiesgo >= k) titular = `Propenso a cerrar el año en riesgo: estuvo en riesgo en los ${k} bimestres.`;
+    else if (enRiesgo >= Math.ceil(k * 0.75)) titular = `Propenso a cerrar el año en riesgo: en riesgo en ${enRiesgo} de ${k} bimestres.`;
+    else if (enRiesgo >= 2) titular = `Año con riesgo intermitente: en riesgo en ${enRiesgo} de ${k} bimestres.`;
+    else titular = `Año estable: en riesgo en ${enRiesgo} de ${k} bimestres.`;
+  } else {
+    titular = res.tipo === "descriptivo"
+      ? "Sin pronóstico: solo se muestra la situación actual."
+      : `${porc} de probabilidad de riesgo.`;
+  }
+
+  const tendencias: string[] = [];
+  for (const area of AREAS_LECTURA) {
+    const serie: number[] = [];
+    for (let b = 1; b <= Math.max(k, 1); b++) {
+      const v = area.keys.map((key) => notaBimestre(a, key, String(b) as Bimestre)).find((x) => x != null);
+      if (v != null) serie.push(v);
+    }
+    if (serie.length < 2) continue;
+    const ultima = serie[serie.length - 1];
+    const delta = ultima - serie[0];
+    const tendencia = delta <= -1 ? "en baja" : delta >= 1 ? "en alza" : "estable";
+    // "estable" a secas suena tranquilizador aunque el alumno siga en nota de riesgo.
+    const enRiesgoAhora = ultima <= umbral ? ", en nivel de riesgo" : "";
+    tendencias.push(`${area.label}: ${serie.map((v) => Number(v.toFixed(1))).join(" → ")} (${tendencia}${enRiesgoAhora})`);
+  }
+
+  return {
+    titular, tendencias,
+    nota: `Se considera "en riesgo" una nota de ${umbral} o menos en Matemática o Comunicación.`,
+  };
 }
 
 /**

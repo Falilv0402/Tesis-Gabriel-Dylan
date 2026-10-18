@@ -7,13 +7,14 @@ import {
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import type { AlumnoColegio, Tab } from "@/types";
+import type { AlumnoColegio, ColegioResumen, Tab } from "@/types";
 import { Panel, EmptyState } from "@/components/ui/Primitives";
 import type { PlanEstadoRow } from "@/hooks/usePlanRevision";
 import { pct, riskClass } from "@/lib/format";
 import {
   MATERIAS_COLEGIO, anioFromSalon, aniosDeSalones, seccionFromSalon, seccionesDeSalones,
   notaInfo, notaCelda, gradeCell, colegioStudentId, mejorBimestreConDatos, factoresRiesgoColegio, type Bimestre,
+  describirResultado, lecturaAlumno,
 } from "@/lib/colegio";
 
 interface Annotation { id: string; estudiante_id: string; contenido: string; created_at: string; autor_nombre?: string | null; autor_email?: string | null; es_propia?: boolean }
@@ -22,6 +23,8 @@ interface Milestone  { id: string; texto: string; fecha: string; completado: boo
 interface ColegioEstudianteViewProps {
   role: string;
   alumno: AlumnoColegio | undefined;
+  /** Resumen del modelo del colegio: de ahí sale si los porcentajes son un pronóstico, cierre de año o descriptivo. */
+  resumen?: ColegioResumen | null;
   /** Roster completo del colegio, para el buscador/lista con notas por materia. */
   alumnos: AlumnoColegio[];
   onSelectAlumno: (id: string) => void;
@@ -66,7 +69,7 @@ const LINE_COLORS: Record<string, string> = {
 };
 
 export function ColegioEstudianteView({
-  role, alumno, alumnos, onSelectAlumno,
+  role, alumno, resumen, alumnos, onSelectAlumno,
   annotations, annotationText, setAnnotationText, isSavingAnnotation,
   planMilestones, newMilestone, setNewMilestone, newMilestoneDate, setNewMilestoneDate,
   studentTab, setStudentTab, setTab,
@@ -266,6 +269,8 @@ export function ColegioEstudianteView({
   const promedioNum = alumno.promedio_materias  != null ? Number(alumno.promedio_materias)  : null;
   const conductaNum = alumno.conducta_promedio  != null ? Number(alumno.conducta_promedio)  : null;
   const cursosC     = alumno.n_materias_c ?? 0;
+  const resultado   = describirResultado(resumen?.metricas);
+  const lectura     = lecturaAlumno(alumno, resumen?.metricas);
 
   // Trayectoria de notas por bimestre y materia (B1-B4)
   const trayectoria = (["1", "2", "3", "4"] as const).map((b) => {
@@ -321,8 +326,30 @@ export function ColegioEstudianteView({
             {/* Gauge: color según nivel de riesgo */}
             <div className="gauge" style={{ borderColor: `${gaugeColor}28`, minWidth: 130 }}>
               <strong style={{ color: gaugeColor }}>{pct(alumno.prob_riesgo)}</strong>
-              <span>Probabilidad de<br/>riesgo</span>
+              <span>{resultado.gauge[0]}<br/>{resultado.gauge[1]}</span>
             </div>
+          </div>
+
+          {/* ── Lectura del modelo: qué dice y en qué se apoya, en lenguaje llano ── */}
+          <div style={{
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderLeft: `3px solid ${gaugeColor}`, borderRadius: 10, padding: "12px 16px",
+          }}>
+            <div style={{
+              fontSize: 10, fontWeight: 700, color: "var(--text-muted)",
+              textTransform: "uppercase", letterSpacing: "0.55px", marginBottom: 6,
+            }}>
+              Lectura del modelo
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--navy)", lineHeight: 1.4 }}>
+              {lectura.titular}
+            </div>
+            {lectura.tendencias.length > 0 && (
+              <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12.5, color: "var(--text)", lineHeight: 1.6 }}>
+                {lectura.tendencias.map((t) => <li key={t}>{t}</li>)}
+              </ul>
+            )}
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>{lectura.nota}</div>
           </div>
 
           {/* ── Stat chips ── grid uniforme (label + valor por celda) ─────── */}
@@ -334,9 +361,9 @@ export function ColegioEstudianteView({
             {([
               { label: "Salón",          value: alumno.salon,                                       accent: "var(--navy)" },
               { label: "Grado",          value: anioLabel,                                          accent: "var(--navy)" },
-              { label: "Promedio anual", value: promedioNum != null ? promedioNum.toFixed(1) : "—", accent: gradeColor(promedioNum) },
+              { label: "Promedio general", value: promedioNum != null ? promedioNum.toFixed(1) : "—", accent: gradeColor(promedioNum) },
               { label: "Conducta",       value: conductaNum != null ? conductaNum.toFixed(1) : "—", accent: gradeColor(conductaNum) },
-              { label: "Cursos en C",    value: String(cursosC),                                    accent: cursosC > 2 ? "#dc2626" : cursosC > 0 ? "#d97706" : "#16a34a" },
+              { label: "Áreas con nota ≤ 13", value: String(cursosC),                                   accent: cursosC > 2 ? "#dc2626" : cursosC > 0 ? "#d97706" : "#16a34a" },
             ] as { label: string; value: string; accent: string }[]).map(({ label, value, accent }) => (
               <div key={label} style={{
                 background: "var(--surface)",

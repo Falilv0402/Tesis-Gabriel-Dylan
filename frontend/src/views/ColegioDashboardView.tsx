@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Filter, RefreshCcw, GraduationCap, AlertTriangle, Users, ArrowRight } from "lucide-react";
+import { Filter, RefreshCcw, GraduationCap, AlertTriangle, Users, ArrowRight, Info } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { AlumnoColegio, ColegioResumen } from "@/types";
 import { Kpi, Panel, EmptyState } from "@/components/ui/Primitives";
@@ -10,7 +10,7 @@ import { pct, riskClass } from "@/lib/format";
 import {
   anioFromSalon, aniosDeSalones,
   seccionFromSalon, seccionesDeSalones,
-  colegioStudentId,
+  colegioStudentId, describirResultado,
 } from "@/lib/colegio";
 
 /**
@@ -68,6 +68,8 @@ export function ColegioDashboardView({
 
   const totalFiltrado = filtrados.length;
   const enRiesgo = counts.ALTO + counts.MEDIO;
+  // Qué significan los porcentajes según los bimestres cargados (pronóstico / cierre de año / descriptivo)
+  const resultado = describirResultado(resumen?.metricas);
 
   // ── Riesgo agrupado por salón (sustituto del mapa geográfico) ─────────────
   // Un colegio propio no tiene distritos: el agrupamiento natural del riesgo
@@ -132,23 +134,35 @@ export function ColegioDashboardView({
         <div>
           <h2>{nombreColegio}</h2>
           <span>
-            Modelo interno del colegio · alerta temprana B1-B3 → B4
+            Modelo interno del colegio · {resultado.titulo}
             {resumen?.trained_at && ` · actualizado ${new Date(resumen.trained_at).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" })}`}
           </span>
         </div>
       </div>
 
       {/* ── Aviso: modelo con datos incompletos ─────────────────────────── */}
-      {resumen?.metricas?.modo_prediccion?.startsWith("descriptivo") && (
+      {resultado.tipo === "descriptivo" && (
         <div style={{
           display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px",
           background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10,
         }}>
           <AlertTriangle size={16} style={{ color: "#92400e", flexShrink: 0, marginTop: 1 }} />
           <div style={{ fontSize: 12.5, color: "#92400e", lineHeight: 1.5 }}>
-            <strong>Este colegio todavía no tiene los 4 bimestres cargados</strong> — el modelo está
-            operando con datos limitados (no está prediciendo, solo describiendo lo que hay). Algunas
-            materias o bimestres pueden verse sin nota hasta que se suban los Excel faltantes.
+            <strong>Sin pronóstico por ahora</strong> — {resultado.explicacion} Algunas materias o
+            bimestres pueden verse sin nota hasta que se suban los Excel faltantes.
+          </div>
+        </div>
+      )}
+
+      {/* ── Qué está viendo el director: pronóstico o cierre de año ──────── */}
+      {(resultado.tipo === "pronostico" || resultado.tipo === "cierre_anual") && (
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px",
+          background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10,
+        }}>
+          <Info size={16} style={{ color: "#1e40af", flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 12.5, color: "#1e40af", lineHeight: 1.5 }}>
+            <strong>{resultado.tipo === "pronostico" ? "Pronóstico" : "Cierre de año"}</strong> — {resultado.explicacion}
           </div>
         </div>
       )}
@@ -324,7 +338,11 @@ export function ColegioDashboardView({
                       <strong>{a.nombre}</strong>
                       <span>{a.salon} · {anioFromSalon(a.salon).label}</span>
                       <span style={{ color, fontWeight: 600 }}>
-                        {a.nivel_riesgo} · {pct(a.prob_riesgo)} prob. de riesgo
+                        {a.nivel_riesgo} · {pct(a.prob_riesgo)}{" "}
+                        {resultado.tipo === "pronostico" ? `prob. de riesgo en B${resultado.bimestrePronosticado}`
+                          : resultado.tipo === "cierre_anual" ? `· en riesgo en ${a.bimestres_en_riesgo ?? "?"} de ${resultado.bimestreCargado} bimestres`
+                          : resultado.tipo === "descriptivo" ? "índice de riesgo"
+                          : "prob. de riesgo"}
                       </span>
                     </div>
                     <button className="alert-card-btn" style={{ background: color }} onClick={() => onIntervenir?.(a)}>
