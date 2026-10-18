@@ -363,12 +363,30 @@ export function useAdmin(
     // Cerrar la sesión del cliente efímero (no persiste, pero por prolijidad).
     await signupClient.auth.signOut().catch(() => {});
 
-    if (!error && signUpData.user) {
+    // Supabase no lanza error si el correo ya existe: devuelve un usuario sin identidades.
+    if (!error && signUpData.user && signUpData.user.identities?.length === 0) {
+      toast("Ese correo ya tiene una cuenta registrada.", "error");
+    } else if (!error && signUpData.user) {
+      // Desde la migración 0020 el registro nunca otorga 'admin' (ni un 2.º director): la
+      // cuenta nace como 'coordinador' y quien la crea, que sí tiene permiso, le sube el rol.
+      let rolAsignado = true;
+      if (rolEfectivo === "admin" || rolEfectivo === "director") {
+        const { data: filas, error: rolErr } = await supabase
+          .from("profiles")
+          .update({ rol: rolEfectivo })
+          .eq("id", signUpData.user.id)
+          .select("id");
+        rolAsignado = !rolErr && !!filas?.length;
+      }
       await insertAudit("Crear usuario", "profiles", { email: newUserEmail, rol: newUserRol, asignacion: newUserDistrito });
       setShowCreateUser(false);
       setNewUserEmail(""); setNewUserNombre(""); setNewUserPwd(""); setNewUserRol("director");
       setNewUserDistrito(""); setNewUserColegioIe("");
-      toast(`Usuario ${newUserEmail} creado correctamente como ${newUserRol}.`);
+      if (rolAsignado) {
+        toast(`Usuario ${newUserEmail} creado correctamente como ${newUserRol}.`);
+      } else {
+        toast(`Usuario ${newUserEmail} creado, pero no se pudo asignar el rol ${newUserRol}. Revisa su rol en la lista de usuarios.`, "error");
+      }
       void loadDbUsers();
     } else if (error) {
       toast(translateAuthError(error.message), "error");

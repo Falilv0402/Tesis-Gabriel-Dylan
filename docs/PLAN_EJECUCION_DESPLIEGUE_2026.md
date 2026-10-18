@@ -342,3 +342,13 @@ Colegios con modelo propio: IE 831305 (Cole Andres Avelino Trapiche), IE 864785 
 - [x] **No se versiona nada sensible**: el SQL y las credenciales se escriben en `scripts/_local/` (en `.gitignore`).
 - [x] **Probado** contra un Postgres embebido con el esquema de `auth`/`profiles` y el trigger de las migraciones: 17 cuentas creadas + 1 omitida por la guarda "el colegio ya tiene director" (se sembró un director previo a propósito), segunda corrida sin duplicados, las 18 contraseñas coinciden con su hash.
 - [ ] **Pendiente**: correr el SQL en el SQL Editor de Supabase y verificar el inicio de sesión de cada cuenta.
+
+
+## FASE 26 — Endurecimiento de la tabla `profiles` (2026-10-18)
+
+Revisión de seguridad hecha al preparar las cuentas por colegio: el rol y el colegio de un perfil no estaban protegidos frente a cambios hechos por el propio usuario ni frente a lo que se enviaba al registrarse.
+
+- [x] **Migración `0020_proteger_rol_en_perfiles.sql`**: (1) el trigger de registro (`handle_new_user`) solo otorga `director` o `coordinador` y respeta "un director por colegio"; (2) nuevo trigger `profiles_proteger_campos_sensibles` que limita quién puede cambiar `rol`, `codigo_ie`, `distrito` y `activo` (superadmin; admin y director solo dentro de su colegio y de sus límites; el propio usuario únicamente asigna colegio/distrito la primera vez, que es como funciona el registro); no estorba al SQL Editor ni al `service_role`; (3) se elimina la política `profiles_insert` (el frontend nunca inserta perfiles).
+- [x] **Frontend**: `useAdmin.handleCreateUser` sube el rol (`admin` / `director`) con un UPDATE posterior hecho por quien crea la cuenta, y avisa si el correo ya existía (antes mostraba "creado correctamente" igual).
+- [x] **Probado** en un Postgres embebido que reproduce las políticas vigentes (0007/0009/0016) con roles `authenticated` y `auth.uid()` simulados: unos 40 casos (registro, intentos de auto-escalada, cambios entre colegios, flujos legítimos de director/admin/superadmin, registro real y "crear usuario"), más el SQL de las cuentas de FASE 25 corrido después de la migración. Typecheck y 37 tests de frontend limpios.
+- [ ] **Pendiente**: aplicar `0020` en el SQL Editor de Supabase **antes** de hacer push y verificarla con una cuenta de profesor (los intentos de cambiar el propio rol o colegio deben fallar; editar nombre/materia debe seguir funcionando).
