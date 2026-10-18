@@ -40,6 +40,50 @@ def test_resolver_nombre_hereda_el_del_modelo_anterior(tmp_path):
     assert tm._resolver_nombre_colegio("", tmp_path / "otro.pkl", "7") == "Colegio 7"
 
 
+def test_origen_del_nombre_y_su_prioridad(tmp_path):
+    out = tmp_path / "colegio_1.pkl"
+    # sin nada: por defecto
+    assert tm._resolver_nombre_colegio_con_origen(None, out, "1") == ("Colegio 1", "por_defecto")
+    # el Excel (formato CUBICOL) gana a "por defecto"
+    assert tm._resolver_nombre_colegio_con_origen("Colegio San Juan", out, "1") == ("Colegio San Juan", "excel")
+    # el modelo anterior se hereda cuando el Excel no trae nombre (Reporte consolidado)
+    joblib.dump({"nombre_colegio": "Colegio Bueno"}, out)
+    assert tm._resolver_nombre_colegio_con_origen("REPORTE CONSOLIDADO DE NOTAS", out, "1") == ("Colegio Bueno", "modelo_anterior")
+    # lo escrito a mano gana a todo: Excel y modelo anterior
+    assert tm._resolver_nombre_colegio_con_origen("Colegio San Juan", out, "1", "  Mi   Colegio ") == ("Mi Colegio", "manual")
+    assert tm._resolver_nombre_colegio_con_origen(None, out, "1", "Mi Colegio") == ("Mi Colegio", "manual")
+    # vacío o solo espacios = automático
+    assert tm._resolver_nombre_colegio_con_origen(None, out, "1", "   ")[1] == "modelo_anterior"
+
+
+@pytest.mark.parametrize("texto,esperado", [
+    (None, None), ("", None), ("   ", None),
+    ("  Colegio   San Juan ", "Colegio San Juan"),
+    ("I.E. N° 831305 «Andrés Avelino»", None),     # « » no están permitidos -> ValueError (ver abajo)
+])
+def test_limpiar_nombre_manual_basico(texto, esperado):
+    if texto and "«" in texto:
+        with pytest.raises(ValueError):
+            pe.limpiar_nombre_manual(texto)
+    else:
+        assert pe.limpiar_nombre_manual(texto) == esperado
+
+
+@pytest.mark.parametrize("texto", [
+    "ab", "x" * 81,                                    # largo
+    "<script>alert(1)</script>", 'Colegio "X"', "A<b>", # caracteres no permitidos (el nombre acaba en correos HTML)
+    "colegio_831305_upload", "Colegio 831305", "IE 831305", "Reporte consolidado de notas",   # no son un nombre
+])
+def test_limpiar_nombre_manual_rechaza(texto):
+    with pytest.raises(ValueError):
+        pe.limpiar_nombre_manual(texto)
+
+
+@pytest.mark.parametrize("texto", ["Joseph And Mery", "I.E. 831305 Andrés Avelino Cáceres", "Cole Rafael Hoyos (La Victoria)", "San José & Santa Rosa"])
+def test_limpiar_nombre_manual_acepta_nombres_reales(texto):
+    assert pe.limpiar_nombre_manual(texto) == texto
+
+
 # ─── Versión más reciente por (salón, bimestre) ──────────────────────────────
 
 def _filas(archivo, mtime, bim, nota):
@@ -152,7 +196,7 @@ def entrenar(tmp_path, monkeypatch):
     monkeypatch.setattr(tm, "__file__", str(tmp_path / "modelo" / "colegio" / "train_colegio_model.py"))
 
     def _run(bimestres, **kw):
-        carpeta = tmp_path / "excels"
+        carpeta = tmp_path / "colegio_999001_upload"
         carpeta.mkdir(exist_ok=True)
         for f in carpeta.glob("*.xlsx"):
             f.unlink()
@@ -202,3 +246,43 @@ def test_muestra_sin_alumnos_en_riesgo_no_revienta_y_queda_descriptiva(entrenar)
     assert m["tipo_resultado"] == "descriptivo"
     assert m["modo_prediccion"].startswith("descriptivo")
     assert m["auc_cv"] is None
+
+
+def test_nombre_manual_y_origen_quedan_en_el_artefacto(entrenar, tmp_path):
+    # Reporte consolidado sin nombre y sin modelo previo: "por_defecto"
+    art = entrenar([1, 2, 3])
+    assert art["nombre_colegio"] == "Colegio 999001" and art["metricas"]["nombre_colegio_origen"] == "por_defecto"
+    # la siguiente carga (ahora CON nombre escrito a mano) lo fija
+    carpeta = tmp_path / "colegio_999001_upload"
+    tm.train(str(carpeta), "999001", None, "Colegio Escrito A Mano")
+    art2 = joblib.load(tmp_path / "modelo" / "model" / "colegio_999001.pkl")
+    assert art2["nombre_colegio"] == "Colegio Escrito A Mano"
+    assert art2["metricas"]["nombre_colegio_origen"] == "manual" == art2["nombre_colegio_origen"]
+    # y una carga posterior SIN nombre lo conserva (el caso del bug original)
+    tm.train(str(carpeta), "999001")
+    art3 = joblib.load(tmp_path / "modelo" / "model" / "colegio_999001.pkl")
+    assert art3["nombre_colegio"] == "Colegio Escrito A Mano"
+    assert art3["metricas"]["nombre_colegio_origen"] == "modelo_anterior"
+
+
+# ─── API: el nombre se valida ANTES de guardar cualquier archivo ─────────────
+
+def test_procesar_rechaza_nombre_invalido_sin_guardar_archivos(tmp_path):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from starlette.testclient import TestClient
+    from app.main import app
+    from app.api import colegio_propio as cp
+
+    app.dependency_overrides[cp.require_admin_de_colegio] = lambda: {"codigo_ie": "999777", "token": "t"}
+    try:
+        carpeta = cp.DATA_DIR / "colegio_999777_upload"
+        assert not carpeta.exists()
+        r = TestClient(app).post(
+            "/v1/colegio/999777/procesar",
+            files=[("notas_files", ("Notas.xlsx", b"x", "application/octet-stream"))],
+            data={"nombre_colegio": "<script>alert(1)</script>"},
+        )
+        assert r.status_code == 400 and "letras" in r.json()["detail"]
+        assert not carpeta.exists()          # nada quedó a medias en disco
+    finally:
+        app.dependency_overrides.clear()

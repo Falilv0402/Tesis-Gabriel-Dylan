@@ -589,11 +589,11 @@ export default function Page() {
               colegioUploadStatus={admin.colegioUploadStatus}
               colegioUploadMsg={admin.colegioUploadMsg}
               colegioUploadResult={admin.colegioUploadResult}
-              onUploadColegioExcels={(files, ie) => {
+              onUploadColegioExcels={(files, ie, nombre) => {
                 // Tras (intentar) reentrenar, refresca el dashboard del colegio
                 // (useColegio solo recarga cuando cambia la IE, no solo por
                 // cambiar de pestaña) para que los datos nunca queden obsoletos.
-                void admin.uploadColegioExcels(files, ie).then(() => colegio.reload());
+                void admin.uploadColegioExcels(files, ie, nombre).then(() => colegio.reload());
               }}
               role={auth.role}
               profileCodigoIe={auth.profileCodigoIe}
@@ -690,7 +690,7 @@ export default function Page() {
       />
 
       {/* Toast notifications */}
-      <div className="toast-container">
+      <div className="toast-container" role="status" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className={`toast toast-${t.type}`}>
             {t.type === "success" && <CheckCircle2 size={16} />}

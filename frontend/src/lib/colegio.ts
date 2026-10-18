@@ -186,6 +186,31 @@ const AREAS_LECTURA = [
   { label: "Comunicación", keys: ["comunicacion", "lenguaje"] },
 ] as const;
 
+/**
+ * Qué decirle a quien sube los Excel sobre el nombre con el que quedó el colegio. El colegio lo fija el código IE
+ * de la cuenta, no el contenido del Excel; lo que sí depende de dónde se lea es el NOMBRE, y el "Reporte
+ * consolidado" (el formato de Trapiche) no lo trae en el archivo. `aviso` = el nombre quedó como el de por defecto.
+ */
+export function describirNombreColegio(
+  origen: string | null | undefined, nombre: string,
+): { texto: string; aviso: boolean } | null {
+  switch (origen) {
+    case "manual":
+      return { texto: `Nombre del colegio: «${nombre}» (el que indicaste).`, aviso: false };
+    case "excel":
+      return { texto: `Nombre del colegio: «${nombre}» (tomado del encabezado del Excel).`, aviso: false };
+    case "modelo_anterior":
+      return { texto: `Nombre del colegio: «${nombre}» (se conservó el ya registrado; los reportes consolidados no traen el nombre del colegio).`, aviso: false };
+    case "por_defecto":
+      return {
+        texto: `No se encontró el nombre del colegio: quedó como «${nombre}». Los reportes consolidados no lo traen. Escríbelo en el campo «Nombre del colegio» y vuelve a subir los Excel.`,
+        aviso: true,
+      };
+    default:
+      return null; // modelo entrenado antes de que se registrara el origen
+  }
+}
+
 export type LecturaAlumno = { titular: string; tendencias: string[]; nota: string };
 
 /**

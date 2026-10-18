@@ -3,7 +3,7 @@
  * hizo el modelo del colegio (pronóstico, cierre de año o descriptivo) a texto
  * que un director entienda.
  */
-import { describirResultado, lecturaAlumno } from "@/lib/colegio";
+import { describirNombreColegio, describirResultado, lecturaAlumno } from "@/lib/colegio";
 import type { AlumnoColegio } from "@/types";
 
 const alumno = (extra: Record<string, unknown> = {}): AlumnoColegio =>
@@ -105,5 +105,27 @@ describe("lecturaAlumno", () => {
 
   test("sin series suficientes no inventa tendencias", () => {
     expect(lecturaAlumno(alumno({ b1_matematica: 10 }), pron).tendencias).toEqual([]);
+  });
+});
+
+describe("describirNombreColegio", () => {
+  test("cada origen explica de dónde salió el nombre", () => {
+    expect(describirNombreColegio("manual", "Mi Colegio")).toEqual({ texto: "Nombre del colegio: «Mi Colegio» (el que indicaste).", aviso: false });
+    expect(describirNombreColegio("excel", "Joseph And Mery")?.texto).toContain("encabezado del Excel");
+    const previo = describirNombreColegio("modelo_anterior", "Cole Trapiche");
+    expect(previo?.aviso).toBe(false);
+    expect(previo?.texto).toContain("los reportes consolidados no traen el nombre");
+  });
+
+  test("por defecto avisa y dice qué hacer", () => {
+    const r = describirNombreColegio("por_defecto", "Colegio 9001");
+    expect(r?.aviso).toBe(true);
+    expect(r?.texto).toContain("«Colegio 9001»");
+    expect(r?.texto).toContain("campo «Nombre del colegio»");
+  });
+
+  test("modelo viejo sin origen no inventa nada", () => {
+    expect(describirNombreColegio(undefined, "X")).toBeNull();
+    expect(describirNombreColegio(null, "X")).toBeNull();
   });
 });

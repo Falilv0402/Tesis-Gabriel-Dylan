@@ -251,6 +251,8 @@ export type ColegioResumen = {
     bimestres_cargados?:    number[] | null;
     bimestre_pronosticado?: number | null;
     umbral_riesgo_nota?:    number | null;
+    /** De dónde salió el nombre del colegio: lo escribió el usuario, el encabezado del Excel, el ya registrado, o el de por defecto. */
+    nombre_colegio_origen?: "manual" | "excel" | "modelo_anterior" | "por_defecto" | null;
     nota_metodologica?:  string;
     importancia_variables?: { variable: string; importancia: number }[] | null;
     [key: string]: unknown;

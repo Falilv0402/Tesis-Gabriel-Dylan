@@ -1,6 +1,6 @@
 "use client";
 
-import { RefObject } from "react";
+import { RefObject, useEffect, useState } from "react";
 import { Upload, CheckCircle2, AlertTriangle, School, Loader, Info, Cpu, ShieldAlert, Download } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -10,6 +10,7 @@ import { ConfusionMatrix } from "@/components/charts/ConfusionMatrix";
 import { RocMiniChart } from "@/components/charts/RocMiniChart";
 import type { Metrics, Evaluation } from "@/types";
 import { EM2022_HABILITADO } from "@/lib/constants";
+import { describirNombreColegio } from "@/lib/colegio";
 
 interface CsvValidation {
   total_filas: number;
@@ -23,6 +24,7 @@ interface ColegioUploadResult {
   n_riesgo: number;
   pct_riesgo: number;
   nombre_colegio: string;
+  nombre_colegio_origen?: string | null;
   salones: string[];
   advertencias: string[];
 }
@@ -47,7 +49,7 @@ interface DatosViewProps {
   colegioUploadStatus: "idle" | "uploading" | "success" | "error";
   colegioUploadMsg: string;
   colegioUploadResult: ColegioUploadResult | null;
-  onUploadColegioExcels: (files: FileList, ie: string) => void;
+  onUploadColegioExcels: (files: FileList, ie: string, nombre?: string) => void;
   role: string;
   profileCodigoIe: string | null;
   setTab: (tab: import("@/types").Tab) => void;
@@ -115,6 +117,21 @@ export function DatosView({
   const noIeAssigned  = isColegioRole && !profileCodigoIe;
   const isEM2022      = colegioModelStats?.modo_prediccion === "Modelo Nacional EM2022";
   const puedeSubirExcel = isSuperadmin || (isColegioRole && !!profileCodigoIe);
+
+  // Nombre del colegio escrito a mano (opcional). El colegio lo fija el código IE de la cuenta, pero el NOMBRE
+  // solo sale del Excel en el formato CUBICOL: el "Reporte consolidado" no lo trae. Por eso, la primera vez
+  // (colegio sin modelo propio) se pide aquí; con modelo propio, vacío = conservar el nombre ya registrado.
+  const [nombreColegio, setNombreColegio] = useState("");
+  const nombreLimpio = nombreColegio.replace(/\s+/g, " ").trim();
+  const nombreActual = !isSuperadmin && colegioModelStats && !isEM2022 ? colegioModelStats.nombre_colegio : null;
+  const nombreObligatorio = isColegioRole && (!colegioModelStats || isEM2022);
+  const nombreFaltante = nombreObligatorio && !nombreLimpio;
+  const nombreMuyCorto = !!nombreLimpio && nombreLimpio.length < 3;
+  const infoNombre = colegioUploadResult
+    ? describirNombreColegio(colegioUploadResult.nombre_colegio_origen, colegioUploadResult.nombre_colegio)
+    : null;
+  // Tras una carga exitosa el nombre ya quedó guardado: se limpia el campo para no fijarlo en las siguientes.
+  useEffect(() => { if (colegioUploadStatus === "success") setNombreColegio(""); }, [colegioUploadStatus]);
 
   return (
     <section className="full-col">
@@ -525,6 +542,19 @@ export function DatosView({
           automáticamente el modelo de riesgo con las notas internas.
         </p>
 
+        <div role="note" style={{
+          display: "flex", gap: 8, marginBottom: 12, padding: "10px 12px", fontSize: 12, lineHeight: 1.5,
+          background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, color: "#1e3a8a",
+        }}>
+          <Info size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+          <span>
+            <strong>Recuerda:</strong> el sistema identifica el colegio por el código IE de tu cuenta, no por lo que
+            diga el Excel. El <strong>nombre</strong> del colegio sale del campo de abajo; si lo dejas vacío se toma del
+            encabezado del Excel (formato CUBICOL) o se conserva el ya registrado. El «Reporte consolidado» no trae el
+            nombre del colegio en el archivo.
+          </span>
+        </div>
+
         {/* Input oculto para múltiples Excel */}
         <input
           ref={colegioFileRef}
@@ -535,7 +565,7 @@ export function DatosView({
           onChange={(e) => {
             const files = e.target.files;
             if (files && files.length > 0) {
-              onUploadColegioExcels(files, ieEfectiva);
+              onUploadColegioExcels(files, ieEfectiva, nombreLimpio || undefined);
             }
             e.target.value = "";
           }}
@@ -563,10 +593,38 @@ export function DatosView({
           </div>
         )}
 
+        <label style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 12, fontWeight: 600 }}>
+            Nombre del colegio{" "}
+            {nombreObligatorio
+              ? <span style={{ color: "#ef4444" }}>*</span>
+              : <span style={{ fontWeight: 400, color: "#64748b" }}>(opcional)</span>}
+          </span>
+          <input
+            value={nombreColegio}
+            onChange={(e) => setNombreColegio(e.target.value)}
+            maxLength={80}
+            placeholder={nombreActual ?? "Ej: Colegio San Juan"}
+            style={{ fontSize: 13, padding: "7px 10px", borderRadius: 8, border: "1px solid var(--border)" }}
+          />
+          <span style={{
+            fontSize: 11, fontWeight: 400, textTransform: "none", letterSpacing: 0, lineHeight: 1.4,
+            color: nombreFaltante || nombreMuyCorto ? "#b91c1c" : "#64748b",
+          }}>
+            {nombreMuyCorto
+              ? "El nombre debe tener al menos 3 caracteres."
+              : nombreObligatorio
+                ? "Obligatorio la primera vez: indica el nombre con el que se mostrará tu colegio."
+                : nombreActual
+                  ? `Déjalo vacío para conservar «${nombreActual}». Escríbelo solo si quieres cambiarlo.`
+                  : "Déjalo vacío para usar el del Excel o el que el colegio ya tenga registrado."}
+          </span>
+        </label>
+
         {/* Botón de carga */}
         <button
           className="primary"
-          disabled={colegioUploadStatus === "uploading" || !ieEfectiva}
+          disabled={colegioUploadStatus === "uploading" || !ieEfectiva || nombreFaltante || nombreMuyCorto}
           onClick={() => colegioFileRef.current?.click()}
           style={{ width: "100%", marginBottom: 8 }}
         >
@@ -601,6 +659,16 @@ export function DatosView({
             <p style={{ fontSize: 12, fontWeight: 700, color: "var(--navy)", marginBottom: 8 }}>
               Modelo entrenado — {colegioUploadResult.nombre_colegio}
             </p>
+            {infoNombre && (
+              <p style={{
+                fontSize: 11, lineHeight: 1.5, marginBottom: 8, padding: infoNombre.aviso ? "8px 10px" : 0,
+                color: infoNombre.aviso ? "#92400e" : "#475569",
+                background: infoNombre.aviso ? "#fffbeb" : "transparent",
+                border: infoNombre.aviso ? "1px solid #fde68a" : "none", borderRadius: 8,
+              }}>
+                {infoNombre.aviso ? "⚠️ " : ""}{infoNombre.texto}
+              </p>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
               <Kpi label="Alumnos"  value={colegioUploadResult.n_alumnos}  detail="procesados" />
               <Kpi label="En riesgo" value={colegioUploadResult.n_riesgo}  detail="detectados" tone={colegioUploadResult.n_riesgo > 0 ? "high" : undefined} />

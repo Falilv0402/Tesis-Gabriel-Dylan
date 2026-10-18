@@ -53,16 +53,21 @@ from sklearn.metrics import (
     confusion_matrix, roc_curve,
 )
 
-from parse_excels import procesar_colegio, AREAS_ACADEMICAS, nombre_colegio_valido
+from parse_excels import procesar_colegio, AREAS_ACADEMICAS, nombre_colegio_valido, limpiar_nombre_manual
 
 
-def _resolver_nombre_colegio(nombre_parseado, output_path: Path, codigo_ie: str) -> str:
-    """Nombre real leído de los Excel si lo hay; si no (p.ej. el formato
-    "Reporte consolidado" no lo trae), el que ya tenía el modelo anterior o sus
-    respaldos. Sin esto, cada carga por la web le cambiaba el nombre al colegio
-    en todo el sistema (header, correos de alerta, listados)."""
+def _resolver_nombre_colegio_con_origen(
+    nombre_parseado, output_path: Path, codigo_ie: str, nombre_manual: str | None = None,
+) -> tuple[str, str]:
+    """(nombre, origen). Prioridad: el que escribió a mano quien subió los Excel ("manual"); el leído del
+    encabezado del Excel ("excel", solo el formato CUBICOL lo trae); el que ya tenía el modelo anterior o sus
+    respaldos ("modelo_anterior": el "Reporte consolidado" no trae nombre y sin esto cada carga por la web le
+    cambiaba el nombre al colegio en todo el sistema); y como último recurso "Colegio {IE}" ("por_defecto")."""
+    manual = limpiar_nombre_manual(nombre_manual)
+    if manual:
+        return manual, "manual"
     if nombre_colegio_valido(nombre_parseado):
-        return str(nombre_parseado).strip()
+        return str(nombre_parseado).strip(), "excel"
     respaldos = sorted((output_path.parent / "backups" / output_path.stem).glob("*.pkl"), reverse=True)
     for pkl in [output_path, *respaldos]:
         if not pkl.exists():
@@ -72,8 +77,12 @@ def _resolver_nombre_colegio(nombre_parseado, output_path: Path, codigo_ie: str)
         except Exception:
             continue
         if nombre_colegio_valido(previo):
-            return str(previo).strip()
-    return f"Colegio {codigo_ie}"
+            return str(previo).strip(), "modelo_anterior"
+    return f"Colegio {codigo_ie}", "por_defecto"
+
+
+def _resolver_nombre_colegio(nombre_parseado, output_path: Path, codigo_ie: str) -> str:
+    return _resolver_nombre_colegio_con_origen(nombre_parseado, output_path, codigo_ie)[0]
 
 # ─── Etiquetas legibles para las features, usadas en "Importancia de variables" ──
 _ETIQUETAS_AREA = {
@@ -249,7 +258,7 @@ def _entrenar_calibrado(X: pd.DataFrame, y: np.ndarray) -> dict:
     return {"modelo": modelo, "oof": oof, "n_splits": n_splits if oof is not None else 0, "class_weight": class_weight}
 
 
-def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
+def train(carpeta: str, codigo_ie: str, distrito: str | None = None, nombre_manual: str | None = None) -> None:
     model_dir = Path(__file__).resolve().parents[1] / "model"
     model_dir.mkdir(exist_ok=True)
     # El archivo se guarda SIEMPRE sin ceros iniciales (misma normalización
@@ -462,9 +471,11 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
     cols_out = [c for c in cols_out if c in df.columns]
     predicciones = df[cols_out].replace({np.nan: None}).to_dict(orient="records")
 
-    nombre_colegio = _resolver_nombre_colegio(
+    nombre_colegio, nombre_origen = _resolver_nombre_colegio_con_origen(
         df["nombre_colegio"].iloc[0] if "nombre_colegio" in df.columns else None, output_path, codigo_ie,
+        nombre_manual,
     )
+    print(f"  Nombre del colegio: {nombre_colegio!r} (origen: {nombre_origen})")
 
     if modelo is None or k < 2:
         tipo_resultado = "descriptivo"
@@ -506,6 +517,7 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
     artefacto = {
         "codigo_ie":      codigo_ie,
         "nombre_colegio": nombre_colegio,
+        "nombre_colegio_origen": nombre_origen,
         # Distrito opcional: permite que este colegio aparezca en el selector
         # "Colegio asignado" (crear usuario / autoregistro) aunque no forme
         # parte del dataset EM2022 — ver get_colegios() en prediction_service.py.
@@ -515,6 +527,9 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
         "predicciones":   predicciones,
         "metricas": {
             "nombre_colegio": nombre_colegio,
+            # De dónde salió el nombre: "manual" (lo escribió quien subió los Excel), "excel" (encabezado
+            # del Excel), "modelo_anterior" (se conservó el ya registrado) o "por_defecto" ("Colegio {IE}").
+            "nombre_colegio_origen": nombre_origen,
             "modo_prediccion": modo,
             "tipo_resultado": tipo_resultado,
             "bimestres_cargados": list(range(1, k + 1)),
@@ -565,5 +580,6 @@ if __name__ == "__main__":
     parser.add_argument("--ie",       default="0249", help="Código IE del colegio")
     parser.add_argument("--carpeta",  default=".",    help="Carpeta con los Excel")
     parser.add_argument("--distrito", default=None,   help="Distrito (opcional, para el selector de colegios)")
+    parser.add_argument("--nombre",   default=None,   help="Nombre del colegio indicado a mano (tiene prioridad sobre el del Excel)")
     args = parser.parse_args()
-    train(args.carpeta, args.ie, args.distrito)
+    train(args.carpeta, args.ie, args.distrito, args.nombre)

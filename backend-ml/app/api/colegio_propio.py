@@ -2,12 +2,13 @@
 colegio_propio.py — Endpoints para el módulo "Mi Colegio".
 Sirve predicciones de riesgo basadas en los datos internos del colegio.
 """
+import html as html_lib
 import os
 import re
 import shutil
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, UploadFile, File
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request, UploadFile, File
 import httpx
 import joblib
 import subprocess
@@ -290,6 +291,8 @@ def get_resumen(auth_ctx: dict = Depends(require_admin_de_colegio)):
             "f1_cv":                 m.get("f1_cv"),
             "salones":           m.get("salones", []),
             "nombre_colegio":    m.get("nombre_colegio", art.get("nombre_colegio", codigo_ie)),
+            # "manual" | "excel" | "modelo_anterior" | "por_defecto" — de dónde salió el nombre
+            "nombre_colegio_origen": m.get("nombre_colegio_origen"),
             "nota_metodologica": m.get("nota_metodologica"),
             "n_alumnos_modelo":  m.get("n_alumnos_modelo", m.get("n_alumnos", 0)),
             "advertencias_carga": m.get("advertencias_carga", []),
@@ -345,10 +348,11 @@ async def _alertar_nuevos_alto(codigo_ie: str, token: str, antes: dict[str, str]
             return len(nuevos_alto)
 
         nombre_colegio = art_nuevo.get("nombre_colegio", codigo_ie)
+        nombre_html = html_lib.escape(str(nombre_colegio))
         html = (
             f"<div style='font-family:Arial,sans-serif;max-width:560px'>"
             f"<h2 style='color:#dc2626'>⚠️ Nuevos alumnos en riesgo ALTO</h2>"
-            f"<p>El modelo de <strong>{nombre_colegio}</strong> se acaba de actualizar y detectó "
+            f"<p>El modelo de <strong>{nombre_html}</strong> se acaba de actualizar y detectó "
             f"<strong>{len(nuevos_alto)}</strong> alumno(s) que ahora está(n) en nivel de riesgo "
             f"<strong style='color:#dc2626'>ALTO</strong> y antes no lo estaban.</p>"
             f"<p>Ingresa a SATRA para revisar el detalle y registrar intervenciones.</p>"
@@ -424,12 +428,29 @@ async def procesar_excels(
     auth_ctx: dict = Depends(require_admin_de_colegio),
     notas_files: list[UploadFile] = File(...),
     conducta_files: list[UploadFile] = File(default=[]),
+    nombre_colegio: str | None = Form(default=None),
 ):
     """
     Recibe los Excel del colegio, los procesa y entrena el modelo de riesgo.
     Acepta múltiples archivos de notas y conducta.
+
+    El colegio lo determina el código IE de la sesión, no el Excel. El nombre que se muestra sale, en este
+    orden, de `nombre_colegio` (si se envía), del encabezado del Excel (solo formato CUBICOL), del nombre que
+    el colegio ya tenía o, como último recurso, de "Colegio {IE}".
     """
     codigo_ie = auth_ctx["codigo_ie"]
+
+    # Se valida ANTES de guardar nada: un nombre inválido no debe dejar archivos a medias en la carpeta.
+    nombre_manual = None
+    if nombre_colegio and nombre_colegio.strip():
+        if str(COLEGIO_SCRIPTS) not in sys.path:
+            sys.path.insert(0, str(COLEGIO_SCRIPTS))
+        from parse_excels import limpiar_nombre_manual  # import diferido: arrastra pandas/openpyxl
+        try:
+            nombre_manual = limpiar_nombre_manual(nombre_colegio)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
     upload_dir = DATA_DIR / f"colegio_{codigo_ie}_upload"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
@@ -474,7 +495,8 @@ async def procesar_excels(
     try:
         result = subprocess.run(
             [sys.executable, str(COLEGIO_SCRIPTS / "train_colegio_model.py"),
-             "--ie", codigo_ie, "--carpeta", str(upload_dir)],
+             "--ie", codigo_ie, "--carpeta", str(upload_dir),
+             *(["--nombre", nombre_manual] if nombre_manual else [])],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=120, cwd=str(COLEGIO_SCRIPTS),
         )

@@ -29,6 +29,28 @@ def nombre_colegio_valido(nombre) -> bool:
     n = str(nombre).strip()
     return n.lower() not in ("nan", "none") and not _NOMBRE_NO_VALIDO.search(n)
 
+
+# Solo letras (con tildes y ñ), números, espacios y . , ' ’ ( ) & / ° º -: el nombre acaba en correos HTML
+# y listados, así que se rechazan < > " y similares en vez de depender de que todo lo escape.
+_NOMBRE_MANUAL_CARACTERES = re.compile(r"[\w .,'’()&/°º-]+")
+
+
+def limpiar_nombre_manual(texto) -> str | None:
+    """Nombre del colegio escrito a mano por quien sube los Excel. None si viene vacío;
+    ValueError (con un mensaje para mostrar al usuario) si no sirve como nombre."""
+    if texto is None:
+        return None
+    n = re.sub(r"\s+", " ", str(texto)).strip()
+    if not n:
+        return None
+    if not 3 <= len(n) <= 80:
+        raise ValueError("El nombre del colegio debe tener entre 3 y 80 caracteres.")
+    if not _NOMBRE_MANUAL_CARACTERES.fullmatch(n):
+        raise ValueError("El nombre del colegio solo puede llevar letras, números, espacios y . , ' ( ) & / -")
+    if not nombre_colegio_valido(n):
+        raise ValueError("Escribe el nombre real del colegio (no «Colegio 831305», «upload» ni el título de un reporte).")
+    return n
+
 # ─── Conversión de notas literales a numéricas ────────────────────────────────
 LITERAL_MAP = {"AD": 18.5, "A": 16.0, "B": 13.0, "C": 10.0}
 

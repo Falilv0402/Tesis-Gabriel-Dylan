@@ -59,7 +59,8 @@ export function useAdmin(
   const [colegioUploadMsg,    setColegioUploadMsg]    = useState("");
   const [colegioUploadResult, setColegioUploadResult] = useState<{
     n_alumnos: number; n_riesgo: number; pct_riesgo: number;
-    nombre_colegio: string; salones: string[]; advertencias: string[];
+    nombre_colegio: string; nombre_colegio_origen?: string | null;
+    salones: string[]; advertencias: string[];
   } | null>(null);
 
   // Estadísticas del modelo actual del colegio (se cargan al abrir Datos)
@@ -394,7 +395,7 @@ export function useAdmin(
     setAuthBusy(false);
   }
 
-  async function uploadColegioExcels(files: FileList, ieCode: string) {
+  async function uploadColegioExcels(files: FileList, ieCode: string, nombreColegio?: string) {
     if (!files.length || !ieCode) return;
     setColegioUploadStatus("uploading");
     setColegioUploadMsg(`Procesando ${files.length} archivo(s) para IE ${ieCode}...`);
@@ -419,6 +420,9 @@ export function useAdmin(
 
     notasFiles.forEach(f    => form.append("notas_files",    f, f.name));
     conductaFiles.forEach(f => form.append("conducta_files", f, f.name));
+    // Nombre escrito a mano (opcional): tiene prioridad sobre el del Excel. Sin él, el backend usa el encabezado
+    // del Excel, el nombre ya registrado o "Colegio {IE}".
+    if (nombreColegio?.trim()) form.append("nombre_colegio", nombreColegio.trim());
 
     try {
       // El backend valida el rol (admin/superadmin) contra este token de sesión
@@ -441,6 +445,7 @@ export function useAdmin(
           n_riesgo:       m.n_riesgo      ?? 0,
           pct_riesgo:     m.pct_riesgo    ?? 0,
           nombre_colegio: m.nombre_colegio ?? ieCode,
+          nombre_colegio_origen: m.nombre_colegio_origen ?? null,
           salones:        m.salones        ?? [],
           advertencias,
         });
