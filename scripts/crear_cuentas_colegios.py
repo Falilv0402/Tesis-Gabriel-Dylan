@@ -103,7 +103,9 @@ def construir() -> tuple[str, str]:
         c = COLEGIOS[col]
         email = f"{usuario}@{DOMINIO}"
         pwd = generar_contrasena()
-        h = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt(rounds=10)).decode()
+        # $2a$ es el prefijo que produce crypt() de Postgres/Supabase; $2b$ (Python) es el mismo
+        # algoritmo para contraseñas ASCII < 72 bytes, pero así no se depende de que GoTrue lo acepte.
+        h = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt(rounds=10)).decode().replace("$2b$", "$2a$", 1)
         distrito = None if rol == "admin" else c["distrito"]  # igual que useAdmin.ts: el admin solo lleva colegio
         filas_sql.append(
             f"    ({_sql(email)}, {_sql(h)}, {_sql(rol)}, {_sql(c['ie'])}, {_sql(distrito)}, "
