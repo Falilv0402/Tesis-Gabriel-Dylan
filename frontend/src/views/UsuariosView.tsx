@@ -172,7 +172,7 @@ export function UsuariosView({
 
         {!isDirector && showCreateUser && (
           <div className="create-user-form">
-            {/* Aviso para admin de IE: solo puede crear directores de su colegio */}
+            {/* Aviso para admin de IE: el colegio queda fijo al suyo; el rol (Director o Coordinador) lo elige */}
             {isAdminIE && profileCodigoIe && (
               <div style={{ padding: "8px 12px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 8, fontSize: 12, color: "#0369a1", marginBottom: 4 }}>
                 ℹ️ Estás creando un usuario para{" "}
@@ -193,16 +193,19 @@ export function UsuariosView({
               <input type="password" value={newUserPwd} onChange={(e) => setNewUserPwd(e.target.value)} placeholder="Min. 6 caracteres" />
             </label>
 
-            {/* Superadmin: puede elegir rol y asignación */}
+            {/* Rol: lo elige quien crea la cuenta. El admin de colegio solo puede crear Director o Coordinador
+                (su colegio queda fijo); el superadmin también puede crear admins de colegio. */}
+            <label>Rol asignado
+              <select value={newUserRol} onChange={(e) => setNewUserRol(e.target.value as "admin" | "director" | "coordinador")}>
+                <option value="director">Director</option>
+                <option value="coordinador">Coordinador Académico</option>
+                {!isAdminIE && <option value="admin">Administrador de colegio</option>}
+              </select>
+            </label>
+
+            {/* Superadmin: además elige distrito y colegio */}
             {!isAdminIE && (
               <>
-                <label>Rol asignado
-                  <select value={newUserRol} onChange={(e) => setNewUserRol(e.target.value as "admin" | "director" | "coordinador")}>
-                    <option value="director">Director</option>
-                    <option value="coordinador">Coordinador Académico</option>
-                    <option value="admin">Administrador de colegio</option>
-                  </select>
-                </label>
                 {(newUserRol === "director" || newUserRol === "coordinador") && (
                   <>
                     <label>Distrito asignado

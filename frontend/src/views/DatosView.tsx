@@ -10,7 +10,7 @@ import { ConfusionMatrix } from "@/components/charts/ConfusionMatrix";
 import { RocMiniChart } from "@/components/charts/RocMiniChart";
 import type { Metrics, Evaluation } from "@/types";
 import { EM2022_HABILITADO } from "@/lib/constants";
-import { describirNombreColegio } from "@/lib/colegio";
+import { describirNombreColegio, formatearFechaModelo } from "@/lib/colegio";
 
 interface CsvValidation {
   total_filas: number;
@@ -165,13 +165,13 @@ export function DatosView({
 
       {/* ── Estado: admin con IE pero sin datos en ningún modelo ────────── */}
       {noModelYet && profileCodigoIe && (
-        <Panel title={`Colegio IE ${profileCodigoIe} — Sin datos`}>
+        <Panel title={`Colegio IE ${profileCodigoIe} — Sin modelo entrenado`}>
           <div style={{ display: "flex", alignItems: "center", gap: 12,
             padding: "16px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10 }}>
             <Info size={18} style={{ color: "#d97706", flexShrink: 0 }} />
             <div>
               <p style={{ fontSize: 13, fontWeight: 700, color: "#92400e", marginBottom: 3 }}>
-                No hay datos disponibles para esta IE
+                Sin modelo entrenado
               </p>
               <p style={{ fontSize: 12, color: "#92400e", lineHeight: 1.5 }}>
                 {EM2022_HABILITADO
@@ -350,14 +350,11 @@ export function DatosView({
                   <strong style={{ color: "#0369a1" }}>Modo:</strong>{" "}
                   <span style={{ color: "#0369a1" }}>{colegioModelStats.modo_prediccion}</span>
                 </div>
-                {(colegioModelStats.salones.length > 0 || colegioModelStats.trained_at) && (
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)" }}>
-                    {colegioModelStats.salones.length > 0 && <span>Salones: {colegioModelStats.salones.join(" · ")}</span>}
-                    {colegioModelStats.trained_at && (
-                      <span>Entrenado: {new Date(colegioModelStats.trained_at).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" })}</span>
-                    )}
-                  </div>
-                )}
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)" }}>
+                  {colegioModelStats.salones.length > 0 ? <span>Salones: {colegioModelStats.salones.join(" · ")}</span> : <span />}
+                  {/* HU034: sin fecha registrada (modelo de una versión anterior) se dice explícitamente */}
+                  <span>Entrenado: {formatearFechaModelo(colegioModelStats.trained_at)}</span>
+                </div>
                 {colegioModelStats.advertencias_carga.length > 0 && (
                   <div style={{ padding: "8px 10px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8 }}>
                     <p style={{ fontSize: 11, fontWeight: 700, color: "#92400e", marginBottom: 4 }}>
@@ -410,6 +407,10 @@ export function DatosView({
       {/* ── Panel: Histórico de reentrenamientos (HU024/HU025/HU026/HU034) ── */}
       {colegioModelStats && !isEM2022 && (
         <Panel title="Histórico de reentrenamientos">
+          <p className="model-note" style={{ marginBottom: 10 }}>
+            Historial de ajustes del modelo predictivo: cada Excel que se carga reentrena el modelo y deja aquí su fecha,
+            su versión y cuántos alumnos quedaron en riesgo ALTO, MEDIO y BAJO.
+          </p>
           {/* HU039: si el último reentrenamiento quedó peor que el anterior,
               puedeSubirExcel restaura ese respaldo sin necesitar el servidor. */}
           {puedeSubirExcel && colegioRespaldo?.disponible && (
@@ -422,7 +423,7 @@ export function DatosView({
                 <ShieldAlert size={16} style={{ color: "#92400e", flexShrink: 0, marginTop: 1 }} />
                 <span style={{ fontSize: 12.5, color: "#92400e", lineHeight: 1.5 }}>
                   Hay un respaldo del modelo anterior a la última carga
-                  {colegioRespaldo.fecha && ` (${new Date(colegioRespaldo.fecha).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" })})`}.
+                  {` (${formatearFechaModelo(colegioRespaldo.fecha)})`}.
                   Si el último Excel dejó el modelo peor, puedes revertirlo.
                 </span>
               </div>
@@ -441,7 +442,7 @@ export function DatosView({
             </div>
           )}
           {modelosVersiones.length === 0 ? (
-            <EmptyState message="Aún no hay versiones registradas. Cada vez que se cargue un Excel nuevo, quedará un registro aquí." />
+            <EmptyState message="Sin datos históricos. Cada vez que se cargue un Excel nuevo, quedará un registro de la versión aquí." />
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ width: "100%", height: 220 }}>
@@ -485,7 +486,7 @@ export function DatosView({
                   <tbody>
                     {modelosVersiones.map((v) => (
                       <tr key={v.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <td style={{ padding: "6px 8px" }}>{new Date(v.created_at).toLocaleDateString("es-PE", { dateStyle: "medium" })}</td>
+                        <td style={{ padding: "6px 8px" }}>{formatearFechaModelo(v.created_at, false)}</td>
                         <td style={{ padding: "6px 8px" }}>{v.version || "—"}</td>
                         <td style={{ padding: "6px 8px" }}>{v.n_alumnos ?? "—"}</td>
                         <td style={{ padding: "6px 8px", color: "#dc2626", fontWeight: 600 }}>{v.n_alto ?? "—"}</td>
@@ -501,16 +502,20 @@ export function DatosView({
               <button
                 type="button"
                 onClick={() => {
-                  const header = "fecha,version,n_alumnos,n_alto,n_medio,n_bajo,accuracy,auc_roc";
+                  const header = "fecha,version,alumnos,ALTO,MEDIO,BAJO,accuracy,auc_roc";
+                  const celda = (x: unknown) => {
+                    const s = x == null ? "" : String(x);
+                    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+                  };
                   const rows = modelosVersiones.map((v) =>
-                    [v.created_at, v.version, v.n_alumnos, v.n_alto, v.n_medio, v.n_bajo, v.accuracy, v.auc_roc].join(",")
+                    [v.created_at, v.version, v.n_alumnos, v.n_alto, v.n_medio, v.n_bajo, v.accuracy, v.auc_roc].map(celda).join(",")
                   );
                   const csv = [header, ...rows].join("\n");
                   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");
                   a.href = url;
-                  a.download = `historico_modelo_${colegioModelStats?.nombre_colegio || "colegio"}.csv`;
+                  a.download = `historial_reentrenamientos_IE${String(parseInt(ieEfectiva, 10) || ieEfectiva)}.csv`;
                   a.click();
                   URL.revokeObjectURL(url);
                 }}

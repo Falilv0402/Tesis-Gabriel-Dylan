@@ -354,3 +354,23 @@ Revisión de seguridad hecha al preparar las cuentas por colegio: el rol y el co
 - [x] **Frontend**: `useAdmin.handleCreateUser` sube el rol (`admin` / `director`) con un UPDATE posterior hecho por quien crea la cuenta, y avisa si el correo ya existía (antes mostraba "creado correctamente" igual).
 - [x] **Probado** en un Postgres embebido que reproduce las políticas vigentes (0007/0009/0016) con roles `authenticated` y `auth.uid()` simulados: unos 40 casos (registro, intentos de auto-escalada, cambios entre colegios, flujos legítimos de director/admin/superadmin, registro real y "crear usuario"), más el SQL de las cuentas de FASE 25 corrido después de la migración. Typecheck y 37 tests de frontend limpios.
 - [x] **Aplicada y verificada en producción** (2026-10-18) con una cuenta de profesor: cambiarse el propio rol o colegio responde 403 y editar un campo normal (materia) sigue funcionando.
+
+
+## FASE 27 — Revisión de cumplimiento de HU/CP (vista de administrador) y cierre de brechas (2026-10-18)
+
+Se revisaron los documentos que entregaron los clientes: *Historias de Usuario v1.3* (35 HU, 78 escenarios) y *Casos de Prueba v1.2* (78 CP). Tienen la misma estructura que nuestras v2.1/v2.0 (con pasos más granulares y el rol "Administrador" en varios casos). Se recorrió cada escenario contra el código y se extrajeron los mensajes literales de los documentos para comprobar cuáles existen en el sistema.
+
+Brechas del **sistema** encontradas y corregidas:
+- [x] **CP012 / HU005-1**: el Admin de colegio no podía crear usuarios (el formulario exigía un colegio que no se le muestra) ni elegir el rol. Ahora elige Director o Coordinador y su colegio queda fijo; el usuario nuevo hereda el distrito del colegio (antes quedaba "Sin distrito").
+- [x] **CP013 / HU005-2/3**: activar, desactivar y cambiar rol decían "correcto" aunque RLS no hubiera tocado ninguna fila; ahora se comprueba la fila afectada y se avisa "No se pudo … (sin permiso …)".
+- [x] **HU009-3 / CP025**: si el servidor no responde, el director veía "Sin modelo propio configurado"; ahora ve un aviso de error de conexión con "Reintentar".
+- [x] **HU009-2 / CP024**: aviso "Este colegio todavía no tiene los 4 bimestres cargados" (con el pronóstico del bimestre siguiente) o "datos limitados" (modo descriptivo).
+- [x] **HU024 / CP055-056**: nuevo "Ver Historial de Riesgo" en la ficha del alumno (riesgo por bimestre; "Sin datos históricos" si no hay notas). **HU025-2 / CP058**: el histórico de reentrenamientos vacío dice "Sin datos históricos".
+- [x] **HU033-2 / CP074**: sin modelo entrenado, Datos dice "Sin modelo entrenado". **HU034-2 / CP076**: fecha ausente o inválida → "Fecha no disponible" (Datos y encabezado del dashboard).
+- [x] **HU030-2 / CP068**: la carga rechaza solo el archivo inválido ("Formato no soportado: solo .xlsx o .xls" / "Archivo supera el límite de 20MB"), en el navegador y en el backend, y procesa el resto. **HU029-2**: el motivo de una hoja omitida dice "solo N alumno(s) detectado(s), mínimo 5".
+- [x] **CP008**: "Cerrar sesión" también en el menú de perfil. **CP057**: el CSV del histórico se llama `historial_reentrenamientos_IE{código}.csv`.
+- [x] **Carga de Excel**: campo "Nombre del colegio" (obligatorio la primera vez; el Reporte consolidado no trae el nombre en el archivo) y mensaje sobre de dónde salió el nombre; los avisos (toasts) salen arriba y al centro.
+- [x] **Documentos actualizados** (`docs/excel/`): *Historias de Usuario v1.4* (17 celdas) y *Casos de Prueba v1.3* (62 celdas en 15 casos) — wording de pantallas que no existen (p. ej. "Ajustes de Modelo", rutas /users/create) llevado a lo que el sistema muestra, y HU009-2 al nuevo comportamiento de pronóstico. Fórmulas y demás hojas intactas.
+- [x] **Servidor**: se copiaron los Excel de IE 9001 (24), IE 864785 (24) e IE 249 (22) a sus carpetas `colegio_{ie}_upload` (hash idéntico al original), para que una carga web no reconstruya el modelo solo con lo subido. Simulación aislada de la próxima carga: los 3 conservan nombre y número de alumnos (58, 83, 345) en modo "cierre de año".
+- [x] Verificado: 73 tests de backend, 47 de frontend, typecheck y `next build` limpios; vistas nuevas revisadas en navegador con datos de ejemplo.
+- [ ] **Pendiente**: desplegar backend en Hetzner y hacer push del frontend. **Pendiente de decisión**: cómo ocultar los nombres de los alumnos (seudónimos tipo "Estudiante 000123").

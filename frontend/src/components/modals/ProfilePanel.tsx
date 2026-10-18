@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { Camera, CheckCircle2, Loader } from "lucide-react";
+import { Camera, CheckCircle2, Loader, LogOut } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { Avatar } from "@/components/ui/Avatar";
 import { AVATAR_COLORS, MATERIAS_PROFESOR } from "@/lib/constants";
@@ -31,6 +31,8 @@ interface ProfilePanelProps {
   profileMsg: { ok: boolean; text: string } | null;
   onClose: () => void;
   onSave: () => void;
+  /** Cierra la sesión desde el menú de perfil (CP008). */
+  onLogout: () => void;
 }
 
 export function ProfilePanel({
@@ -44,7 +46,7 @@ export function ProfilePanel({
   profileAvatarColor, setProfileAvatarColor,
   profileAvatarUrl, avatarUploading, onUploadAvatar,
   profileBusy, profileMsg,
-  onClose, onSave,
+  onClose, onSave, onLogout,
 }: ProfilePanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   if (!show) return null;
@@ -159,6 +161,9 @@ export function ProfilePanel({
 
           <button className="primary" disabled={profileBusy} onClick={onSave} style={{ width: "100%" }}>
             <CheckCircle2 size={16} /> {profileBusy ? "Guardando..." : "Guardar cambios"}
+          </button>
+          <button type="button" onClick={onLogout} style={{ width: "100%", marginTop: 8 }}>
+            <LogOut size={16} /> Cerrar sesión
           </button>
         </div>
       </aside>

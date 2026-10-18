@@ -469,27 +469,33 @@ async def procesar_excels(
     MAX_BYTES_POR_ARCHIVO = 20 * 1024 * 1024  # 20 MB
     CHUNK = 1024 * 1024
     saved = []
+    rechazados: list[str] = []   # se rechaza SOLO el archivo inválido (con su motivo); el resto sigue (HU030-2)
     for f in notas_files + conducta_files:
         safe_name = Path(f.filename or "archivo.xlsx").name
         if Path(safe_name).suffix.lower() not in (".xlsx", ".xls"):
-            raise HTTPException(status_code=400, detail=f"Tipo de archivo no permitido: '{safe_name}' (solo .xlsx/.xls).")
+            rechazados.append(f"{safe_name}: Formato no soportado: solo .xlsx o .xls")
+            continue
         dest = upload_dir / safe_name
         total = 0
+        excede = False
         with open(dest, "wb") as out:
             while chunk := await f.read(CHUNK):
                 total += len(chunk)
                 if total > MAX_BYTES_POR_ARCHIVO:
-                    out.close()
-                    dest.unlink(missing_ok=True)
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"'{safe_name}' supera el tamaño máximo permitido (20 MB).",
-                    )
+                    excede = True
+                    break
                 out.write(chunk)
+        if excede:
+            dest.unlink(missing_ok=True)
+            rechazados.append(f"{safe_name}: Archivo supera el límite de 20MB")
+            continue
         saved.append(str(dest))
 
     if not saved:
-        raise HTTPException(status_code=400, detail="No se recibieron archivos.")
+        raise HTTPException(
+            status_code=400,
+            detail=" · ".join(rechazados) if rechazados else "No se recibieron archivos.",
+        )
 
     # Ejecutar script de entrenamiento
     try:
@@ -517,6 +523,8 @@ async def procesar_excels(
         "status":    "ok",
         "codigo_ie": codigo_ie,
         "archivos_procesados": len(saved),
+        # Archivos descartados por formato o tamaño, con el motivo de cada uno (los válidos sí se procesaron).
+        "archivos_rechazados": rechazados,
         # La carpeta del colegio es acumulativa (se pueden ir sumando bimestres):
         # el modelo se reentrena con TODO lo que hay ahí, no solo con esta carga.
         "archivos_en_carpeta": len(list(upload_dir.glob("*.xls*"))),

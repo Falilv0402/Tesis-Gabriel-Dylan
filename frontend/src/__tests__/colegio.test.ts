@@ -3,7 +3,7 @@
  * hizo el modelo del colegio (pronóstico, cierre de año o descriptivo) a texto
  * que un director entienda.
  */
-import { describirNombreColegio, describirResultado, lecturaAlumno } from "@/lib/colegio";
+import { describirNombreColegio, describirResultado, formatearFechaModelo, historialRiesgo, lecturaAlumno } from "@/lib/colegio";
 import type { AlumnoColegio } from "@/types";
 
 const alumno = (extra: Record<string, unknown> = {}): AlumnoColegio =>
@@ -20,6 +20,7 @@ describe("describirResultado", () => {
     expect(r.titulo).toBe("Pronóstico del 4.° bimestre · a partir de B1–B3");
     expect(r.gauge).toEqual(["Riesgo en el", "4.° bimestre"]);
     expect(r.bimestrePronosticado).toBe(4);
+    expect(r.explicacion).toContain("todavía no tiene los 4 bimestres cargados (hay B1–B3)");
   });
 
   test("cierre de año: ya no hay bimestre que pronosticar", () => {
@@ -33,6 +34,7 @@ describe("describirResultado", () => {
     const r = describirResultado({ tipo_resultado: "descriptivo", modo_prediccion: "descriptivo (PP anual)" });
     expect(r.tipo).toBe("descriptivo");
     expect(r.explicacion).toMatch(/no una predicción/);
+    expect(r.explicacion).toContain("todavía no tiene los 4 bimestres cargados — el modelo está operando con datos limitados");
   });
 
   test("modelo viejo sin tipo_resultado: 'descriptivo...' se reconoce por el texto del modo", () => {
@@ -127,5 +129,49 @@ describe("describirNombreColegio", () => {
   test("modelo viejo sin origen no inventa nada", () => {
     expect(describirNombreColegio(undefined, "X")).toBeNull();
     expect(describirNombreColegio(null, "X")).toBeNull();
+  });
+});
+
+describe("formatearFechaModelo", () => {
+  test("fecha válida se formatea en español", () => {
+    expect(formatearFechaModelo("2026-10-18T04:11:00")).toMatch(/2026/);
+    expect(formatearFechaModelo("2026-10-18T04:11:00", false)).not.toMatch(/\d:\d/);
+  });
+  test("nula, vacía o inválida: 'Fecha no disponible'", () => {
+    expect(formatearFechaModelo(null)).toBe("Fecha no disponible");
+    expect(formatearFechaModelo(undefined)).toBe("Fecha no disponible");
+    expect(formatearFechaModelo("")).toBe("Fecha no disponible");
+    expect(formatearFechaModelo("no-es-fecha")).toBe("Fecha no disponible");
+  });
+});
+
+describe("historialRiesgo", () => {
+  test("marca cada bimestre según el umbral en Matemática o Comunicación", () => {
+    const h = historialRiesgo(alumno({
+      b1_matematica: 15, b1_comunicacion: 16,   // sin riesgo
+      b2_matematica: 12, b2_comunicacion: 16,   // en riesgo (mate ≤ 13)
+      b3_matematica: 16, b3_comunicacion: 13,   // en riesgo (com = umbral)
+    }));
+    expect(h.filas.map((f) => f.estado)).toEqual(["sin_riesgo", "en_riesgo", "en_riesgo", "sin_datos"]);
+    expect(h.hayDatos).toBe(true);
+    expect(h.enRiesgo).toBe(2);
+    expect(h.evaluados).toBe(3);
+  });
+  test("con una sola área con nota, basta esa para evaluar", () => {
+    expect(historialRiesgo(alumno({ b1_matematica: 10 })).filas[0].estado).toBe("en_riesgo");
+    expect(historialRiesgo(alumno({ b1_comunicacion: 18 })).filas[0].estado).toBe("sin_riesgo");
+  });
+  test("usa las columnas de primaria si no hay las de secundaria", () => {
+    const h = historialRiesgo(alumno({ b1_mat_prim: 12, b1_lenguaje: 17 }));
+    expect(h.filas[0]).toMatchObject({ matematica: 12, comunicacion: 17, estado: "en_riesgo" });
+  });
+  test("sin ninguna nota: no hay datos históricos", () => {
+    const h = historialRiesgo(alumno());
+    expect(h.hayDatos).toBe(false);
+    expect(h.filas.every((f) => f.estado === "sin_datos")).toBe(true);
+  });
+  test("respeta un umbral distinto", () => {
+    expect(historialRiesgo(alumno({ b1_matematica: 14 }), 14).filas[0].estado).toBe("en_riesgo");
+    expect(historialRiesgo(alumno({ b1_matematica: 14 }), 13).filas[0].estado).toBe("sin_riesgo");
   });
 });

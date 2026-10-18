@@ -6,6 +6,7 @@ Usan datos sintéticos (nada de archivos ni alumnos reales).
 
 Ejecutar con:  pytest backend-ml/tests/test_colegio_pipeline.py -v
 """
+import shutil
 import sys
 from pathlib import Path
 
@@ -286,3 +287,29 @@ def test_procesar_rechaza_nombre_invalido_sin_guardar_archivos(tmp_path):
         assert not carpeta.exists()          # nada quedó a medias en disco
     finally:
         app.dependency_overrides.clear()
+
+
+def test_procesar_rechaza_solo_los_archivos_invalidos_y_dice_por_que(tmp_path):
+    """Si TODOS los archivos son inválidos responde 400 con el motivo de cada uno y no deja nada en disco."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from starlette.testclient import TestClient
+    from app.main import app
+    from app.api import colegio_propio as cp
+
+    app.dependency_overrides[cp.require_admin_de_colegio] = lambda: {"codigo_ie": "999778", "token": "t"}
+    try:
+        carpeta = cp.DATA_DIR / "colegio_999778_upload"
+        assert not carpeta.exists()
+        r = TestClient(app).post(
+            "/v1/colegio/999778/procesar",
+            files=[("notas_files", ("Notas reporte.pdf", b"%PDF", "application/pdf")),
+                   ("notas_files", ("Notas.docx", b"x", "application/octet-stream"))],
+        )
+        assert r.status_code == 400
+        detalle = r.json()["detail"]
+        assert "Notas reporte.pdf: Formato no soportado: solo .xlsx o .xls" in detalle
+        assert "Notas.docx: Formato no soportado: solo .xlsx o .xls" in detalle
+        assert not list(carpeta.glob("*"))      # ningún archivo inválido se guardó
+    finally:
+        app.dependency_overrides.clear()
+        shutil.rmtree(cp.DATA_DIR / "colegio_999778_upload", ignore_errors=True)

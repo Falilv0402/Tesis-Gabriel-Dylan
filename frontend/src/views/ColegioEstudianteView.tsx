@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, BarChart3, CalendarRange, CheckCircle2, FileText, Filter, Lightbulb, MessageSquare, Pencil, Plus, Save, Users, TrendingUp,
+  Activity, BarChart3, CalendarRange, CheckCircle2, FileText, Filter, History, Lightbulb, MessageSquare, Pencil, Plus, Save, Users, TrendingUp,
 } from "lucide-react";
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -14,7 +14,7 @@ import { pct, riskClass } from "@/lib/format";
 import {
   MATERIAS_COLEGIO, anioFromSalon, aniosDeSalones, seccionFromSalon, seccionesDeSalones,
   notaInfo, notaCelda, gradeCell, colegioStudentId, mejorBimestreConDatos, factoresRiesgoColegio, type Bimestre,
-  describirResultado, lecturaAlumno,
+  describirResultado, lecturaAlumno, historialRiesgo,
 } from "@/lib/colegio";
 
 interface Annotation { id: string; estudiante_id: string; contenido: string; created_at: string; autor_nombre?: string | null; autor_email?: string | null; es_propia?: boolean }
@@ -81,6 +81,10 @@ export function ColegioEstudianteView({
   const canEditAll = role === "director";
   const [showRechazoForm, setShowRechazoForm] = useState(false);
   const [comentarioRechazo, setComentarioRechazo] = useState("");
+  // HU024: "Ver Historial de Riesgo" (riesgo del alumno por bimestre). Se cierra al cambiar de alumno.
+  const [verHistorial, setVerHistorial] = useState(false);
+  const alumnoActualId = alumno ? colegioStudentId(alumno) : "";
+  useEffect(() => { setVerHistorial(false); }, [alumnoActualId]);
 
   // ── Buscador / lista completa con notas por materia (antes vivía en el
   // Dashboard) — sirve para encontrar y seleccionar un alumno, con el mismo
@@ -271,6 +275,7 @@ export function ColegioEstudianteView({
   const cursosC     = alumno.n_materias_c ?? 0;
   const resultado   = describirResultado(resumen?.metricas);
   const lectura     = lecturaAlumno(alumno, resumen?.metricas);
+  const historial   = historialRiesgo(alumno, resumen?.metricas?.umbral_riesgo_nota ?? 13);
 
   // Trayectoria de notas por bimestre y materia (B1-B4)
   const trayectoria = (["1", "2", "3", "4"] as const).map((b) => {
@@ -298,6 +303,14 @@ export function ColegioEstudianteView({
             >
               <FileText size={14} />
               {isGeneratingStudentPdf ? "Generando..." : "PDF"}
+            </button>
+            <button
+              className="btn-student-action"
+              onClick={() => setVerHistorial((v) => !v)}
+              aria-expanded={verHistorial}
+              title="Riesgo del alumno en cada bimestre"
+            >
+              <History size={14} /> {verHistorial ? "Ocultar Historial de Riesgo" : "Ver Historial de Riesgo"}
             </button>
             <button className="btn-student-action" onClick={() => setTab("intervenciones")} title="Registrar intervención">
               <CheckCircle2 size={14} /> Intervenir
@@ -351,6 +364,61 @@ export function ColegioEstudianteView({
             )}
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>{lectura.nota}</div>
           </div>
+
+          {/* ── Historial de riesgo por bimestre (HU024) ── */}
+          {verHistorial && (
+            <div role="region" aria-label="Historial de riesgo" style={{
+              background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 16px",
+            }}>
+              <div style={{
+                fontSize: 10, fontWeight: 700, color: "var(--text-muted)",
+                textTransform: "uppercase", letterSpacing: "0.55px", marginBottom: 8,
+              }}>
+                Historial de riesgo por bimestre
+              </div>
+              {!historial.hayDatos ? (
+                <div className="model-note">Sin datos históricos</div>
+              ) : (
+                <>
+                  <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid var(--border)" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ background: "var(--navy)", color: "#fff" }}>
+                          {["Bimestre", "Matemática", "Comunicación", "Estado"].map((h) => (
+                            <th key={h} style={{ padding: "7px 10px", textAlign: "center", fontSize: 11, fontWeight: 700 }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {historial.filas.map((f) => {
+                          const estilo = f.estado === "en_riesgo"
+                            ? { texto: "En riesgo", color: "#dc2626", bg: "#fef2f2" }
+                            : f.estado === "sin_riesgo"
+                              ? { texto: "Sin riesgo", color: "#16a34a", bg: "#f0fdf4" }
+                              : { texto: "Sin datos", color: "var(--text-muted)", bg: "transparent" };
+                          return (
+                            <tr key={f.bimestre} style={{ borderTop: "1px solid var(--border)" }}>
+                              <td style={{ padding: "7px 10px", textAlign: "center", fontWeight: 700 }}>{f.bimestre}</td>
+                              <td style={{ padding: "7px 10px", textAlign: "center" }}>{f.matematica ?? "—"}</td>
+                              <td style={{ padding: "7px 10px", textAlign: "center" }}>{f.comunicacion ?? "—"}</td>
+                              <td style={{ padding: "7px 10px", textAlign: "center" }}>
+                                <span style={{ fontWeight: 700, color: estilo.color, background: estilo.bg, borderRadius: 20, padding: "2px 10px", fontSize: 11 }}>
+                                  {estilo.texto}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
+                    En riesgo en {historial.enRiesgo} de {historial.evaluados} bimestre(s) con notas. {lectura.nota}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* ── Stat chips ── grid uniforme (label + valor por celda) ─────── */}
           <div style={{

@@ -695,7 +695,7 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
                     continue
                 if len(df_n) < 5:
                     # Hoja con muy pocos alumnos — skip (datos incompletos)
-                    msg = f"Hoja '{sheet}' de {nf.name}: omitida, solo {len(df_n)} alumno(s) detectado(s) (mínimo 5)"
+                    msg = f"Hoja '{sheet}' de {nf.name}: solo {len(df_n)} alumno(s) detectado(s), mínimo 5 (hoja omitida)"
                     print(f"  SKIP {msg}")
                     advertencias.append(msg)
                     continue

@@ -148,8 +148,9 @@ export function describirResultado(m?: MetricasColegio | null): ResultadoModelo 
       titulo: `Pronóstico del ${n}.° bimestre · a partir de B1–B${k}`,
       gauge: ["Riesgo en el", `${n}.° bimestre`],
       explicacion:
-        `Estás viendo un pronóstico: el sistema usa las notas de B1–B${k} para estimar quién estará en riesgo ` +
-        `en el ${n}.° bimestre, cuando todavía hay tiempo de intervenir. Se confirma al subir las notas del ${n}.° bimestre.`,
+        `Este colegio todavía no tiene los 4 bimestres cargados (hay B1–B${k}), así que el sistema pronostica: usa esas notas ` +
+        `para estimar quién estará en riesgo en el ${n}.° bimestre, cuando todavía hay tiempo de intervenir. ` +
+        `Se confirma al subir las notas del ${n}.° bimestre.`,
     };
   }
   if (m?.tipo_resultado === "cierre_anual") {
@@ -168,6 +169,7 @@ export function describirResultado(m?: MetricasColegio | null): ResultadoModelo 
       titulo: "Situación actual · sin pronóstico",
       gauge: ["Índice de riesgo", "(sin pronóstico)"],
       explicacion:
+        (k < 4 ? "Este colegio todavía no tiene los 4 bimestres cargados — el modelo está operando con datos limitados. " : "") +
         "Todavía no se puede pronosticar: hacen falta al menos 2 bimestres cargados y suficientes alumnos con y sin riesgo. " +
         "Mientras tanto, los porcentajes son un índice de las notas actuales, no una predicción.",
     };
@@ -209,6 +211,44 @@ export function describirNombreColegio(
     default:
       return null; // modelo entrenado antes de que se registrara el origen
   }
+}
+
+/**
+ * Fecha del modelo lista para mostrar. Un modelo entrenado por una versión anterior que no guardó la fecha (o con
+ * el campo nulo/vacío/inválido) muestra "Fecha no disponible" en vez de una fecha inválida o vacía.
+ */
+export function formatearFechaModelo(valor: string | null | undefined, conHora = true): string {
+  if (!valor) return "Fecha no disponible";
+  const d = new Date(valor);
+  if (Number.isNaN(d.getTime())) return "Fecha no disponible";
+  return d.toLocaleString("es-PE", conHora ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" });
+}
+
+export type FilaHistorialRiesgo = {
+  bimestre: string;
+  matematica: number | null;
+  comunicacion: number | null;
+  estado: "en_riesgo" | "sin_riesgo" | "sin_datos";
+};
+
+/**
+ * Historial de riesgo de un alumno por bimestre (HU024): en cada bimestre cargado, "en riesgo" si su nota de
+ * Matemática o Comunicación es la del umbral o menos (el mismo criterio con el que el modelo define el riesgo).
+ * `hayDatos` es false cuando no hay ninguna nota en ninguno de los 4 bimestres ("Sin datos históricos").
+ */
+export function historialRiesgo(
+  a: AlumnoColegio, umbral = 13,
+): { filas: FilaHistorialRiesgo[]; hayDatos: boolean; enRiesgo: number; evaluados: number } {
+  const filas = (["1", "2", "3", "4"] as const).map((b): FilaHistorialRiesgo => {
+    const [mat, com] = AREAS_LECTURA.map(
+      (area) => area.keys.map((key) => notaBimestre(a, key, b)).find((x) => x != null) ?? null,
+    );
+    const notas = [mat, com].filter((x): x is number => x != null);
+    const estado = notas.length === 0 ? "sin_datos" : notas.some((n) => n <= umbral) ? "en_riesgo" : "sin_riesgo";
+    return { bimestre: `B${b}`, matematica: mat, comunicacion: com, estado };
+  });
+  const evaluados = filas.filter((f) => f.estado !== "sin_datos").length;
+  return { filas, hayDatos: evaluados > 0, enRiesgo: filas.filter((f) => f.estado === "en_riesgo").length, evaluados };
 }
 
 export type LecturaAlumno = { titular: string; tendencias: string[]; nota: string };

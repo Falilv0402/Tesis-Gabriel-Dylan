@@ -317,10 +317,13 @@ export function useAdmin(
   async function handleCreateUser(
     translateAuthError: (msg: string) => string,
     authBusy: boolean,
-    setAuthBusy: (v: boolean) => void
+    setAuthBusy: (v: boolean) => void,
+    colegios: { id_ie: string | number; distrito: string }[] = [],
   ) {
     const rolEfectivo = newUserRol;
-    if (!EM2022_HABILITADO && (rolEfectivo === "director" || rolEfectivo === "coordinador") && !newUserColegioIe) {
+    // El admin de colegio no elige el colegio: queda fijo al suyo (el formulario no se lo muestra).
+    const colegioElegido = role === "admin" ? (profileCodigoIe ?? "") : newUserColegioIe;
+    if (!EM2022_HABILITADO && (rolEfectivo === "director" || rolEfectivo === "coordinador") && !colegioElegido) {
       toast("Selecciona un colegio para el nuevo usuario.", "error");
       return;
     }
@@ -340,8 +343,13 @@ export function useAdmin(
     // raw_user_meta_data y los inserta directamente en profiles al crear
     // la fila — sin necesidad de un UPDATE posterior ni restricciones RLS.
     const metaCodigoIe = ieEfectiva || null;
+    // Igual que el registro: con EM2022 apagado el distrito sale del colegio elegido (sin él, el usuario
+    // vería el aviso "Sin distrito"); con EM2022 encendido es el distrito que eligió quien crea la cuenta.
+    const distritoDelColegio = colegios.find(
+      (c) => String(parseInt(String(c.id_ie), 10)) === String(parseInt(colegioElegido, 10)),
+    )?.distrito ?? null;
     const metaDistrito = (rolEfectivo === "director" || rolEfectivo === "coordinador")
-      ? (newUserDistrito || null)
+      ? ((!EM2022_HABILITADO ? distritoDelColegio : null) || newUserDistrito || null)
       : null;
 
     // IMPORTANTE: usamos un cliente AISLADO para el signUp. Supabase inicia
@@ -395,8 +403,26 @@ export function useAdmin(
     setAuthBusy(false);
   }
 
-  async function uploadColegioExcels(files: FileList, ieCode: string, nombreColegio?: string) {
-    if (!files.length || !ieCode) return;
+  async function uploadColegioExcels(allFiles: FileList, ieCode: string, nombreColegio?: string) {
+    if (!allFiles.length || !ieCode) return;
+
+    // Se rechaza SOLO el archivo inválido (con el detalle), no toda la carga: el resto se sube igual.
+    const MAX_BYTES = 20 * 1024 * 1024;
+    const rechazadosLocal: string[] = [];
+    const files: File[] = [];
+    for (const f of Array.from(allFiles)) {
+      if (!/\.xlsx?$/i.test(f.name)) rechazadosLocal.push(`${f.name}: Formato no soportado: solo .xlsx o .xls`);
+      else if (f.size > MAX_BYTES) rechazadosLocal.push(`${f.name}: Archivo supera el límite de 20MB`);
+      else files.push(f);
+    }
+    if (!files.length) {
+      setColegioUploadResult(null);
+      setColegioUploadStatus("error");
+      setColegioUploadMsg(`No se subió ningún archivo. ${rechazadosLocal.join(" · ")}`);
+      toast(rechazadosLocal[0] ?? "No se seleccionó ningún archivo válido.", "error");
+      return;
+    }
+
     setColegioUploadStatus("uploading");
     setColegioUploadMsg(`Procesando ${files.length} archivo(s) para IE ${ieCode}...`);
     setColegioUploadResult(null);
@@ -439,7 +465,11 @@ export function useAdmin(
       if (res.ok) {
         const data = await res.json();
         const m = data.metricas ?? {};
-        const advertencias: string[] = m.advertencias_carga ?? [];
+        const advertencias: string[] = [
+          ...(m.advertencias_carga ?? []),
+          ...rechazadosLocal,
+          ...(data.archivos_rechazados ?? []),
+        ];
         setColegioUploadResult({
           n_alumnos:      m.n_alumnos     ?? 0,
           n_riesgo:       m.n_riesgo      ?? 0,
@@ -520,17 +550,19 @@ export function useAdmin(
     toast(`Programacion ${scheduleFreq} guardada. Proxima: ${proxima}`);
   }
 
+  // RLS no devuelve error cuando la fila está fuera del alcance de quien actúa: simplemente no la toca (0 filas).
+  // Por eso se pide la fila de vuelta (.select) y se avisa si no hubo ninguna, en vez de "éxito" sin cambios.
   async function desactivarUsuario(id: string) {
-    const { error } = await supabase.from("profiles").update({ activo: false }).eq("id", id);
-    if (error) { toast("No se pudo desactivar (sin permiso o usuario fuera de tu colegio).", "error"); return; }
+    const { data, error } = await supabase.from("profiles").update({ activo: false }).eq("id", id).select("id");
+    if (error || !data?.length) { toast("No se pudo desactivar (sin permiso o usuario fuera de tu colegio).", "error"); return; }
     await insertAudit("Desactivar usuario", "profiles", { usuario_id: id });
     toast("Usuario desactivado correctamente.");
     void loadDbUsers();
   }
 
   async function activarUsuario(id: string) {
-    const { error } = await supabase.from("profiles").update({ activo: true }).eq("id", id);
-    if (error) { toast("No se pudo activar (sin permiso o usuario fuera de tu colegio).", "error"); return; }
+    const { data, error } = await supabase.from("profiles").update({ activo: true }).eq("id", id).select("id");
+    if (error || !data?.length) { toast("No se pudo activar (sin permiso o usuario fuera de tu colegio).", "error"); return; }
     await insertAudit("Activar usuario", "profiles", { usuario_id: id });
     toast("Usuario activado correctamente.", "success");
     void loadDbUsers();
@@ -541,8 +573,8 @@ export function useAdmin(
   // (admin: solo su propia IE; superadmin: todos) — este handler solo
   // reporta si el update no tuvo efecto.
   async function cambiarRolUsuario(id: string, nuevoRol: string) {
-    const { error } = await supabase.from("profiles").update({ rol: nuevoRol }).eq("id", id);
-    if (error) { toast("No se pudo cambiar el rol (sin permiso).", "error"); return; }
+    const { data, error } = await supabase.from("profiles").update({ rol: nuevoRol }).eq("id", id).select("id");
+    if (error || !data?.length) { toast("No se pudo cambiar el rol (sin permiso).", "error"); void loadDbUsers(); return; }
     await insertAudit("Cambiar rol de usuario", "profiles", { usuario_id: id, nuevo_rol: nuevoRol });
     toast(`Rol actualizado a ${nuevoRol}.`, "success");
     void loadDbUsers();

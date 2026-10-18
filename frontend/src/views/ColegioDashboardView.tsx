@@ -10,7 +10,7 @@ import { pct, riskClass } from "@/lib/format";
 import {
   anioFromSalon, aniosDeSalones,
   seccionFromSalon, seccionesDeSalones,
-  colegioStudentId, describirResultado,
+  colegioStudentId, describirResultado, formatearFechaModelo,
 } from "@/lib/colegio";
 
 /**
@@ -135,7 +135,7 @@ export function ColegioDashboardView({
           <h2>{nombreColegio}</h2>
           <span>
             Modelo interno del colegio · {resultado.titulo}
-            {resumen?.trained_at && ` · actualizado ${new Date(resumen.trained_at).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" })}`}
+            {` · actualizado: ${formatearFechaModelo(resumen?.trained_at)}`}
           </span>
         </div>
       </div>

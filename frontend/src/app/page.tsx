@@ -20,6 +20,7 @@ import { exportCsv, exportXlsx, exportPdf } from "@/lib/exports";
 
 import { Avatar } from "@/components/ui/Avatar";
 import { SinModeloPropio } from "@/components/ui/SinModeloPropio";
+import { ErrorConexionColegio } from "@/components/ui/ErrorConexionColegio";
 import { ComparatorModal } from "@/components/modals/ComparatorModal";
 import { IeProfileModal } from "@/components/modals/IeProfileModal";
 import { ProfilePanel } from "@/components/modals/ProfilePanel";
@@ -205,6 +206,12 @@ export default function Page() {
     }
   }
 
+  // Cuando el colegio no tiene datos que mostrar: si el servidor no respondió (HU009-3) se avisa el error de conexión;
+  // solo si respondió y no hay modelo se dice "Sin modelo propio configurado".
+  const sinModeloOError = colegio.error === "connection"
+    ? <ErrorConexionColegio onRetry={() => void colegio.reload()} />
+    : <SinModeloPropio setTab={setTab} />;
+
   // ── Loading state ─────────────────────────────────────────────────
   // authLoading: sesión aún no verificada con Supabase.
   // roleLoaded: sesión verificada pero perfil (rol real) aún no llegó de BD.
@@ -333,7 +340,7 @@ export default function Page() {
                 <em>{auth.role}</em>
               </span>
             </button>
-            <button onClick={() => void auth.handleLogout()}><LogOut size={16} /> Salir</button>
+            <button onClick={() => void auth.handleLogout()}><LogOut size={16} /> Cerrar sesión</button>
           </div>
         </header>
         )}
@@ -410,7 +417,7 @@ export default function Page() {
           )}
 
           {isDirectorRole && tab === "dashboard" && !colegio.hasModel && !EM2022_HABILITADO && (
-            <SinModeloPropio setTab={setTab} />
+            sinModeloOError
           )}
 
           {isDirectorRole && tab === "dashboard" && !colegio.hasModel && EM2022_HABILITADO && (
@@ -473,7 +480,7 @@ export default function Page() {
           )}
 
           {isDirectorRole && tab === "estudiante" && !colegio.hasModel && !EM2022_HABILITADO && (
-            <SinModeloPropio setTab={setTab} />
+            sinModeloOError
           )}
 
           {isDirectorRole && tab === "estudiante" && !colegio.hasModel && EM2022_HABILITADO && (
@@ -525,7 +532,7 @@ export default function Page() {
           )}
 
           {isDirectorRole && tab === "intervenciones" && !colegio.hasModel && !EM2022_HABILITADO && (
-            <SinModeloPropio setTab={setTab} />
+            sinModeloOError
           )}
 
           {isDirectorRole && tab === "intervenciones" && !colegio.hasModel && EM2022_HABILITADO && (
@@ -557,7 +564,7 @@ export default function Page() {
           )}
 
           {isDirectorRole && tab === "reportes" && !colegio.hasModel && !EM2022_HABILITADO && (
-            <SinModeloPropio setTab={setTab} />
+            sinModeloOError
           )}
 
           {isDirectorRole && tab === "reportes" && !colegio.hasModel && EM2022_HABILITADO && (
@@ -641,7 +648,7 @@ export default function Page() {
               distritosList={auth.distritosList}
               colegiosList={auth.colegiosList}
               authBusy={actionBusy}
-              onCreateUser={() => void admin.handleCreateUser(auth.translateAuthError, actionBusy, setActionBusy)}
+              onCreateUser={() => void admin.handleCreateUser(auth.translateAuthError, actionBusy, setActionBusy, auth.colegiosList)}
               onDesactivar={(id) => void admin.desactivarUsuario(id)}
               onActivar={(id) => void admin.activarUsuario(id)}
               onCambiarRol={(id, rol) => void admin.cambiarRolUsuario(id, rol)}
@@ -687,6 +694,7 @@ export default function Page() {
         profileBusy={auth.profileBusy} profileMsg={auth.profileMsg}
         onClose={() => auth.setShowProfile(false)}
         onSave={() => void auth.saveProfile()}
+        onLogout={() => { auth.setShowProfile(false); void auth.handleLogout(); }}
       />
 
       {/* Toast notifications */}
