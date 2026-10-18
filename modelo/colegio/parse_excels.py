@@ -13,6 +13,22 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# Textos que NO son un nombre de colegio: el nombre de la carpeta de carga web
+# ("colegio_831305_upload"), un "Colegio 831305" a secas, el título genérico
+# "Reporte consolidado..." o vacío. Si se aceptaran, cada carga por la web le
+# cambiaría el nombre al colegio en todo el sistema.
+_NOMBRE_NO_VALIDO = re.compile(
+    r"^(colegio|ie)?[\s_-]*\d*[\s_-]*(uploads?)?$|(^|[\s_-])uploads?($|[\s_-])|^reporte consolidado",
+    re.IGNORECASE,
+)
+
+
+def nombre_colegio_valido(nombre) -> bool:
+    if nombre is None:
+        return False
+    n = str(nombre).strip()
+    return n.lower() not in ("nan", "none") and not _NOMBRE_NO_VALIDO.search(n)
+
 # ─── Conversión de notas literales a numéricas ────────────────────────────────
 LITERAL_MAP = {"AD": 18.5, "A": 16.0, "B": 13.0, "C": 10.0}
 
@@ -450,6 +466,14 @@ def _parse_reporte_consolidado(df_raw: pd.DataFrame, filename: str) -> pd.DataFr
                 )
             except (ValueError, TypeError):
                 pass
+        # Conducta del bimestre de ESTE archivo (el promedio de arriba se mezcla
+        # con los otros bimestres al unir archivos; el pronóstico necesita la
+        # conducta de cada bimestre por separado para no usar datos futuros).
+        if bimestre is not None and record["conducta_promedio"] is not None:
+            record[f"b{bimestre}_conducta"] = record["conducta_promedio"]
+        # Bimestre de origen: lo usa procesar_colegio() para quedarse con el
+        # archivo MÁS RECIENTE de cada (salón, bimestre).
+        record["_bim"] = bimestre
 
         registros.append(record)
 
@@ -611,11 +635,15 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
     # ── Extraer nombre del colegio de la primera fila del primer Excel ────────
     # (En el formato "Reporte consolidado" la fila 0 es un título genérico,
     # no el nombre del colegio — en ese caso se usa el de la carpeta.)
-    nombre_colegio = re.sub(r"^Colegio\s*\d+\s*-\s*", "", carpeta.name, flags=re.IGNORECASE).strip() or "Colegio"
+    # Si ninguna de las dos fuentes trae un nombre real, queda "" y quien llama
+    # (train_colegio_model.py) conserva el nombre que el colegio ya tenía.
+    nombre_colegio = re.sub(r"^Colegio\s*\d+\s*-\s*", "", carpeta.name, flags=re.IGNORECASE).strip()
+    if not nombre_colegio_valido(nombre_colegio):
+        nombre_colegio = ""
     try:
         df_header = pd.read_excel(notas_files[0], header=None, nrows=2, dtype=str)
         val = str(df_header.iloc[0, 0]).strip()
-        if val and val.lower() not in ["nan", "none", ""] and not val.upper().startswith("REPORTE CONSOLIDADO"):
+        if nombre_colegio_valido(val):
             nombre_colegio = val.title()  # "JOSEPH AND MERY" → "Joseph And Mery"
     except Exception:
         pass
@@ -650,6 +678,8 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
                     advertencias.append(msg)
                     continue
                 df_n["sheet"] = sheet
+                df_n["_archivo"] = nf.name
+                df_n["_mtime"] = nf.stat().st_mtime
                 dfs_notas.append(df_n)
                 print(f"  OK Notas {nf.name} [{sheet}]: {len(df_n)} alumnos, salon={salon}")
         except Exception as e:
@@ -691,10 +721,13 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
     # difieren (varios cortes reales) da una estimación anual más robusta que
     # quedarse con la primera al azar y perder las demás.
     df_notas = pd.concat(dfs_notas, ignore_index=True)
+    df_notas = _quedarse_con_version_mas_reciente(df_notas, advertencias)
+    df_notas = _unificar_numeracion_por_nombre(df_notas, advertencias)
+    df_notas = df_notas.drop(columns=[c for c in ("_archivo", "_mtime", "_bim") if c in df_notas.columns])
     before = len(df_notas)
     n_grupos = df_notas.groupby(["salon", "n_alumno"]).ngroups
     if n_grupos < before:
-        print(f"  {before - n_grupos} alumno(s) aparecen en más de un archivo del mismo salón — promediando sus notas")
+        print(f"  {before - n_grupos} fila(s) unidas: cada alumno junta sus bimestres/archivos del mismo salón")
         numeric_cols = [
             c for c in df_notas.columns
             if c.startswith(("pp_", "b1_", "b2_", "b3_", "b4_", "tendencia_")) or c == "conducta_promedio"
@@ -732,13 +765,22 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
 
     # ── Features derivadas ────────────────────────────────────────────────────
     # Número de materias clave con PP = C (≤13)
-    materias_pp = [c for c in df.columns if c.startswith("pp_")]
-    def n_materias_c(row):
-        return sum(1 for c in materias_pp if pd.notna(row.get(c)) and row[c] <= 13.0)
-    df["n_materias_c"] = df.apply(n_materias_c, axis=1)
+    # La nota de cada área sale del promedio anual (pp_) si existe y, si no, del
+    # promedio de los bimestres cargados (_nota_area). Antes solo miraba pp_: en
+    # los formatos por bimestre (p.ej. "Reporte consolidado") todos quedaban con
+    # 0 cursos en C y sin promedio, aunque el alumno estuviera desaprobando.
+    claves_area = sorted(
+        {c.split("_", 1)[1] for c in df.columns if re.match(r"^(pp|b[1-4])_", c)} - {"conducta"}
+    )
+    def _notas_efectivas(row) -> list[float]:
+        notas = (_nota_area(row, k) for k in claves_area)
+        return [float(v) for v in notas if v is not None and not pd.isna(v)]
+    df["n_materias_c"] = df.apply(lambda r: sum(1 for v in _notas_efectivas(r) if v <= 13.0), axis=1)
 
     # Promedio de materias clave
-    df["promedio_materias"] = df[materias_pp].mean(axis=1)
+    df["promedio_materias"] = df.apply(
+        lambda r: float(np.mean(v)) if (v := _notas_efectivas(r)) else np.nan, axis=1
+    )
 
     # ── Target: riesgo académico ──────────────────────────────────────────────
     # En riesgo si tiene C (≤13) en Matemática O Comunicación
@@ -780,6 +822,79 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
 
 
 # ─── Utilidades internas ──────────────────────────────────────────────────────
+
+def _quedarse_con_version_mas_reciente(df: pd.DataFrame, advertencias: list[str]) -> pd.DataFrame:
+    """La carpeta de carga de un colegio es acumulativa (así se pueden ir sumando
+    bimestres sin volver a subir los anteriores). Si de un mismo (salón, bimestre)
+    hay más de un archivo -- p.ej. se corrigió y se volvió a subir con otro
+    nombre --, solo cuenta el más reciente. Antes se promediaban las versiones y
+    la vieja seguía contaminando las notas."""
+    if "_bim" not in df.columns or "_archivo" not in df.columns or not df["_bim"].notna().any():
+        return df
+    tiene_bim = df["_bim"].notna()
+    fuentes = df[tiene_bim].groupby(["salon", "_bim", "_archivo"])["_mtime"].max().reset_index()
+    ganador = fuentes.sort_values("_mtime").groupby(["salon", "_bim"]).tail(1)
+    ganadores = set(zip(ganador["salon"], ganador["_bim"], ganador["_archivo"]))
+    claves = zip(df["salon"], df["_bim"], df["_archivo"])
+    mantener = [(not b) or (k in ganadores) for k, b in zip(claves, tiene_bim)]
+
+    repetidos = fuentes.groupby(["salon", "_bim"]).size()
+    repetidos = repetidos[repetidos > 1]
+    if len(repetidos):
+        ejemplos = ", ".join(f"{s} B{int(b)}" for s, b in list(repetidos.index)[:5])
+        advertencias.append(
+            f"Había más de un archivo para {len(repetidos)} reporte(s) del mismo salón y bimestre "
+            f"({ejemplos}{'...' if len(repetidos) > 5 else ''}): se usó siempre el más reciente."
+        )
+    return df[mantener].reset_index(drop=True)
+
+
+def _norm_nombre(s) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode().upper()
+    return " ".join(re.sub(r"[^A-Z0-9 ]+", " ", s).split())
+
+
+def _unificar_numeracion_por_nombre(df: pd.DataFrame, advertencias: list[str]) -> pd.DataFrame:
+    """Los bimestres de un alumno se unen por (salón, N.° de lista). Si la lista
+    cambia entre bimestres (un alumno se retira o llega uno nuevo y la
+    numeración se corre), ese N.° apuntaría a personas distintas y se mezclarían
+    sus notas. Cuando se detecta, en ese salón se cruza por NOMBRE usando como
+    lista oficial la del archivo más reciente (el N.° queda igual al del último
+    Excel, para no descuadrar anotaciones e intervenciones ya guardadas); los
+    alumnos que ya no figuran en esa lista se descartan."""
+    import difflib
+    df = df.copy()
+    df["_nn"] = df["nombre"].map(_norm_nombre)
+    conflictivos = [
+        s for s, g in df.groupby("salon") if (g.groupby("n_alumno")["_nn"].nunique() > 1).any()
+    ]
+    descartados = 0
+    for salon in conflictivos:
+        m = df["salon"] == salon
+        sub = df[m]
+        orden = sub["_bim"].fillna(0) if "_bim" in sub.columns else 0
+        ref_archivo = sub.assign(_o=orden).sort_values(["_o", "_mtime"]).iloc[-1]["_archivo"]
+        oficial = dict(zip(sub[sub["_archivo"] == ref_archivo]["_nn"], sub[sub["_archivo"] == ref_archivo]["n_alumno"]))
+        def _n_oficial(nn: str):
+            if nn in oficial:
+                return oficial[nn]
+            cerca = difflib.get_close_matches(nn, list(oficial), n=1, cutoff=0.88)
+            return oficial[cerca[0]] if cerca else None
+        nuevo = sub["_nn"].map(_n_oficial)
+        descartados += sub.loc[nuevo.isna(), "_nn"].nunique()
+        df.loc[m, "n_alumno"] = nuevo
+        df = df[~(m & df["n_alumno"].isna())] if nuevo.isna().any() else df
+    if conflictivos:
+        advertencias.append(
+            f"La lista de alumnos cambió entre archivos en {len(conflictivos)} salón(es) "
+            f"({', '.join(conflictivos[:5])}{'...' if len(conflictivos) > 5 else ''}): se cruzaron los bimestres "
+            f"por nombre usando la lista del archivo más reciente"
+            + (f"; {descartados} alumno(s) que ya no figuran en ella se descartaron." if descartados else ".")
+        )
+    df["n_alumno"] = df["n_alumno"].astype(int)
+    return df.drop(columns=["_nn"]).reset_index(drop=True)
+
 
 def _normalizar_salon(salon: str) -> str:
     """S5A→5A, S5B→5B, P6A→P6A (primaria mantiene P), 5A→5A."""

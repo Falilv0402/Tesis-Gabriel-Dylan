@@ -46,14 +46,34 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
     roc_auc_score, f1_score, precision_score, recall_score, accuracy_score,
     confusion_matrix, roc_curve,
 )
 
-from parse_excels import procesar_colegio, AREAS_ACADEMICAS
+from parse_excels import procesar_colegio, AREAS_ACADEMICAS, nombre_colegio_valido
+
+
+def _resolver_nombre_colegio(nombre_parseado, output_path: Path, codigo_ie: str) -> str:
+    """Nombre real leído de los Excel si lo hay; si no (p.ej. el formato
+    "Reporte consolidado" no lo trae), el que ya tenía el modelo anterior o sus
+    respaldos. Sin esto, cada carga por la web le cambiaba el nombre al colegio
+    en todo el sistema (header, correos de alerta, listados)."""
+    if nombre_colegio_valido(nombre_parseado):
+        return str(nombre_parseado).strip()
+    respaldos = sorted((output_path.parent / "backups" / output_path.stem).glob("*.pkl"), reverse=True)
+    for pkl in [output_path, *respaldos]:
+        if not pkl.exists():
+            continue
+        try:
+            previo = joblib.load(pkl).get("nombre_colegio")
+        except Exception:
+            continue
+        if nombre_colegio_valido(previo):
+            return str(previo).strip()
+    return f"Colegio {codigo_ie}"
 
 # ─── Etiquetas legibles para las features, usadas en "Importancia de variables" ──
 _ETIQUETAS_AREA = {
@@ -66,6 +86,20 @@ _ETIQUETAS_AREA = {
 def _etiqueta_feature(nombre: str) -> str:
     if nombre == "conducta_promedio":
         return "Conducta (promedio)"
+    # Features del pronóstico por transición (ver _features_transicion): se
+    # nombran por posición relativa al bimestre a pronosticar, no por número.
+    if nombre == "prev1_conducta":
+        return "Conducta (bimestre anterior)"
+    if nombre == "conducta_prom":
+        return "Conducta (promedio)"
+    if nombre == "riesgo_prev1":
+        return "En riesgo en el bimestre anterior"
+    if nombre == "riesgo_prev2":
+        return "En riesgo dos bimestres atrás"
+    for prefijo, texto in (("prev1_", "{} (bimestre anterior)"), ("prev2_", "{} (dos bimestres atrás)"), ("delta_", "Variación en {}")):
+        if nombre.startswith(prefijo):
+            area = nombre.removeprefix(prefijo)
+            return texto.format(_ETIQUETAS_AREA.get(area, area.title()))
     if nombre in ("n_materias_c", "promedio_materias"):
         return {"n_materias_c": "N.º de cursos con C", "promedio_materias": "Promedio general"}[nombre]
     if nombre.startswith("tend_temprana_"):
@@ -105,6 +139,116 @@ FEATURES_PP = [
 ]
 
 
+# ─── Pronóstico por transición entre bimestres ───────────────────────────────
+#
+# El colegio sube las notas que tiene hasta hoy (B1..BK). Lo que se quiere es
+# avisar quién está en riesgo en el SIGUIENTE bimestre (K+1), que todavía no
+# existe -- no hay etiqueta para entrenar con él. Se aprende entonces la
+# relación "cómo los dos bimestres previos anticipan el siguiente" con el
+# último bimestre ya conocido (B(K-2), B(K-1) → BK) y se aplica un paso más
+# adelante (B(K-1), BK → B(K+1)). Las variables se nombran por posición
+# relativa (prev1/prev2), no por número de bimestre, para que sirvan en ambos
+# momentos. Con los 4 bimestres cargados ya no queda futuro que pronosticar:
+# esa misma transición se usa como validación retrospectiva.
+
+NOTA_RIESGO = 13.0   # nota <= 13 (por debajo del logro esperado) en Matemática o Comunicación
+MIN_CLASE = 5        # alumnos mínimos de cada clase (en riesgo / no) para entrenar un modelo
+
+
+def _cols_mc(df, n: int):
+    mat = next((c for c in (f"b{n}_matematica", f"b{n}_mat_prim") if c in df.columns), None)
+    com = next((c for c in (f"b{n}_comunicacion", f"b{n}_lenguaje") if c in df.columns), None)
+    return mat, com
+
+
+def _riesgo_bimestre(df, n: int) -> pd.Series:
+    """1 = nota <= 13 en Matemática o Comunicación en el bimestre n; 0 = no;
+    NaN = ese alumno no tiene notas de ese bimestre."""
+    cols = [c for c in _cols_mc(df, n) if c]
+    if not cols:
+        return pd.Series(np.nan, index=df.index)
+    sub = df[cols]
+    riesgo = (sub <= NOTA_RIESGO).any(axis=1).astype(float)
+    riesgo[sub.isna().all(axis=1)] = np.nan
+    return riesgo
+
+
+def _bimestres_cargados(df) -> int:
+    """Último bimestre con notas reales (>= 5 alumnos), contando solo los
+    consecutivos desde B1 (un hueco corta la cuenta)."""
+    k = 0
+    for n in (1, 2, 3, 4):
+        if any(c and df[c].notna().sum() >= 5 for c in _cols_mc(df, n)):
+            k = n
+        else:
+            break
+    return k
+
+
+def _features_transicion(df, prev1: int, prev2: int | None, usar_conducta_prom: bool) -> pd.DataFrame:
+    X = pd.DataFrame(index=df.index)
+    for area in AREAS_ACADEMICAS + ["lenguaje", "mat_prim"]:
+        c1 = f"b{prev1}_{area}"
+        if c1 not in df.columns or df[c1].notna().sum() < 5:
+            continue
+        X[f"prev1_{area}"] = df[c1]
+        if prev2:
+            c2 = f"b{prev2}_{area}"
+            if c2 in df.columns and df[c2].notna().sum() >= 5:
+                X[f"prev2_{area}"] = df[c2]
+                X[f"delta_{area}"] = df[c1] - df[c2]
+    cc = f"b{prev1}_conducta"
+    if cc in df.columns and df[cc].notna().sum() >= 5:
+        X["prev1_conducta"] = df[cc]
+    elif usar_conducta_prom and "conducta_promedio" in df.columns and df["conducta_promedio"].notna().sum() >= 5:
+        X["conducta_prom"] = df["conducta_promedio"]
+    X["riesgo_prev1"] = _riesgo_bimestre(df, prev1).fillna(0)
+    if prev2:
+        X["riesgo_prev2"] = _riesgo_bimestre(df, prev2).fillna(0)
+    return X
+
+
+def _construir_pipe(pos: int, neg: int):
+    class_weight = {0: 1.0, 1: max(1.0, neg / max(pos, 1))}
+    pipe_lr = Pipeline([
+        ("scaler", StandardScaler()),
+        ("clf", LogisticRegression(C=0.3, max_iter=2000, class_weight=class_weight, random_state=42)),
+    ])
+    pipe_rf = Pipeline([
+        ("scaler", StandardScaler()),
+        ("clf", RandomForestClassifier(
+            n_estimators=300, max_depth=4, min_samples_leaf=3,
+            class_weight=class_weight, random_state=42, n_jobs=-1,
+        )),
+    ])
+    return VotingClassifier(estimators=[("lr", pipe_lr), ("rf", pipe_rf)], voting="soft"), class_weight
+
+
+def _entrenar_calibrado(X: pd.DataFrame, y: np.ndarray) -> dict:
+    """Ensemble LR + RF con probabilidades calibradas (Platt/sigmoid). Devuelve
+    el modelo ya ajustado y la validación cruzada (probabilidades fuera de
+    muestra) -- única medida honesta con tan pocos alumnos por colegio."""
+    pos = int(y.sum())
+    neg = len(y) - pos
+    menor = min(pos, neg)
+    pipe, class_weight = _construir_pipe(pos, neg)
+    cal_cv = 5 if menor >= 25 else 3 if menor >= 10 else 2
+    n_splits = 5 if menor >= 10 else 3
+
+    oof = None
+    try:
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+        oof = cross_val_predict(
+            CalibratedClassifierCV(pipe, method="sigmoid", cv=cal_cv), X, y, cv=skf, method="predict_proba",
+        )[:, 1]
+    except Exception as e:  # muestra demasiado chica/desbalanceada para validar: se informa sin tumbar la carga
+        print(f"      No se pudo calcular la validación cruzada: {e}")
+
+    modelo = CalibratedClassifierCV(pipe, method="sigmoid", cv=cal_cv)
+    modelo.fit(X, y)
+    return {"modelo": modelo, "oof": oof, "n_splits": n_splits if oof is not None else 0, "class_weight": class_weight}
+
+
 def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
     model_dir = Path(__file__).resolve().parents[1] / "model"
     model_dir.mkdir(exist_ok=True)
@@ -131,175 +275,109 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
     df.to_csv(csv_path, index=False)
     print(f"      Dataset guardado → {csv_path}")
 
-    # ── 2. Construir features y target predictivos ────────────────────────────
-    print("\n[2/4] Preparando features (modo predictivo B1-B3 → B4)...")
+    # ── 2. Qué se puede hacer con los bimestres cargados ──────────────────────
+    k = _bimestres_cargados(df)
+    bimestre_pron = k + 1 if k < 4 else None
+    print(f"\n[2/4] Bimestres cargados: B1-B{k}" if k else "\n[2/4] Sin desglose por bimestre (solo promedio anual)")
 
-    # ── Target: riesgo en el 4.° bimestre (lo que queremos predecir) ──────────
-    # Usamos B4 si está disponible, sino PP como fallback. No basta con que la
-    # COLUMNA exista (algunos formatos, como "Reporte consolidado" o el
-    # consolidado anual de CUBICOL, la crean vacía porque no hay desglose por
-    # bimestre) — hace falta que tenga datos reales, o el target degenera:
-    # con fillna(99) ningún alumno queda "en riesgo" nunca (99 > 13 siempre).
-    mat_b4  = next((c for c in ["b4_matematica","b4_mat_prim"] if c in df.columns and df[c].notna().sum() >= 5), None)
-    com_b4  = next((c for c in ["b4_comunicacion","b4_lenguaje"] if c in df.columns and df[c].notna().sum() >= 5), None)
-    mat_pp  = next((c for c in ["pp_matematica","pp_mat_prim"] if c in df.columns), None)
-    com_pp  = next((c for c in ["pp_comunicacion","pp_lenguaje"] if c in df.columns), None)
-
-    if mat_b4 and com_b4:
-        # Modo predictivo genuino: target = C en bimestre 4
-        df["riesgo_target"] = (
-            (df[mat_b4].fillna(99) <= 13) | (df[com_b4].fillna(99) <= 13)
-        ).astype(int)
-        modo = "predictivo (B1-B3 → B4)"
-        print("      Modo: PREDICTIVO — features B1-B3, target B4")
+    X_apply = None
+    mask_todos = None
+    if k >= 2:
+        # Transición con etiqueta conocida: B(k-2), B(k-1) → Bk
+        prev1 = k - 1
+        prev2 = k - 2 if k - 2 >= 1 else None
+        y_serie = _riesgo_bimestre(df, k)
+        mask_todos = y_serie.notna().values
+        X_all = _features_transicion(df, prev1, prev2, usar_conducta_prom=(k < 4))
+        X = X_all[mask_todos].copy()
+        y = y_serie[mask_todos].astype(int).values
+        medianas = X.median().fillna(0)
+        X = X.fillna(medianas)
+        available = list(X.columns)
+        if k < 4:
+            X_apply = _features_transicion(df, k, k - 1 if k - 1 >= 1 and prev2 else None, usar_conducta_prom=True)
+            X_apply = X_apply.reindex(columns=available).fillna(medianas)
+        modo = (f"predictivo · pronóstico del {bimestre_pron}.° bimestre (a partir de B1-B{k})"
+                if k < 4 else "cierre de año · validación retrospectiva (B1-B4 cargados)")
     else:
-        # Fallback: target = PP anual
+        # Sin bimestres suficientes: no hay forma de pronosticar. Solo modo
+        # descriptivo (el objetivo es el promedio anual) y se avisa en la UI.
         df["riesgo_target"] = df["riesgo"].values
-        modo = "descriptivo (PP anual)"
-        print("      Modo: DESCRIPTIVO (fallback) — sin datos de B4")
-
-    # ── Features: solo bimestres 1-3 (lo que se conoce ANTES del B4) ──────────
-    early_available = [f for f in FEATURES_EARLY if f in df.columns
-                       and df[f].notna().sum() >= 5]
-
-    # Añadir tendencia temprana calculada aquí (B3 - B1), para las 7 áreas
-    # ponderadas más las variantes de nombre propias de primaria
-    # (lenguaje/mat_prim, que el parser normaliza aparte de comunicacion/matematica).
-    for materia in AREAS_ACADEMICAS + ["lenguaje", "mat_prim"]:
-        b1 = f"b1_{materia}"
-        b3 = f"b3_{materia}"
-        tend = f"tend_temprana_{materia}"
-        if b1 in df.columns and b3 in df.columns:
-            df[tend] = df[b3].fillna(df[b1]) - df[b1].fillna(df[b3])
-            # Igual que con FEATURES_EARLY: si b1/b3 no tienen datos reales
-            # (formato solo-anual), tend queda enteramente NaN — no sirve
-            # como feature y no debe contarse para el umbral de "≥3 features".
-            if tend not in early_available and df[tend].notna().sum() >= 5:
-                early_available.append(tend)
-
-    if len(early_available) >= 3:
-        available = early_available
-    else:
-        # Fallback a PP si no hay bimestres. Igual que arriba: una columna
-        # sin datos reales (100% NaN) no se puede imputar por mediana (la
-        # mediana de puro NaN es NaN) y rompe el entrenamiento — se descarta.
-        available = [f for f in FEATURES_PP if f in df.columns and df[f].notna().sum() >= 5]
-        modo = "descriptivo (sin bimestres suficientes)"
+        early_available = [f for f in FEATURES_EARLY if f in df.columns and df[f].notna().sum() >= 5]
+        if len(early_available) >= 3:
+            available = early_available
+            modo = "descriptivo (solo 1 bimestre cargado: aún no se puede pronosticar)"
+        else:
+            # pp_matematica y pp_comunicacion se excluyen a propósito: el
+            # objetivo es exactamente "pp_matematica <= 13 OR pp_comunicacion
+            # <= 13", incluirlas sería circular (AUC ≈ 1.0 sin valor real).
+            available = [f for f in FEATURES_PP if f in df.columns and df[f].notna().sum() >= 5]
+            modo = "descriptivo (PP anual)"
+        mask_todos = df["riesgo_target"].notna().values
+        X = df.loc[mask_todos, available].copy()
+        y = df.loc[mask_todos, "riesgo_target"].astype(int).values
+        for col in X.columns:
+            X[col] = X[col].fillna(X[col].median())
+        medianas = X.median().fillna(0)
 
     print(f"      Features usadas ({len(available)}): {available}")
     print(f"      Modo de predicción: {modo}")
-
-    # Filtrar solo alumnos con target conocido (tienen B4)
-    mask_target = df["riesgo_target"].notna()
-    df_model = df[mask_target].copy()
-    X = df_model[available].copy()
-    y = df_model["riesgo_target"].values
-    print(f"      Alumnos con B4 conocido: {len(df_model)} / {len(df)}")
-
-    # Imputar nulos con mediana
-    for col in X.columns:
-        X[col] = X[col].fillna(X[col].median())
-
-    print(f"      Alumnos totales: {len(X)}")
-    print(f"      En riesgo (y=1): {y.sum()} ({100*y.mean():.1f}%)")
+    print(f"      Alumnos totales: {len(df)} | con resultado conocido para entrenar: {len(X)}")
+    print(f"      En riesgo (y=1): {int(y.sum())} ({100*y.mean():.1f}%)" if len(y) else "      Sin alumnos para entrenar")
 
     # ── 3. Entrenar modelo ────────────────────────────────────────────────────
     print("\n[3/4] Entrenando modelo...")
 
-    pos = y.sum()
+    pos = int(y.sum())
     neg = len(y) - pos
+    modelo = None
+    oof = None
+    auc_cv = precision_cv = recall_cv = f1_cv = float("nan")
+    auc_train = f1_train = precision_train = recall_train = accuracy_train = float("nan")
+    n_splits_used = 0
+    cm_train = fpr_train = tpr_train = None
+    importancia_variables = None
 
-    # Si no hay suficiente varianza, usar scoring puro (sin clasificador)
-    if pos == 0 or neg == 0:
-        print("      Sin varianza en target — usando score basado en promedio.")
-        modelo    = None
-        auc_cv          = float("nan")
-        auc_train       = float("nan")
-        f1_train        = float("nan")
-        precision_train = float("nan")
-        recall_train    = float("nan")
-        accuracy_train  = float("nan")
-        n_splits_used   = 0
-        cm_train        = None
-        fpr_train       = None
-        tpr_train       = None
-        importancia_variables = None
+    if min(pos, neg) < MIN_CLASE:
+        # Muestra insuficiente (pocos alumnos en riesgo o pocos sin riesgo):
+        # un modelo aquí sería ruido. Se muestra el índice de notas y se avisa.
+        print(f"      Muestra insuficiente (en riesgo={pos}, sin riesgo={neg}; mínimo {MIN_CLASE} de cada uno) — se usa el índice de notas.")
+        if not modo.startswith("descriptivo"):
+            modo = "descriptivo (muestra insuficiente para pronosticar)"
     else:
-        class_weight = {0: 1.0, 1: max(1.0, neg / max(pos, 1))}
-
-        pipe_lr = Pipeline([
-            ("scaler", StandardScaler()),
-            ("clf",    LogisticRegression(
-                C=1.0, max_iter=1000, class_weight=class_weight, random_state=42
-            )),
-        ])
-        pipe_rf = Pipeline([
-            ("scaler", StandardScaler()),
-            ("clf",    RandomForestClassifier(
-                n_estimators=300, max_depth=6,
-                class_weight=class_weight, random_state=42, n_jobs=-1
-            )),
-        ])
-        pipe = VotingClassifier(
-            estimators=[("lr", pipe_lr), ("rf", pipe_rf)],
-            voting="soft",
-        )
-
-        # ── Cross-validation AUC (estimador insesgado) ────────────────────────
-        # Con ~95 alumnos y ~15% positivos: 5-fold deja ~3 positivos por fold,
-        # suficiente para calcular AUC. Si hay muy pocos, reducimos a 3-fold.
-        n_splits = 5 if pos >= 10 else 3 if pos >= 5 else 0
-        if n_splits >= 3:
-            skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
-            cv_aucs = cross_val_score(pipe, X, y, cv=skf, scoring="roc_auc")
-            auc_cv  = float(cv_aucs.mean())
-            print(f"      AUC CV ({n_splits}-fold) : {auc_cv:.4f}  "
-                  f"(±{float(cv_aucs.std()):.4f}  por fold: {[round(a,3) for a in cv_aucs]})")
-        else:
-            auc_cv = float("nan")
-            print("      Muy pocos positivos para CV — se omite AUC CV.")
-        n_splits_used = n_splits
-
-        # Entrenar el ensemble y CALIBRAR sus probabilidades (Platt / sigmoid).
-        # Sin calibrar, el VotingClassifier produce probabilidades infladas
-        # (muchos alumnos con 90%+ aunque su nivel por notas sea bajo); la
-        # calibración las ajusta a frecuencias reales y las vuelve creíbles.
-        # Queda consistente con el modelo nacional EM 2022 (también calibrado).
-        # Se usa sigmoid (no isotónica) por ser más robusta con pocos alumnos;
-        # el cv interno se acota al tamaño del colegio.
-        cal_cv = 5 if pos >= 25 else 3 if pos >= 6 else 2
-        modelo = CalibratedClassifierCV(pipe, method="sigmoid", cv=cal_cv)
-        modelo.fit(X, y)
-        y_prob    = modelo.predict_proba(X)[:, 1]
-        y_pred    = (y_prob >= 0.5).astype(int)
+        res = _entrenar_calibrado(X, y)
+        modelo, oof, n_splits_used = res["modelo"], res["oof"], res["n_splits"]
+        class_weight = res["class_weight"]
+        y_prob = modelo.predict_proba(X)[:, 1]
+        y_pred = (y_prob >= 0.5).astype(int)
         auc_train       = float(roc_auc_score(y, y_prob))
         f1_train        = float(f1_score(y, y_pred, zero_division=0))
         precision_train = float(precision_score(y, y_pred, zero_division=0))
         recall_train    = float(recall_score(y, y_pred, zero_division=0))
         accuracy_train  = float(accuracy_score(y, y_pred))
-        print(f"      AUC (train, referencia) : {auc_train:.4f}  "
-              f"F1 (train): {f1_train:.4f}  "
-              f"Precision: {precision_train:.4f}  Recall: {recall_train:.4f}")
-        print("      Modelo CALIBRADO (sigmoid). El AUC CV es el indicador válido.")
+        if oof is not None:
+            y_pred_cv    = (oof >= 0.5).astype(int)
+            auc_cv       = float(roc_auc_score(y, oof))
+            precision_cv = float(precision_score(y, y_pred_cv, zero_division=0))
+            recall_cv    = float(recall_score(y, y_pred_cv, zero_division=0))
+            f1_cv        = float(f1_score(y, y_pred_cv, zero_division=0))
+            print(f"      AUC validación cruzada ({n_splits_used}-fold): {auc_cv:.4f}  "
+                  f"(precisión {precision_cv:.2f} · recall {recall_cv:.2f} · F1 {f1_cv:.2f})")
+        print(f"      AUC (train, referencia) : {auc_train:.4f}  F1 (train): {f1_train:.4f}")
+        print("      Modelo CALIBRADO (sigmoid). La validación cruzada es el indicador válido.")
 
         # Matriz de confusión y curva ROC (en muestra, igual referencia que las
-        # demás métricas "train") — se guardan para mostrar en el front los
-        # mismos gráficos que ya existen para el modelo nacional EM 2022
-        # (ConfusionMatrix / RocMiniChart), con los datos propios del colegio.
+        # demás métricas "train") para los gráficos del front.
         cm_train = confusion_matrix(y, y_pred).tolist()
         fpr_train, tpr_train, _ = roc_curve(y, y_prob)
 
-        # ── Importancia global de variables (HU034) ───────────────────────────
-        # El ensemble calibrado no expone una única "importancia" combinada, y
-        # SHAP por instancia (como en EM2022) no es confiable con muestras tan
-        # chicas por colegio. En vez de eso, se entrena aparte un Random Forest
-        # simple (mismas features, mismo class_weight) solo para leer su
-        # feature_importances_ -- una medida global estándar, estable incluso
-        # con pocos alumnos, que no participa en las predicciones reales.
+        # Importancia global de variables: un Random Forest simple aparte (el
+        # ensemble calibrado no expone una importancia única y SHAP por
+        # instancia no es confiable con muestras tan chicas).
         pipe_rf_importancia = Pipeline([
             ("scaler", StandardScaler()),
             ("clf", RandomForestClassifier(
-                n_estimators=300, max_depth=6,
+                n_estimators=300, max_depth=4, min_samples_leaf=3,
                 class_weight=class_weight, random_state=42, n_jobs=-1,
             )),
         ])
@@ -318,19 +396,39 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
     # ── 4. Generar predicciones y guardar ─────────────────────────────────────
     print("\n[4/4] Generando predicciones y guardando artefacto...")
 
+    # Bimestres en que cada alumno estuvo en riesgo (Matemática o Comunicación <= 13)
+    en_riesgo_bim = [_riesgo_bimestre(df, n).fillna(0) for n in range(1, k + 1)]
+    df["bimestres_en_riesgo"] = sum(en_riesgo_bim).astype(int) if en_riesgo_bim else 0
+    df["bimestres_evaluados"] = k
+    if k >= 1:
+        # "riesgo" = en riesgo en el último bimestre cargado (antes salía del
+        # promedio anual y, en formatos por bimestre, quedaba en 0 para todos).
+        df["riesgo"] = _riesgo_bimestre(df, k).fillna(0).astype(int)
+
     if modelo is not None:
-        X_imp = X.copy()
-        for col in X_imp.columns:
-            X_imp[col] = X_imp[col].fillna(X_imp[col].median())
-        df["prob_riesgo"] = modelo.predict_proba(X_imp)[:, 1]
+        if X_apply is not None:
+            # Pronóstico: bimestre siguiente, aún sin resultado → fuera de muestra por definición
+            df["prob_riesgo"] = modelo.predict_proba(X_apply)[:, 1]
+        else:
+            # Sin futuro que pronosticar (cierre de año, o modo descriptivo):
+            # probabilidades de validación cruzada, no del modelo viendo la respuesta
+            if k >= 2:
+                X_todos = _features_transicion(df, k - 1, k - 2 if k - 2 >= 1 else None, usar_conducta_prom=False)
+                X_todos = X_todos.reindex(columns=available).fillna(medianas)
+            else:
+                X_todos = df[available].copy()
+                for col in X_todos.columns:
+                    X_todos[col] = X_todos[col].fillna(medianas[col])
+            probs = modelo.predict_proba(X_todos)[:, 1]
+            if oof is not None:
+                probs[np.where(mask_todos)[0]] = oof
+            df["prob_riesgo"] = probs
     else:
         df["prob_riesgo"] = df["riesgo_score"]
 
     # ── Nivel de riesgo coherente con el modelo ───────────────────────────────
     # El badge ALTO/MEDIO/BAJO se deriva de la probabilidad CALIBRADA (umbral
     # 70%/45%, igual que el modelo nacional EM 2022), no del índice de notas.
-    # Así el badge "Nivel" y el "%" mostrados SIEMPRE concuerdan, y el sistema
-    # actúa como alerta temprana (predicción) y no como foto de notas actuales.
     # El índice ponderado de notas (riesgo_score) se conserva como métrica
     # explicable secundaria (transparente: Mate 25%, Com 20%, ...).
     if modelo is not None:
@@ -352,6 +450,7 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
     cols_out = [
         "n_alumno", "nombre", "salon", "codigo_ie",
         "nivel_riesgo", "prob_riesgo", "riesgo",
+        "bimestres_en_riesgo", "bimestres_evaluados",
         "n_materias_c", "promedio_materias", "conducta_promedio",
     ] + [
         c for c in df.columns
@@ -363,7 +462,46 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
     cols_out = [c for c in cols_out if c in df.columns]
     predicciones = df[cols_out].replace({np.nan: None}).to_dict(orient="records")
 
-    nombre_colegio = df["nombre_colegio"].iloc[0] if "nombre_colegio" in df.columns else codigo_ie
+    nombre_colegio = _resolver_nombre_colegio(
+        df["nombre_colegio"].iloc[0] if "nombre_colegio" in df.columns else None, output_path, codigo_ie,
+    )
+
+    if modelo is None or k < 2:
+        tipo_resultado = "descriptivo"
+        if modelo is None:
+            nota = (
+                "Modo descriptivo: " + (
+                    "con un solo bimestre cargado no se puede pronosticar; los porcentajes son un índice "
+                    "de las notas actuales, no una predicción." if k <= 1 else
+                    "no hay suficientes alumnos en riesgo y sin riesgo para entrenar un modelo; los "
+                    "porcentajes son un índice de las notas actuales, no una predicción."
+                ) + " Sube más bimestres para activar el pronóstico."
+            )
+        else:
+            nota = (
+                "Modo descriptivo: sin al menos 2 bimestres cargados no se puede pronosticar; el modelo se "
+                "ajustó al promedio anual y los porcentajes describen la situación actual, no el futuro. "
+                "Sube más bimestres para activar el pronóstico."
+            )
+    elif k < 4:
+        tipo_resultado = "pronostico"
+        nota = (
+            f"PRONÓSTICO DEL {bimestre_pron}.° BIMESTRE: el modelo aprendió con este colegio cómo las notas "
+            f"previas anticipan el bimestre siguiente (B{prev1}"
+            + (f" y B{prev2}" if prev2 else "") + f" → B{k}) y lo aplica a B{k}"
+            + (f" y B{k-1}" if prev2 else "") + f" para estimar quién estará en riesgo en B{bimestre_pron}, "
+            f"cuando todavía hay tiempo de intervenir. Validación cruzada de esa transición: AUC "
+            f"{round(auc_cv, 3) if not np.isnan(auc_cv) else 'N/A'}. Se confirma comparando con las notas reales "
+            f"cuando se suba B{bimestre_pron}."
+        )
+    else:
+        tipo_resultado = "cierre_anual"
+        nota = (
+            "CIERRE DE AÑO: los 4 bimestres ya están cargados, así que no queda un bimestre por pronosticar. "
+            "El porcentaje es la probabilidad (de validación cruzada, fuera de muestra) con la que el modelo "
+            "habría anticipado el riesgo en B4 a partir de B2-B3: mide qué tan consistente es el patrón de "
+            "cada alumno. Junto a él se muestra en cuántos bimestres estuvo realmente en riesgo."
+        )
 
     artefacto = {
         "codigo_ie":      codigo_ie,
@@ -378,11 +516,18 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
         "metricas": {
             "nombre_colegio": nombre_colegio,
             "modo_prediccion": modo,
+            "tipo_resultado": tipo_resultado,
+            "bimestres_cargados": list(range(1, k + 1)),
+            "bimestre_pronosticado": bimestre_pron if (modelo is not None and 2 <= k < 4) else None,
+            "umbral_riesgo_nota": NOTA_RIESGO,
             "n_alumnos":      len(df),
             "n_alumnos_modelo": len(X),
             "n_riesgo":       int(y.sum()),
-            "pct_riesgo":     round(100 * float(y.mean()), 1),
+            "pct_riesgo":     round(100 * float(y.mean()), 1) if len(y) else 0.0,
             "auc_cv":         round(auc_cv, 4)         if not np.isnan(auc_cv)         else None,
+            "precision_cv":   round(precision_cv, 4)   if not np.isnan(precision_cv)   else None,
+            "recall_cv":      round(recall_cv, 4)      if not np.isnan(recall_cv)      else None,
+            "f1_cv":          round(f1_cv, 4)          if not np.isnan(f1_cv)          else None,
             "auc_train":      round(auc_train, 4)      if not np.isnan(auc_train)      else None,
             "f1_train":       round(f1_train, 4)       if not np.isnan(f1_train)       else None,
             "precision_train": round(precision_train, 4) if not np.isnan(precision_train) else None,
@@ -395,16 +540,7 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None) -> None:
             "roc_fpr": fpr_train.tolist() if fpr_train is not None else None,
             "roc_tpr": tpr_train.tolist() if tpr_train is not None else None,
             "importancia_variables": importancia_variables,
-            "nota_metodologica": (
-                f"MODO PREDICTIVO: features B1-B3, target B4. "
-                f"AUC CV {n_splits_used}-fold = {round(auc_cv,4) if not np.isnan(auc_cv) else 'N/A'}. "
-                "El modelo predice quién tendrá C en el 4° bimestre usando solo los 3 primeros, "
-                "permitiendo intervención oportuna. Validación real: comparar predicciones con "
-                "resultados finales al cierre del año académico."
-            ) if n_splits_used >= 3 else (
-                "Modo descriptivo (fallback): pocos datos de B4. "
-                "Actualizar cuando estén disponibles todos los bimestres."
-            ),
+            "nota_metodologica": nota,
             "salones":        df["salon"].unique().tolist(),
             # Hojas/archivos que se omitieron o fallaron al leer el Excel (p.ej.
             # muy pocos alumnos, formato no reconocido) — se muestran en la UI

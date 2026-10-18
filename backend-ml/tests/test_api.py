@@ -39,15 +39,17 @@ def client():
 
 class TestHealth:
     def test_health_ok(self, client):
-        r = client.get("/health")
+        r = client.get("/v1/health")
         assert r.status_code == 200
         data = r.json()
         assert data["status"] == "ok"
 
     def test_health_model_loaded(self, client):
-        r = client.get("/health")
+        # TestClient no ejecuta el arranque de la app (el modelo se carga en segundo
+        # plano al levantar el servidor): un endpoint que lo necesita lo carga lazy.
+        client.get("/v1/modelo/metricas")
+        r = client.get("/v1/health")
         data = r.json()
-        # El modelo debe haberse cargado en arranque
         assert data.get("model_loaded") is True or "trained_at" in data
 
 

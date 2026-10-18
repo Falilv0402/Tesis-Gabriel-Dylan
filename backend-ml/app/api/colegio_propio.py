@@ -279,6 +279,15 @@ def get_resumen(auth_ctx: dict = Depends(require_admin_de_colegio)):
             "roc_fpr":           m.get("roc_fpr"),
             "roc_tpr":           m.get("roc_tpr"),
             "modo_prediccion":   m.get("modo_prediccion"),
+            # tipo_resultado: "pronostico" | "cierre_anual" | "descriptivo" — qué significan
+            # los porcentajes (el front ya no debe asumir siempre "B1-B3 → B4")
+            "tipo_resultado":        m.get("tipo_resultado"),
+            "bimestres_cargados":    m.get("bimestres_cargados"),
+            "bimestre_pronosticado": m.get("bimestre_pronosticado"),
+            "umbral_riesgo_nota":    m.get("umbral_riesgo_nota"),
+            "precision_cv":          m.get("precision_cv"),
+            "recall_cv":             m.get("recall_cv"),
+            "f1_cv":                 m.get("f1_cv"),
             "salones":           m.get("salones", []),
             "nombre_colegio":    m.get("nombre_colegio", art.get("nombre_colegio", codigo_ie)),
             "nota_metodologica": m.get("nota_metodologica"),
@@ -486,6 +495,9 @@ async def procesar_excels(
         "status":    "ok",
         "codigo_ie": codigo_ie,
         "archivos_procesados": len(saved),
+        # La carpeta del colegio es acumulativa (se pueden ir sumando bimestres):
+        # el modelo se reentrena con TODO lo que hay ahí, no solo con esta carga.
+        "archivos_en_carpeta": len(list(upload_dir.glob("*.xls*"))),
         "metricas":  art["metricas"],
         "nuevos_alto": n_nuevos_alto,  # HU019: cuántos alumnos pasaron a ALTO recién ahora
     }
