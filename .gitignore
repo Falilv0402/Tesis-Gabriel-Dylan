@@ -38,3 +38,5 @@ exports/
 Thumbs.db
 .vscode/
 
+# Cuentas generadas por scripts/crear_cuentas_colegios.py (hashes y contraseñas en claro)
+scripts/_local/
