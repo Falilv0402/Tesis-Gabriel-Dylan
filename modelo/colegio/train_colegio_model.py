@@ -259,6 +259,56 @@ def _entrenar_calibrado(X: pd.DataFrame, y: np.ndarray) -> dict:
     return {"modelo": modelo, "oof": oof, "n_splits": n_splits if oof is not None else 0, "class_weight": class_weight}
 
 
+def _limpiar_relleno_de_arboles(*objetos) -> int:
+    """Pone a cero el relleno (padding) de los nodos de todos los árboles de scikit-learn dentro de `objetos`.
+
+    Cada nodo es un registro de 64 bytes con un hueco de relleno que scikit-learn no inicializa: al guardar el modelo
+    ese hueco arrastra lo que hubiera en la memoria del proceso (restos de texto de datos anteriores). Los Excel ya
+    llegan sin nombres, pero esto garantiza que el .pkl jamás cargue restos de memoria aunque algún día se entrene
+    con datos que traigan nombres. No cambia ningún valor del modelo. Devuelve cuántos bytes limpió."""
+    from sklearn.base import BaseEstimator
+
+    vistos: set[int] = set()
+    limpiados = 0
+
+    def _contenedor(valor):
+        if isinstance(valor, (list, tuple)):
+            for v in valor:
+                yield from _contenedor(v)
+        elif isinstance(valor, dict):
+            for v in valor.values():
+                yield from _contenedor(v)
+        elif isinstance(valor, BaseEstimator):
+            yield valor
+
+    def _visitar(o) -> None:
+        nonlocal limpiados
+        if id(o) in vistos:
+            return
+        vistos.add(id(o))
+        arbol = getattr(o, "tree_", None)
+        if arbol is not None:
+            try:
+                nodos = arbol.__getstate__()["nodes"]            # vista sobre la memoria del árbol (no una copia)
+                usados = np.zeros(nodos.dtype.itemsize, dtype=bool)
+                for dtype_campo, desplazamiento in nodos.dtype.fields.values():
+                    usados[desplazamiento: desplazamiento + dtype_campo.itemsize] = True
+                if not usados.all():
+                    crudo = nodos.view(np.uint8).reshape(len(nodos), nodos.dtype.itemsize)
+                    crudo[:, ~usados] = 0
+                    limpiados += int((~usados).sum()) * len(nodos)
+            except Exception:                                    # versión de sklearn con otro formato: no se bloquea el entrenamiento
+                pass
+        for valor in list(vars(o).values()):
+            for hijo in _contenedor(valor):
+                _visitar(hijo)
+
+    for objeto in objetos:
+        for estimador in _contenedor(objeto):
+            _visitar(estimador)
+    return limpiados
+
+
 def train(carpeta: str, codigo_ie: str, distrito: str | None = None, nombre_manual: str | None = None) -> None:
     model_dir = Path(__file__).resolve().parents[1] / "model"
     model_dir.mkdir(exist_ok=True)
@@ -570,6 +620,7 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None, nombre_manu
     }
 
     _respaldar_modelo_anterior(output_path)
+    _limpiar_relleno_de_arboles(artefacto["modelo"])
     joblib.dump(artefacto, output_path)
     print(f"  ✓ Artefacto guardado → {output_path}")
     print(f"\n  Distribución de riesgo:")

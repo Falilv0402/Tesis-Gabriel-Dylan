@@ -317,13 +317,12 @@ def test_procesar_rechaza_solo_los_archivos_invalidos_y_dice_por_que(tmp_path):
 
 def test_el_modelo_entrenado_no_conserva_ningun_nombre_de_alumno(entrenar, tmp_path):
     """Opción D: aunque el Excel traiga nombres, el .pkl (predicciones, métricas, todo) solo lleva seudónimos."""
-    import io
     art = entrenar([1, 2, 3])
     nombres = [p["nombre"] for p in art["predicciones"]]
     assert all(n.startswith("Estudiante ") for n in nombres) and len(set(nombres)) == len(nombres) == 80
-    buf = io.BytesIO()
-    joblib.dump(art, buf)
-    assert b"ALUMNO A0" not in buf.getvalue() and b"PRUEBA" not in buf.getvalue()     # los nombres sintéticos del Excel
+    # bytes del ARCHIVO guardado (re-serializarlo aquí mezclaría la memoria de este proceso, que sí tiene los nombres)
+    crudo = (tmp_path / "modelo" / "model" / "colegio_999001.pkl").read_bytes()
+    assert b"ALUMNO A0" not in crudo and b"PRUEBA" not in crudo                          # los nombres sintéticos del Excel
     # el mapa de seudónimos existe, lleva solo hashes y no contiene los nombres
     mapa = (tmp_path / "modelo" / "model" / "colegio_999001_seudonimos.json").read_text(encoding="utf-8")
     assert "ALUMNO" not in mapa.upper() and "PRUEBA" not in mapa.upper()
@@ -332,3 +331,31 @@ def test_el_modelo_entrenado_no_conserva_ningun_nombre_de_alumno(entrenar, tmp_p
     tm.train(str(carpeta), "999001")
     art2 = joblib.load(tmp_path / "modelo" / "model" / "colegio_999001.pkl")
     assert {(p["salon"], p["n_alumno"]): p["nombre"] for p in art2["predicciones"]} ==            {(p["salon"], p["n_alumno"]): p["nombre"] for p in art["predicciones"]}
+
+
+def test_limpiar_relleno_de_arboles_pone_a_cero_el_hueco_sin_cambiar_el_modelo():
+    from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+    from sklearn.linear_model import LogisticRegression
+
+    rng = np.random.default_rng(1)
+    X = rng.normal(size=(200, 6))
+    y = (X[:, 0] + rng.normal(0, 0.5, 200) > 0).astype(int)
+    modelo = VotingClassifier([("lr", LogisticRegression(max_iter=200)),
+                               ("rf", RandomForestClassifier(n_estimators=15, random_state=0))], voting="soft").fit(X, y)
+    antes = modelo.predict_proba(X)
+
+    def relleno_distinto_de_cero():
+        total = 0
+        for arbol in modelo.named_estimators_["rf"].estimators_:
+            nodos = arbol.tree_.__getstate__()["nodes"]
+            usados = np.zeros(nodos.dtype.itemsize, dtype=bool)
+            for dt, off in nodos.dtype.fields.values():
+                usados[off: off + dt.itemsize] = True
+            crudo = nodos.view(np.uint8).reshape(len(nodos), nodos.dtype.itemsize)
+            total += int((crudo[:, ~usados] != 0).sum())
+        return total
+
+    limpiados = tm._limpiar_relleno_de_arboles(modelo)
+    assert limpiados > 0 and relleno_distinto_de_cero() == 0
+    assert np.array_equal(antes, modelo.predict_proba(X))              # ningún valor del modelo cambió
+    assert tm._limpiar_relleno_de_arboles(None, {"x": 1}) == 0         # tolera lo que no es un modelo

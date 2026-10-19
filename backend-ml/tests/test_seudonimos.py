@@ -278,11 +278,9 @@ def _colegio_sintetico(carpeta: Path, n_por_salon=40, seed=3):
 
 
 def test_endpoint_procesar_no_deja_nombres_en_ningun_lado_y_entrega_el_libro(tmp_path, monkeypatch):
-    import io
     import shutil
     import tempfile
 
-    import joblib
     from starlette.testclient import TestClient
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -334,9 +332,8 @@ def test_endpoint_procesar_no_deja_nombres_en_ningun_lado_y_entrega_el_libro(tmp
         for f in carpeta.iterdir():
             contenido = _texto_de_todas_las_celdas(f) if f.suffix == ".xlsx" else f.read_text(encoding="utf-8", errors="ignore").upper()
             assert "ALUMNO A0" not in contenido and "PRUEBA" not in contenido, f.name
-        buf = io.BytesIO()
-        joblib.dump(joblib.load(raiz / "model" / "colegio_999780.pkl"), buf)
-        assert b"ALUMNO A0" not in buf.getvalue()
+        # bytes del ARCHIVO (no una re-serialización: en este proceso hay nombres sintéticos en la memoria)
+        assert b"ALUMNO A0" not in (raiz / "model" / "colegio_999780.pkl").read_bytes()
         assert "PRUEBA" not in (raiz / "model" / "colegio_999780_seudonimos.json").read_text(encoding="utf-8").upper()
         assert set(Path(tempfile.gettempdir()).glob("satra_subida_*")) == temporales_antes      # el temporal con los originales se borró
 
@@ -401,3 +398,44 @@ def test_el_sql_de_limpieza_de_supabase_solo_lleva_seudonimos(tmp_path):
     joblib.dump({"predicciones": preds}, tmp_path / "colegio_831305.pkl")
     with pytest.raises(SystemExit):
         gs.generar_sql(tmp_path, ["831305"])
+
+
+# ─── Un archivo solo se guarda si se puede garantizar que no lleva nombres ────
+
+def _libro_con_hojas(ruta: Path, hojas: dict[str, list[list]]):
+    import openpyxl
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    for nombre, filas in hojas.items():
+        ws = wb.create_sheet(nombre)
+        for fila in filas:
+            ws.append(fila)
+    wb.save(ruta)
+
+
+def test_un_archivo_sin_la_columna_de_nombres_se_rechaza_y_no_se_guarda(tmp_path):
+    carpeta = tmp_path / "colegio"
+    carpeta.mkdir()
+    origen = tmp_path / "Notas raras.xlsx"
+    # otro encabezado ("ALUMNO"): el anonimizador no puede ubicar los nombres → no debe guardarlo tal cual
+    _libro_con_hojas(origen, {"2B": [["N°", "ALUMNO", "MATEMÁTICA"], [1, "BERNAL MONTERO, FATIMA", 14], [2, "BLAS FABIAN, ABDIEL", 11]]})
+    s = sd.Seudonimizador(None)
+    with pytest.raises(ValueError, match="APELLIDOS Y NOMBRES"):
+        an.anonimizar_subida(origen, carpeta, "Notas raras.xlsx", s)
+    assert list(carpeta.iterdir()) == []
+
+
+def test_una_hoja_worksheet_sin_columna_se_omite_pero_el_resto_se_guarda(tmp_path):
+    origen, destino = tmp_path / "Notas.xlsx", tmp_path / "anon.xlsx"
+    _libro_con_hojas(origen, {
+        "CONSOLIDADO DE NOTAS": [["REPORTE CONSOLIDADO DE NOTAS - I BIMESTRE"], ["SECUNDARIA - 2° - B"], [],
+                                 ["N°", "APELLIDOS Y NOMBRES", "ÁLGEBRA"], [1, "BERNAL MONTERO, FATIMA", 14]],
+        "Worksheet 1": [["BLAS FABIAN, ABDIEL"], ["CAPIRE CARBAJAL, SURREY"]],     # sobrante de CUBICOL: el parser lo ignora
+        "Hoja vacía": [],
+    })
+    s = sd.Seudonimizador(None)
+    an.anonimizar_libro(origen, destino, s, "notas")
+    hojas = pd.read_excel(destino, sheet_name=None, header=None, dtype=str)
+    assert "Worksheet 1" not in hojas and "CONSOLIDADO DE NOTAS" in hojas
+    texto = _texto_de_todas_las_celdas(destino)
+    assert "BERNAL" not in texto and "BLAS" not in texto and "CAPIRE" not in texto

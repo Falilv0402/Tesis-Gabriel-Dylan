@@ -85,6 +85,17 @@ def anonimizar_libro(origen: str | Path, destino: str | Path, mapper: Seudonimiz
         for hoja in xl.sheet_names:
             df = pd.read_excel(xl, sheet_name=hoja, header=None, dtype=str)   # igual que el parser
             ubic = _columnas_de_nombre(df) if len(df) else None
+            # Un archivo solo se guarda si se PUEDE garantizar que no lleva nombres: toda hoja con contenido debe
+            # tener la columna "APELLIDOS Y NOMBRES" (así lee el parser a los alumnos). Las hojas "Worksheet N" que
+            # trae CUBICOL sin usar el parser las ignora igual, así que se omiten; cualquier otra hoja con datos y
+            # sin esa columna hace que se rechace el archivo en vez de guardarlo con nombres sin reemplazar.
+            tiene_contenido = bool(len(df)) and bool(df.notna().to_numpy().any())
+            if ubic is None and tiene_contenido:
+                if "worksheet" in hoja.lower():
+                    continue
+                raise ValueError(
+                    f"La hoja '{hoja}' no tiene la columna «APELLIDOS Y NOMBRES»: no se puede verificar que no lleve nombres de alumnos"
+                )
             if ubic is not None:
                 inicio, cols = ubic
                 salon = _salon_de_hoja(df, hoja, tipo)
