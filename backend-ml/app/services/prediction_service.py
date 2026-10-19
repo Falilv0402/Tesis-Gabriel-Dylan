@@ -136,7 +136,7 @@ class PredictionService:
                 "facets": {"distrito": counts("distrito"), "sexo": counts("sexo"), "nivel": counts("nivel_riesgo")}}
 
     def get_colegios(self):
-        import joblib as _jl
+        from app.services.artefactos import cargar_artefacto as _cargar
 
         model_dir = self._loader.model_path.parent
         records: list[dict] = []
@@ -160,7 +160,7 @@ class PredictionService:
                     pkl_path = model_dir / f"colegio_{code}.pkl"
                     if pkl_path.exists():
                         try:
-                            art = _jl.load(pkl_path)
+                            art = _cargar(pkl_path)
                             rec["nombre_ie"] = art.get("nombre_colegio", "")
                         except Exception:
                             pass
@@ -177,7 +177,7 @@ class PredictionService:
                 if codigo_norm in cubiertos:
                     continue
                 try:
-                    art = _jl.load(pkl_path)
+                    art = _cargar(pkl_path)
                 except Exception:
                     continue
                 cubiertos.add(codigo_norm)

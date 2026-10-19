@@ -19,6 +19,7 @@ import subprocess
 import sys
 
 from app.core.limiter import limiter
+from app.services.artefactos import cargar_artefacto
 
 
 def _validate_ie(codigo_ie: str) -> str:
@@ -124,7 +125,7 @@ def _load_artefacto(codigo_ie: str) -> dict:
     ]
     for path in candidates:
         if path.exists():
-            return joblib.load(path)
+            return cargar_artefacto(path)   # con caché en memoria: se relee solo si el archivo cambió
     raise HTTPException(
         status_code=404,
         detail=f"No hay modelo entrenado para la IE {codigo_ie}. "
