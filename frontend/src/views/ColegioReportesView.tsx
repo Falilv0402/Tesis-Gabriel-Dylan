@@ -89,12 +89,13 @@ export function ColegioReportesView({
     const headers = ["n_alumno", "nombre", "salon", "nivel_riesgo", "prob_riesgo",
       ...MATERIAS_COLEGIO.map((m) => `b${bimestre}_${m.key}`), "conducta_promedio"];
     const lines = [headers.join(",")];
+    const aUnDecimal = (n: number | null | undefined) => (n == null ? "" : Number(n.toFixed(1)));   // promedios de sub-áreas salían con 15 decimales
     for (const a of filtrados) {
       const row = [
-        a.n_alumno, `"${a.nombre}"`, a.salon, a.nivel_riesgo,
+        a.n_alumno, `"${a.nombre.replace(/"/g, '""')}"`, a.salon, a.nivel_riesgo,
         (a.prob_riesgo * 100).toFixed(1) + "%",
-        ...MATERIAS_COLEGIO.map((m) => notaCelda(a, m.key, bimestre).value ?? ""),
-        a.conducta_promedio ?? "",
+        ...MATERIAS_COLEGIO.map((m) => aUnDecimal(notaCelda(a, m.key, bimestre).value)),
+        aUnDecimal(a.conducta_promedio),
       ];
       lines.push(row.join(","));
     }

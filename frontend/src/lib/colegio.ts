@@ -245,7 +245,8 @@ export function historialRiesgo(
     );
     const notas = [mat, com].filter((x): x is number => x != null);
     const estado = notas.length === 0 ? "sin_datos" : notas.some((n) => n <= umbral) ? "en_riesgo" : "sin_riesgo";
-    return { bimestre: `B${b}`, matematica: mat, comunicacion: com, estado };
+    const aUnDecimal = (n: number | null) => (n == null ? null : Number(n.toFixed(1)));   // solo para mostrar: el estado usa la nota exacta
+    return { bimestre: `B${b}`, matematica: aUnDecimal(mat), comunicacion: aUnDecimal(com), estado };
   });
   const evaluados = filas.filter((f) => f.estado !== "sin_datos").length;
   return { filas, hayDatos: evaluados > 0, enRiesgo: filas.filter((f) => f.estado === "en_riesgo").length, evaluados };

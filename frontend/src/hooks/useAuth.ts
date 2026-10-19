@@ -49,6 +49,7 @@ export function useAuth(
 
   const skipOnboardingRef = useRef(false);
   const abortLoadProfile  = useRef(false);
+  const usuarioActualId   = useRef<string | null>(null);   // usuario con sesión ya cargada (ver onAuthStateChange)
 
   // ── Utilities ─────────────────────────────────────────────────────────────
   function translateAuthError(msg: string): string {
@@ -331,11 +332,21 @@ export function useAuth(
   // ── Effects ───────────────────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session: s } }) => {
+      usuarioActualId.current = s?.user?.id ?? usuarioActualId.current;
       setSession(s?.user ?? null);
       if (s?.user) await loadProfile(s.user.id);
       setAuthLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      // Supabase repite SIGNED_IN cada vez que la pestaña recupera el foco y emite TOKEN_REFRESHED cada hora. Si es el
+      // mismo usuario no hay nada que recargar: bloquear la pantalla ("Verificando sesion...") desmontaba toda la app y
+      // hacía perder la ficha abierta, la pestaña y lo que se estuviera escribiendo, y llenaba el audit_log de falsos inicios.
+      const mismoUsuario = !!s?.user && s.user.id === usuarioActualId.current;
+      usuarioActualId.current = s?.user?.id ?? null;
+      if (mismoUsuario) {
+        if (event === "USER_UPDATED") setSession(s!.user);
+        return;
+      }
       setSession(s?.user ?? null);
       if (s?.user) {
         abortLoadProfile.current = false;

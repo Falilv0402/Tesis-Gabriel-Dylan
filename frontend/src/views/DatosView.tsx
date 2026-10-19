@@ -507,7 +507,7 @@ export function DatosView({
                         <td style={{ padding: "6px 8px", color: "#dc2626", fontWeight: 600 }}>{v.n_alto ?? "—"}</td>
                         <td style={{ padding: "6px 8px", color: "#d97706", fontWeight: 600 }}>{v.n_medio ?? "—"}</td>
                         <td style={{ padding: "6px 8px", color: "#16a34a", fontWeight: 600 }}>{v.n_bajo ?? "—"}</td>
-                        <td style={{ padding: "6px 8px" }}>{v.auc_roc != null ? v.auc_roc.toFixed(3) : "—"}</td>
+                        <td style={{ padding: "6px 8px" }}>{v.auc_roc != null ? `${(v.auc_roc * 100).toFixed(1)}%` : "—"}</td>
                       </tr>
                     ))}
                   </tbody>

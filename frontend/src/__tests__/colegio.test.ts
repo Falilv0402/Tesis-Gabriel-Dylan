@@ -173,6 +173,11 @@ describe("historialRiesgo", () => {
     expect(h.hayDatos).toBe(false);
     expect(h.filas.every((f) => f.estado === "sin_datos")).toBe(true);
   });
+  test("muestra las notas con un decimal, pero decide el riesgo con la nota exacta", () => {
+    const f = historialRiesgo(alumno({ b1_matematica: 12.666666666666666, b1_comunicacion: 13.04, b2_matematica: 14, b2_comunicacion: 13.04 })).filas;
+    expect(f[0]).toMatchObject({ matematica: 12.7, comunicacion: 13, estado: "en_riesgo" });
+    expect(f[1]).toMatchObject({ matematica: 14, comunicacion: 13, estado: "sin_riesgo" });   // 13.04 > 13 aunque se vea 13
+  });
   test("respeta un umbral distinto", () => {
     expect(historialRiesgo(alumno({ b1_matematica: 14 }), 14).filas[0].estado).toBe("en_riesgo");
     expect(historialRiesgo(alumno({ b1_matematica: 14 }), 13).filas[0].estado).toBe("sin_riesgo");
