@@ -21,6 +21,7 @@ import { exportCsv, exportXlsx, exportPdf } from "@/lib/exports";
 import { Avatar } from "@/components/ui/Avatar";
 import { SinModeloPropio } from "@/components/ui/SinModeloPropio";
 import { ErrorConexionColegio } from "@/components/ui/ErrorConexionColegio";
+import { CargandoColegio } from "@/components/ui/CargandoColegio";
 import { ComparatorModal } from "@/components/modals/ComparatorModal";
 import { IeProfileModal } from "@/components/modals/IeProfileModal";
 import { ProfilePanel } from "@/components/modals/ProfilePanel";
@@ -208,9 +209,12 @@ export default function Page() {
 
   // Cuando el colegio no tiene datos que mostrar: si el servidor no respondió (HU009-3) se avisa el error de conexión;
   // solo si respondió y no hay modelo se dice "Sin modelo propio configurado".
-  const sinModeloOError = colegio.error === "connection"
-    ? <ErrorConexionColegio onRetry={() => void colegio.reload()} />
-    : <SinModeloPropio setTab={setTab} />;
+  // Mientras no termina la primera consulta se dice "Cargando…": todavía no se sabe si hay modelo.
+  const sinModeloOError = !colegio.loaded || colegio.isLoading
+    ? <CargandoColegio />
+    : colegio.error === "connection"
+      ? <ErrorConexionColegio onRetry={() => void colegio.reload()} />
+      : <SinModeloPropio setTab={setTab} />;
 
   // ── Loading state ─────────────────────────────────────────────────
   // authLoading: sesión aún no verificada con Supabase.
@@ -608,6 +612,7 @@ export default function Page() {
               em2022Metrics={modelData.metrics}
               em2022Evaluation={modelData.evaluation}
               colegioModelStats={admin.colegioModelStats}
+              colegioStatsCargada={admin.colegioStatsCargada}
               modelosVersiones={admin.modelosVersiones}
               colegioRespaldo={admin.colegioRespaldo}
               restaurandoModelo={admin.restaurandoModelo}

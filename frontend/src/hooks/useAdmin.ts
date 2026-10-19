@@ -92,8 +92,19 @@ export function useAdmin(
     importancia_variables: { variable: string; importancia: number }[] | null;
   } | null>(null);
 
+  // Marca cuándo terminó la PRIMERA consulta del modelo del colegio: mientras no haya terminado, la pantalla de Datos
+  // debe decir "Cargando…" y no "Sin modelo entrenado" (colegioModelStats es null tanto al empezar como si no hay modelo).
+  const [colegioStatsCargada, setColegioStatsCargada] = useState(false);
   async function loadColegioModelStats(ieCode: string) {
     if (!ieCode) return;
+    try {
+      await consultarColegioModelStats(ieCode);
+    } finally {
+      setColegioStatsCargada(true);
+    }
+  }
+
+  async function consultarColegioModelStats(ieCode: string) {
     const ieNorm = String(parseInt(ieCode, 10)); // "0249" → "249"
     try {
       // 1️⃣ Intentar modelo CUBICOL propio del colegio
@@ -646,7 +657,7 @@ export function useAdmin(
     colegioUploadIe, setColegioUploadIe,
     colegioUploadStatus, colegioUploadMsg, colegioUploadResult,
     colegioFileRef, uploadColegioExcels,
-    colegioModelStats, loadColegioModelStats,
+    colegioModelStats, colegioStatsCargada, loadColegioModelStats,
     modelosVersiones, loadModelosVersiones,
     colegioRespaldo, restaurandoModelo, restaurarModeloColegio,
     loadDbUsers, loadDbAudit,

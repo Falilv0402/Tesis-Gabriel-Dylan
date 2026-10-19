@@ -57,6 +57,8 @@ interface DatosViewProps {
   // Métricas del modelo nacional EM2022 (para admin de colegios sin modelo CUBICOL propio)
   em2022Metrics?: Metrics;
   em2022Evaluation?: Evaluation;
+  /** false hasta que termina la primera consulta del modelo del colegio (antes de eso no se sabe si hay modelo). */
+  colegioStatsCargada?: boolean;
   colegioModelStats: {
     nombre_colegio: string; n_alumnos: number; n_riesgo: number;
     pct_riesgo: number; auc_cv: number | null; auc_train: number | null;
@@ -96,7 +98,7 @@ export function DatosView({
   role, profileCodigoIe, setTab,
   em2022Metrics,
   em2022Evaluation,
-  colegioModelStats,
+  colegioModelStats, colegioStatsCargada = true,
   modelosVersiones,
   colegioRespaldo, restaurandoModelo, onRestaurarModelo,
 }: DatosViewProps) {
@@ -114,7 +116,9 @@ export function DatosView({
   }[colegioUploadStatus];
 
   const isColegioRole = role === "admin" || role === "director" || role === "coordinador";
-  const noModelYet    = isColegioRole && !colegioModelStats;
+  // Con IE asignada, hasta que termina la primera consulta se muestra "Cargando…" y no "Sin modelo entrenado".
+  const esperandoModelo = isColegioRole && !!profileCodigoIe && !colegioStatsCargada;
+  const noModelYet    = isColegioRole && !colegioModelStats && !esperandoModelo;
   const noIeAssigned  = isColegioRole && !profileCodigoIe;
   const isEM2022      = colegioModelStats?.modo_prediccion === "Modelo Nacional EM2022";
   const puedeSubirExcel = isSuperadmin || (isColegioRole && !!profileCodigoIe);
@@ -125,7 +129,7 @@ export function DatosView({
   const [nombreColegio, setNombreColegio] = useState("");
   const nombreLimpio = nombreColegio.replace(/\s+/g, " ").trim();
   const nombreActual = !isSuperadmin && colegioModelStats && !isEM2022 ? colegioModelStats.nombre_colegio : null;
-  const nombreObligatorio = isColegioRole && (!colegioModelStats || isEM2022);
+  const nombreObligatorio = isColegioRole && !esperandoModelo && (!colegioModelStats || isEM2022);
   const nombreFaltante = nombreObligatorio && !nombreLimpio;
   const nombreMuyCorto = !!nombreLimpio && nombreLimpio.length < 3;
   const infoNombre = colegioUploadResult
@@ -160,6 +164,16 @@ export function DatosView({
                 un código IE. Comunícate con el administrador del sistema.
               </p>
             </div>
+          </div>
+        </Panel>
+      )}
+
+      {/* ── Consultando el modelo del colegio ─────────────────────────────── */}
+      {esperandoModelo && (
+        <Panel title="Cargando">
+          <div role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 10, padding: "18px 12px", color: "var(--text-muted)", fontSize: 13 }}>
+            <Loader size={18} style={{ color: "var(--accent)", animation: "spin 1s linear infinite" }} />
+            Cargando los datos del modelo de tu colegio…
           </div>
         </Panel>
       )}
@@ -644,7 +658,7 @@ export function DatosView({
         {/* Botón de carga */}
         <button
           className="primary"
-          disabled={colegioUploadStatus === "uploading" || !ieEfectiva || nombreFaltante || nombreMuyCorto}
+          disabled={colegioUploadStatus === "uploading" || !ieEfectiva || esperandoModelo || nombreFaltante || nombreMuyCorto}
           onClick={() => colegioFileRef.current?.click()}
           style={{ width: "100%", marginBottom: 8 }}
         >

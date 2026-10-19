@@ -16,10 +16,13 @@ export function useColegio(codigoIe: string | null) {
   const [resumen,  setResumen]  = useState<ColegioResumen | null>(null);
   const [hasModel, setHasModel] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  // false hasta que termina la PRIMERA consulta: antes de eso no se sabe si el colegio tiene modelo o no, y no debe
+  // mostrarse "Sin modelo propio configurado" (parpadeaba mientras cargaba).
+  const [loaded, setLoaded] = useState(false);
   const [error,    setError]    = useState<string | null>(null);
 
   async function load() {
-    if (!codigoIe) { setHasModel(false); setAlumnos([]); setResumen(null); return; }
+    if (!codigoIe) { setHasModel(false); setAlumnos([]); setResumen(null); setLoaded(true); return; }
     // EM 2022 guarda la IE como entero; el modelo del colegio acepta ambos
     // formatos, pero normalizamos para consistencia.
     const ie = String(parseInt(codigoIe, 10));
@@ -53,13 +56,15 @@ export function useColegio(codigoIe: string | null) {
       setHasModel(false);
     } finally {
       setIsLoading(false);
+      setLoaded(true);
     }
   }
 
   useEffect(() => {
+    setLoaded(false);
     void load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [codigoIe]);
 
-  return { alumnos, resumen, hasModel, isLoading, error, reload: load };
+  return { alumnos, resumen, hasModel, isLoading, loaded, error, reload: load };
 }
