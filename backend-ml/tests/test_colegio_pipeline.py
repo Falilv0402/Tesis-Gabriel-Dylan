@@ -313,3 +313,22 @@ def test_procesar_rechaza_solo_los_archivos_invalidos_y_dice_por_que(tmp_path):
     finally:
         app.dependency_overrides.clear()
         shutil.rmtree(cp.DATA_DIR / "colegio_999778_upload", ignore_errors=True)
+
+
+def test_el_modelo_entrenado_no_conserva_ningun_nombre_de_alumno(entrenar, tmp_path):
+    """Opción D: aunque el Excel traiga nombres, el .pkl (predicciones, métricas, todo) solo lleva seudónimos."""
+    import io
+    art = entrenar([1, 2, 3])
+    nombres = [p["nombre"] for p in art["predicciones"]]
+    assert all(n.startswith("Estudiante ") for n in nombres) and len(set(nombres)) == len(nombres) == 80
+    buf = io.BytesIO()
+    joblib.dump(art, buf)
+    assert b"ALUMNO A0" not in buf.getvalue() and b"PRUEBA" not in buf.getvalue()     # los nombres sintéticos del Excel
+    # el mapa de seudónimos existe, lleva solo hashes y no contiene los nombres
+    mapa = (tmp_path / "modelo" / "model" / "colegio_999001_seudonimos.json").read_text(encoding="utf-8")
+    assert "ALUMNO" not in mapa.upper() and "PRUEBA" not in mapa.upper()
+    # un reentrenamiento (otra carga) conserva el código de cada alumno
+    carpeta = tmp_path / "colegio_999001_upload"
+    tm.train(str(carpeta), "999001")
+    art2 = joblib.load(tmp_path / "modelo" / "model" / "colegio_999001.pkl")
+    assert {(p["salon"], p["n_alumno"]): p["nombre"] for p in art2["predicciones"]} ==            {(p["salon"], p["n_alumno"]): p["nombre"] for p in art["predicciones"]}

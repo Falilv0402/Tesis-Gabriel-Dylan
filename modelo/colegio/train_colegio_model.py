@@ -54,6 +54,7 @@ from sklearn.metrics import (
 )
 
 from parse_excels import procesar_colegio, AREAS_ACADEMICAS, nombre_colegio_valido, limpiar_nombre_manual
+from seudonimos import Seudonimizador
 
 
 def _resolver_nombre_colegio_con_origen(
@@ -270,6 +271,8 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None, nombre_manu
     # puede no ser el más reciente. Pasó de verdad con La Victoria.
     codigo_ie_archivo = codigo_ie.lstrip("0") or codigo_ie
     output_path = model_dir / f"colegio_{codigo_ie_archivo}.pkl"
+    # Mapa de seudónimos del colegio (solo hashes, nunca nombres): el mismo que usa el API al anonimizar los Excel.
+    seudonimos = Seudonimizador(model_dir / f"colegio_{codigo_ie_archivo}_seudonimos.json")
 
     print(f"\n{'='*60}")
     print(f"  MODELO DE RIESGO — IE {codigo_ie}")
@@ -277,7 +280,8 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None, nombre_manu
 
     # ── 1. ETL ────────────────────────────────────────────────────────────────
     print("\n[1/4] Procesando Excel del colegio...")
-    df = procesar_colegio(carpeta, codigo_ie)
+    with seudonimos.sesion():
+        df = procesar_colegio(carpeta, codigo_ie, seudonimos)
 
     # Guardar dataset limpio
     csv_path = Path(carpeta) / f"colegio_{codigo_ie}_procesado.csv"

@@ -6,9 +6,13 @@ import html as html_lib
 import os
 import re
 import shutil
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request, UploadFile, File
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 import httpx
 import joblib
 import subprocess
@@ -301,6 +305,15 @@ def get_resumen(auth_ctx: dict = Depends(require_admin_de_colegio)):
     }
 
 
+def _modulos_seudonimizacion():
+    """Seudonimizador + anonimizador del pipeline del colegio (import diferido: arrastran pandas/openpyxl)."""
+    if str(COLEGIO_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(COLEGIO_SCRIPTS))
+    from seudonimos import Seudonimizador
+    from anonimizar import anonimizar_subida, libro_unico
+    return Seudonimizador, anonimizar_subida, libro_unico
+
+
 # ─── POST /v1/colegio/{codigo_ie}/procesar ────────────────────────────────────
 
 def _nivel_por_alumno(art: dict) -> dict[str, str]:
@@ -468,28 +481,57 @@ async def procesar_excels(
     # usado como DoS; un Excel de notas real nunca se acerca a este límite).
     MAX_BYTES_POR_ARCHIVO = 20 * 1024 * 1024  # 20 MB
     CHUNK = 1024 * 1024
-    saved = []
     rechazados: list[str] = []   # se rechaza SOLO el archivo inválido (con su motivo); el resto sigue (HU030-2)
-    for f in notas_files + conducta_files:
-        safe_name = Path(f.filename or "archivo.xlsx").name
-        if Path(safe_name).suffix.lower() not in (".xlsx", ".xls"):
-            rechazados.append(f"{safe_name}: Formato no soportado: solo .xlsx o .xls")
-            continue
-        dest = upload_dir / safe_name
-        total = 0
-        excede = False
-        with open(dest, "wb") as out:
-            while chunk := await f.read(CHUNK):
-                total += len(chunk)
-                if total > MAX_BYTES_POR_ARCHIVO:
-                    excede = True
-                    break
-                out.write(chunk)
-        if excede:
-            dest.unlink(missing_ok=True)
-            rechazados.append(f"{safe_name}: Archivo supera el límite de 20MB")
-            continue
-        saved.append(str(dest))
+
+    # Seudonimización (los nombres reales NUNCA se guardan): cada archivo se escribe primero en una carpeta
+    # temporal, se reescribe con "Estudiante 000123" en lugar de los nombres y solo esa copia llega a la carpeta
+    # del colegio. Los nombres salen únicamente en el libro de claves de la respuesta, para el colegio.
+    Seudonimizador, anonimizar_subida, libro_unico = _modulos_seudonimizacion()
+    ie_archivo = codigo_ie.lstrip("0") or codigo_ie
+    seudonimos = Seudonimizador(MODEL_DIR / f"colegio_{ie_archivo}_seudonimos.json")
+    tmp_dir = Path(tempfile.mkdtemp(prefix="satra_subida_"))
+    pendientes: list[tuple[str, Path]] = []
+    libro: list[dict] = []
+    saved: list[str] = []
+    try:
+        for f in notas_files + conducta_files:
+            safe_name = Path(f.filename or "archivo.xlsx").name
+            if Path(safe_name).suffix.lower() not in (".xlsx", ".xls"):
+                rechazados.append(f"{safe_name}: Formato no soportado: solo .xlsx o .xls")
+                continue
+            tmp_path = tmp_dir / f"{len(pendientes)}_{safe_name}"
+            total = 0
+            excede = False
+            with open(tmp_path, "wb") as out:
+                while chunk := await f.read(CHUNK):
+                    total += len(chunk)
+                    if total > MAX_BYTES_POR_ARCHIVO:
+                        excede = True
+                        break
+                    out.write(chunk)
+            if excede:
+                rechazados.append(f"{safe_name}: Archivo supera el límite de 20MB")
+                continue
+            pendientes.append((safe_name, tmp_path))
+
+        def _anonimizar_pendientes() -> tuple[list[str], list[str]]:
+            ok: list[str] = []
+            rech: list[str] = []
+            with seudonimos.sesion():           # bloquea el mapa: dos cargas a la vez no se pisan
+                for nombre_original, tmp_path in pendientes:
+                    try:
+                        destino, libro_archivo = anonimizar_subida(tmp_path, upload_dir, nombre_original, seudonimos)
+                    except Exception:
+                        rech.append(f"{nombre_original}: No se pudo leer el archivo (dañado o con formato no reconocido)")
+                        continue
+                    ok.append(str(destino))
+                    libro.extend(libro_archivo)
+            return ok, rech
+
+        saved, no_leidos = await run_in_threadpool(_anonimizar_pendientes)
+        rechazados += no_leidos
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)   # aquí vivían los archivos originales, con nombres
 
     if not saved:
         raise HTTPException(
@@ -519,9 +561,13 @@ async def procesar_excels(
     # Devolver resumen
     art = _load_artefacto(codigo_ie)
     await _registrar_version_modelo(codigo_ie, auth_ctx["token"], art)
-    return {
+    # Libro de claves (código ↔ nombre ↔ salón ↔ N.° de lista) de los archivos de ESTA carga: es lo único que
+    # lleva nombres reales, viaja solo en esta respuesta (sin caché) y el servidor no lo guarda. Si el colegio lo
+    # pierde, subir otra vez el mismo Excel lo regenera con los mismos códigos.
+    return JSONResponse(headers={"Cache-Control": "no-store"}, content=jsonable_encoder({
         "status":    "ok",
         "codigo_ie": codigo_ie,
+        "libro_claves": libro_unico(libro),
         "archivos_procesados": len(saved),
         # Archivos descartados por formato o tamaño, con el motivo de cada uno (los válidos sí se procesaron).
         "archivos_rechazados": rechazados,
@@ -530,4 +576,4 @@ async def procesar_excels(
         "archivos_en_carpeta": len(list(upload_dir.glob("*.xls*"))),
         "metricas":  art["metricas"],
         "nuevos_alto": n_nuevos_alto,  # HU019: cuántos alumnos pasaron a ALTO recién ahora
-    }
+    }))

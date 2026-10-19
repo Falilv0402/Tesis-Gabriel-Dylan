@@ -251,6 +251,27 @@ export function historialRiesgo(
   return { filas, hayDatos: evaluados > 0, enRiesgo: filas.filter((f) => f.estado === "en_riesgo").length, evaluados };
 }
 
+export type FilaLibroClaves = { codigo: string; nombre: string; salon: string; n_alumno: number };
+
+/**
+ * Libro de claves en CSV (UTF-8 con BOM para que Excel respete las tildes): código ↔ nombre ↔ salón ↔ N.° de lista.
+ * Es lo único que lleva los nombres reales; se arma en el navegador con la respuesta de la carga y el sistema
+ * no lo guarda: es para que el colegio sepa a quién corresponde cada "Estudiante 000123".
+ */
+export function libroClavesCsv(filas: FilaLibroClaves[]): string {
+  const celda = (v: string | number) => {
+    const s = String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lineas = ["codigo,nombre,salon,n_lista", ...filas.map((f) => [f.codigo, f.nombre, f.salon, f.n_alumno].map(celda).join(","))];
+  return "\ufeff" + lineas.join("\r\n");
+}
+
+export function nombreArchivoLibroClaves(codigoIe: string, fecha = new Date()): string {
+  const ie = String(parseInt(codigoIe, 10) || codigoIe);
+  return `libro_de_claves_IE${ie}_${fecha.toISOString().slice(0, 10)}.csv`;
+}
+
 export type LecturaAlumno = { titular: string; tendencias: string[]; nota: string };
 
 /**

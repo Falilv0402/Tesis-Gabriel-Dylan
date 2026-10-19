@@ -61,7 +61,12 @@ export function useAdmin(
     n_alumnos: number; n_riesgo: number; pct_riesgo: number;
     nombre_colegio: string; nombre_colegio_origen?: string | null;
     salones: string[]; advertencias: string[];
+    /** Código ↔ nombre real de los alumnos de ESTA carga. Solo vive en memoria: el servidor no lo guarda. */
+    libro_claves?: { codigo: string; nombre: string; salon: string; n_alumno: number }[];
   } | null>(null);
+
+  // Al cerrar sesión se descarta el libro de claves (lleva nombres reales y solo debe vivir mientras se descarga).
+  useEffect(() => { if (!session) setColegioUploadResult(null); }, [session]);
 
   // Estadísticas del modelo actual del colegio (se cargan al abrir Datos)
   const [colegioModelStats, setColegioModelStats] = useState<{
@@ -476,6 +481,7 @@ export function useAdmin(
           pct_riesgo:     m.pct_riesgo    ?? 0,
           nombre_colegio: m.nombre_colegio ?? ieCode,
           nombre_colegio_origen: m.nombre_colegio_origen ?? null,
+          libro_claves:   data.libro_claves ?? [],
           salones:        m.salones        ?? [],
           advertencias,
         });

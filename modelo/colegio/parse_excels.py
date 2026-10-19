@@ -618,7 +618,7 @@ def _indice_riesgo_ponderado(row) -> float:
 
 # ─── Función pública principal ────────────────────────────────────────────────
 
-def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
+def procesar_colegio(carpeta: str | Path, codigo_ie: str, seudonimizador=None) -> pd.DataFrame:
     """
     Procesa todos los Excel de la carpeta y devuelve un DataFrame consolidado.
     Detecta automáticamente archivos con "Notas" y "Conducta" en el nombre.
@@ -627,6 +627,9 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
         DataFrame con columnas: n_alumno, nombre, salon, codigo_ie,
         pp_matematica, pp_comunicacion, pp_cta, conducta_promedio,
         tendencia_*, n_materias_c, riesgo (target), riesgo_score.
+        Si se pasa `seudonimizador` (seudonimos.Seudonimizador, dentro de su `with .sesion()`), el nombre de
+        cada alumno se reemplaza por su código ("Estudiante 000123") ANTES de seguir: así ningún resultado del
+        modelo conserva nombres reales aunque en la carpeta haya un Excel que todavía los traiga.
         Además, `df.attrs["advertencias"]` trae la lista de hojas/archivos
         omitidos o con error durante el parseo (antes solo se imprimían por
         stdout y se perdían — ahora viajan hasta la UI del admin que sube
@@ -699,6 +702,8 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str) -> pd.DataFrame:
                     print(f"  SKIP {msg}")
                     advertencias.append(msg)
                     continue
+                if seudonimizador is not None:
+                    df_n["nombre"] = seudonimizador.aplicar(df_n["salon"], df_n["n_alumno"], df_n["nombre"])
                 df_n["sheet"] = sheet
                 df_n["_archivo"] = nf.name
                 df_n["_mtime"] = nf.stat().st_mtime

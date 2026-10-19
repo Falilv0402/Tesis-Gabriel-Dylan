@@ -10,7 +10,7 @@ import { ConfusionMatrix } from "@/components/charts/ConfusionMatrix";
 import { RocMiniChart } from "@/components/charts/RocMiniChart";
 import type { Metrics, Evaluation } from "@/types";
 import { EM2022_HABILITADO } from "@/lib/constants";
-import { describirNombreColegio, formatearFechaModelo } from "@/lib/colegio";
+import { describirNombreColegio, formatearFechaModelo, libroClavesCsv, nombreArchivoLibroClaves } from "@/lib/colegio";
 
 interface CsvValidation {
   total_filas: number;
@@ -25,6 +25,7 @@ interface ColegioUploadResult {
   pct_riesgo: number;
   nombre_colegio: string;
   nombre_colegio_origen?: string | null;
+  libro_claves?: { codigo: string; nombre: string; salon: string; n_alumno: number }[];
   salones: string[];
   advertencias: string[];
 }
@@ -560,6 +561,20 @@ export function DatosView({
           </span>
         </div>
 
+        {/* Privacidad: el sistema no guarda los nombres de los alumnos */}
+        <div role="note" style={{
+          display: "flex", gap: 8, marginBottom: 12, padding: "10px 12px", fontSize: 12, lineHeight: 1.5,
+          background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, color: "#14532d",
+        }}>
+          <ShieldAlert size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+          <span>
+            <strong>Privacidad:</strong> el sistema <strong>no guarda los nombres de los alumnos</strong>. Al subir el
+            Excel los reemplaza por un código (<em>Estudiante 000123</em>) y te entrega un <strong>libro de claves</strong>{" "}
+            (código ↔ nombre) para que lo guardes tú en el colegio. Sin ese libro nadie puede saber a quién corresponde
+            cada código; si lo pierdes, vuelve a subir el mismo Excel y se genera de nuevo.
+          </span>
+        </div>
+
         {/* Input oculto para múltiples Excel */}
         <input
           ref={colegioFileRef}
@@ -673,6 +688,38 @@ export function DatosView({
               }}>
                 {infoNombre.aviso ? "⚠️ " : ""}{infoNombre.texto}
               </p>
+            )}
+            {/* Libro de claves: lo único que lleva nombres reales. Vive solo en memoria; el servidor no lo conserva. */}
+            {(colegioUploadResult.libro_claves?.length ?? 0) > 0 && (
+              <div style={{
+                marginBottom: 10, padding: "10px 12px", background: "#fffbeb", border: "1px solid #fde68a",
+                borderRadius: 8, display: "flex", flexDirection: "column", gap: 8,
+              }}>
+                <span style={{ fontSize: 12, lineHeight: 1.5, color: "#92400e" }}>
+                  <strong>Libro de claves — {colegioUploadResult.libro_claves!.length} alumnos.</strong> Descárgalo y guárdalo
+                  en el colegio: es la única forma de saber a quién corresponde cada <em>Estudiante 000123</em>. El sistema
+                  no lo guarda y desaparece al salir de esta pantalla.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const csv = libroClavesCsv(colegioUploadResult.libro_claves!);
+                    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = nombreArchivoLibroClaves(ieEfectiva);
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  style={{
+                    alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6, padding: "6px 12px",
+                    fontSize: 12, fontWeight: 600, color: "#92400e", background: "#fff", border: "1px solid #fde68a",
+                    borderRadius: 8, cursor: "pointer",
+                  }}
+                >
+                  <Download size={14} /> Descargar libro de claves (CSV)
+                </button>
+              </div>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
               <Kpi label="Alumnos"  value={colegioUploadResult.n_alumnos}  detail="procesados" />

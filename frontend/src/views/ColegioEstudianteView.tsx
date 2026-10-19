@@ -332,6 +332,9 @@ export function ColegioEstudianteView({
                   {alumno.salon}
                   <span style={{ opacity: 0.35, fontSize: 16, lineHeight: 1 }}>·</span>
                   {anioLabel}
+                  {/* El colegio ubica al alumno por salón + N.° de lista (su libro de claves tiene el nombre) */}
+                  <span style={{ opacity: 0.35, fontSize: 16, lineHeight: 1 }}>·</span>
+                  N.° {alumno.n_alumno}
                 </span>
               </div>
             </div>

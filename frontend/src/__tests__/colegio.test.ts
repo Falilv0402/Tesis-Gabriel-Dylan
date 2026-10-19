@@ -3,7 +3,10 @@
  * hizo el modelo del colegio (pronóstico, cierre de año o descriptivo) a texto
  * que un director entienda.
  */
-import { describirNombreColegio, describirResultado, formatearFechaModelo, historialRiesgo, lecturaAlumno } from "@/lib/colegio";
+import {
+  describirNombreColegio, describirResultado, formatearFechaModelo, historialRiesgo, lecturaAlumno,
+  libroClavesCsv, nombreArchivoLibroClaves,
+} from "@/lib/colegio";
 import type { AlumnoColegio } from "@/types";
 
 const alumno = (extra: Record<string, unknown> = {}): AlumnoColegio =>
@@ -173,5 +176,31 @@ describe("historialRiesgo", () => {
   test("respeta un umbral distinto", () => {
     expect(historialRiesgo(alumno({ b1_matematica: 14 }), 14).filas[0].estado).toBe("en_riesgo");
     expect(historialRiesgo(alumno({ b1_matematica: 14 }), 13).filas[0].estado).toBe("sin_riesgo");
+  });
+});
+
+describe("libro de claves", () => {
+  const filas = [
+    { codigo: "Estudiante 000001", nombre: "BERNAL MONTERO, FATIMA", salon: "2B", n_alumno: 1 },
+    { codigo: "Estudiante 000002", nombre: 'DE LA "CRUZ", JOSÉ', salon: "2B", n_alumno: 2 },
+  ];
+
+  test("CSV con BOM, una fila por alumno y comillas donde hace falta", () => {
+    const csv = libroClavesCsv(filas);
+    expect(csv.charCodeAt(0)).toBe(0xfeff);                       // Excel respeta las tildes
+    expect(csv.slice(1).split("\r\n")).toEqual([
+      "codigo,nombre,salon,n_lista",
+      'Estudiante 000001,"BERNAL MONTERO, FATIMA",2B,1',          // la coma del nombre va entre comillas
+      'Estudiante 000002,"DE LA ""CRUZ"", JOSÉ",2B,2',            // las comillas se duplican
+    ]);
+  });
+
+  test("sin alumnos solo trae el encabezado", () => {
+    expect(libroClavesCsv([]).slice(1)).toBe("codigo,nombre,salon,n_lista");
+  });
+
+  test("el nombre del archivo lleva el colegio (sin ceros) y la fecha", () => {
+    expect(nombreArchivoLibroClaves("0831305", new Date("2026-10-18T10:00:00Z"))).toBe("libro_de_claves_IE831305_2026-10-18.csv");
+    expect(nombreArchivoLibroClaves("9001", new Date("2026-01-02T00:00:00Z"))).toBe("libro_de_claves_IE9001_2026-01-02.csv");
   });
 });
