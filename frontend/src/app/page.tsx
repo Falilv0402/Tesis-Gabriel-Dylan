@@ -27,6 +27,7 @@ import { IeProfileModal } from "@/components/modals/IeProfileModal";
 import { ProfilePanel } from "@/components/modals/ProfilePanel";
 
 import { AuthView } from "@/views/AuthView";
+import { NuevaContrasenaView } from "@/views/NuevaContrasenaView";
 import { DashboardView } from "@/views/DashboardView";
 import { EstudianteView } from "@/views/EstudianteView";
 import { IntervencionesView } from "@/views/IntervencionesView";
@@ -215,6 +216,20 @@ export default function Page() {
     : colegio.error === "connection"
       ? <ErrorConexionColegio onRetry={() => void colegio.reload()} />
       : <SinModeloPropio setTab={setTab} />;
+
+  // ── Enlace de recuperación (HU0004) ───────────────────────────────
+  // Quien llega con el enlace del correo ya tiene sesión, pero primero debe elegir su contraseña nueva:
+  // hasta entonces no se muestra nada de la app.
+  if (auth.recoveryMode && auth.session) {
+    return (
+      <NuevaContrasenaView
+        email={auth.session.email ?? ""}
+        busy={auth.authBusy}
+        onSubmit={auth.handleSetNewPassword}
+        onCancel={() => void auth.handleLogout("Recuperacion de contrasena cancelada")}
+      />
+    );
+  }
 
   // ── Loading state ─────────────────────────────────────────────────
   // authLoading: sesión aún no verificada con Supabase.

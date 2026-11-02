@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { supabase, RECOVERY_KEY } from "@/lib/supabase";
+import { contrasenaValida } from "@/lib/contrasena";
 import type { UserRole } from "@/types";
 import { apiUrl, EM2022_HABILITADO } from "@/lib/constants";
 import { useProfile } from "@/hooks/useProfile";
@@ -25,6 +26,9 @@ export function useAuth(
   // Mientras sea false, page.tsx muestra el spinner y nunca renderiza contenido
   // con el rol por-defecto ("director"), evitando flashes de vistas incorrectas.
   const [roleLoaded,   setRoleLoaded]   = useState(false);
+  // recoveryMode: la persona entró con el enlace de "Recuperar contraseña" y todavía no eligió una nueva.
+  // Mientras sea true, page.tsx muestra solo la pantalla de nueva contraseña (HU0004).
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   // ── Registration ──────────────────────────────────────────────────────────
   const [regDistrito,      setRegDistrito]      = useState("");
@@ -207,14 +211,7 @@ export function useAuth(
     }
 
     // Validar contraseña robusta
-    const pwdChecks = [
-      authPassword.length >= 8,
-      /[A-Z]/.test(authPassword),
-      /[a-z]/.test(authPassword),
-      /[0-9]/.test(authPassword),
-      /[!@#$%^&*()\-_=+\[\]{};':",.<>/?\\|]/.test(authPassword),
-    ];
-    if (!pwdChecks.every(Boolean)) {
+    if (!contrasenaValida(authPassword)) {
       setAuthError("La contraseña no cumple los requisitos de seguridad.");
       return;
     }
@@ -301,9 +298,34 @@ export function useAuth(
 
   async function handleLogout(motivo: string = "Cierre de sesion") {
     abortLoadProfile.current = true;
+    terminarRecuperacion();
     await insertAudit(motivo);
     await supabase.auth.signOut();
     setSession(null);
+  }
+
+  // ── Nueva contraseña tras el enlace de recuperación (HU0004) ─────────────
+  function terminarRecuperacion() {
+    try { sessionStorage.removeItem(RECOVERY_KEY); } catch { /* sin sessionStorage */ }
+    setRecoveryMode(false);
+  }
+
+  /** Guarda la contraseña nueva. Devuelve null si salió bien, o el mensaje de error para mostrarlo en la pantalla. */
+  async function handleSetNewPassword(nueva: string): Promise<string | null> {
+    if (!contrasenaValida(nueva)) return "La contraseña no cumple los requisitos de seguridad.";
+    setAuthBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: nueva });
+    setAuthBusy(false);
+    if (error) {
+      if (error.message.includes("different from the old password")) return "La nueva contraseña debe ser distinta de la anterior.";
+      if (error.message.includes("session missing") || error.message.includes("expired"))
+        return "El enlace de recuperación expiró. Cierra esta ventana y pide uno nuevo desde «Recuperar contrasena».";
+      return translateAuthError(error.message);
+    }
+    await insertAudit("Restablecer contrasena (recuperacion)", "profiles");
+    terminarRecuperacion();
+    toast("Contraseña actualizada. Ya puedes usar SATRA con la nueva.", "success");
+    return null;
   }
 
   // ── Cierre de sesión por inactividad (30 min) ────────────────────────────
@@ -331,6 +353,9 @@ export function useAuth(
 
   // ── Effects ───────────────────────────────────────────────────────────────
   useEffect(() => {
+    // La señal de "vengo de un enlace de recuperación" se anotó al crear el cliente (lib/supabase.ts).
+    try { if (sessionStorage.getItem(RECOVERY_KEY) === "1") setRecoveryMode(true); } catch { /* sin sessionStorage */ }
+
     supabase.auth.getSession().then(async ({ data: { session: s } }) => {
       usuarioActualId.current = s?.user?.id ?? usuarioActualId.current;
       setSession(s?.user ?? null);
@@ -338,6 +363,11 @@ export function useAuth(
       setAuthLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      // Por si el evento llega con la app ya suscrita (el caso normal lo cubre la marca de sessionStorage).
+      if (event === "PASSWORD_RECOVERY") {
+        try { sessionStorage.setItem(RECOVERY_KEY, "1"); } catch { /* sin sessionStorage */ }
+        setRecoveryMode(true);
+      }
       // Supabase repite SIGNED_IN cada vez que la pestaña recupera el foco y emite TOKEN_REFRESHED cada hora. Si es el
       // mismo usuario no hay nada que recargar: bloquear la pantalla ("Verificando sesion...") desmontaba toda la app y
       // hacía perder la ficha abierta, la pestaña y lo que se estuviera escribiendo, y llenaba el audit_log de falsos inicios.
@@ -363,6 +393,8 @@ export function useAuth(
         setRole("director");
         setRoleLoaded(false);   // reset al cerrar sesión
         setAuthLoading(false);
+        try { sessionStorage.removeItem(RECOVERY_KEY); } catch { /* sin sessionStorage */ }
+        setRecoveryMode(false);
       }
     });
     return () => subscription.unsubscribe();
@@ -448,6 +480,7 @@ export function useAuth(
   // ── Public API ────────────────────────────────────────────────────────────
   return {
     session, authLoading, roleLoaded,
+    recoveryMode, handleSetNewPassword,
     authMode, setAuthMode,
     authEmail, setAuthEmail,
     authPassword, setAuthPassword,

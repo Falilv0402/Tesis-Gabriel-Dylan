@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, Circle, Eye, EyeOff, KeyRound, Mail, ShieldCheck } from "lucide-react";
 import { EM2022_HABILITADO } from "@/lib/constants";
+import { reglasContrasena, type ReglasContrasena } from "@/lib/contrasena";
 
 // ── Validaciones ──────────────────────────────────────────────────────────────
 
@@ -18,27 +19,8 @@ function isInstitutionalEmail(email: string): boolean {
   return !BLOCKED_DOMAINS.includes(domain);
 }
 
-interface PwdRules {
-  length:    boolean;
-  uppercase: boolean;
-  lowercase: boolean;
-  number:    boolean;
-  special:   boolean;
-}
-
-function checkPassword(pwd: string): PwdRules {
-  return {
-    length:    pwd.length >= 8,
-    uppercase: /[A-Z]/.test(pwd),
-    lowercase: /[a-z]/.test(pwd),
-    number:    /[0-9]/.test(pwd),
-    special:   /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd),
-  };
-}
-
-function allPass(rules: PwdRules): boolean {
-  return Object.values(rules).every(Boolean);
-}
+const checkPassword = reglasContrasena;
+const allPass = (rules: ReglasContrasena): boolean => Object.values(rules).every(Boolean);
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
