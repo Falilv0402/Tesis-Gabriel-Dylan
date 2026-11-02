@@ -44,6 +44,12 @@ serve(async (req) => {
       );
     }
 
+    // Remitente: con un dominio verificado en Resend (p. ej. satraapp.com) se define el secreto
+    // ALERT_FROM = "SATRA — Alerta Académica <alertas@satraapp.com>" y los correos llegan a cualquier
+    // destinatario. Sin ese secreto se usa el remitente de pruebas de Resend (onboarding@resend.dev),
+    // que SOLO entrega al correo del dueño de la cuenta de Resend.
+    const FROM = Deno.env.get("ALERT_FROM") ?? "SATRA — Alerta Académica <onboarding@resend.dev>";
+
     // Llamar a la API de Resend
     const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -52,7 +58,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from:    "SATRA — Alerta Académica <onboarding@resend.dev>",
+        from:    FROM,
         to,
         subject,
         html,
