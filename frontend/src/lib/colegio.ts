@@ -375,10 +375,10 @@ export function factoresRiesgoColegio(
 
 /** Clasifica el tipo de riesgo del alumno de colegio según sus promedios. */
 export function tipoRiesgoColegio(a: AlumnoColegio): string {
-  const mat = a.pp_matematica;
-  const com = a.pp_comunicacion;
-  const bajoMat = typeof mat === "number" && mat <= 13;
-  const bajoCom = typeof com === "number" && com <= 13;
+  const mat = comoNota(a.pp_matematica);   // un 0 no es una nota (ver comoNota)
+  const com = comoNota(a.pp_comunicacion);
+  const bajoMat = mat != null && mat <= 13;
+  const bajoCom = com != null && com <= 13;
   if (bajoMat && bajoCom) return "Bajo en varias áreas";
   if (bajoMat)            return "Bajo en Matemática";
   if (bajoCom)            return "Bajo en Comunicación";

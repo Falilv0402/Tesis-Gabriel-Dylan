@@ -708,7 +708,7 @@ const ESTADO_LABEL: Record<string, string> = {
   rechazado:   "Rechazado",
 };
 
-function PlanEstadoBanner({
+export function PlanEstadoBanner({
   planEstado, role, miId, tieneHitos, isEnviandoRevision, isDecidiendoPlan,
   showRechazoForm, setShowRechazoForm, comentarioRechazo, setComentarioRechazo,
   onEnviar, onAprobar, onRechazar,
