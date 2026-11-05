@@ -190,6 +190,36 @@ def _colegio_sintetico(carpeta: Path, bimestres, n_por_salon=40, nota_base=13.5,
             _escribir_excel(carpeta, f"SECUNDARIA - 2° - {letra}", b, np.clip(np.round(notas), 5, 20), nombres)
 
 
+def test_cero_en_el_excel_es_sin_nota_y_no_hunde_los_promedios(tmp_path):
+    """CP062: el «Reporte consolidado» guarda 0 donde el alumno no tiene nota (retirado/no evaluado). Ese 0 no es una
+    nota: antes entraba en los promedios («Factores de riesgo» y PDF) y bajaba un 15 a 10."""
+    carpeta = tmp_path / "colegio_999001_upload"
+    carpeta.mkdir()
+    nombres = [f"ALUMNO A{i:02d}, PRUEBA" for i in range(8)]
+    for b in (1, 2, 3):
+        notas = np.full((8, len(CURSOS)), 15.0)
+        if b == 3:
+            notas[0, :] = 0                       # el colegio puso 0 en todo el 3.er bimestre del alumno 1
+        _escribir_excel(carpeta, "SECUNDARIA - 2° - A", b, notas, nombres)
+    df = pe.procesar_colegio(carpeta, "999001")
+    alumno = df[df["n_alumno"] == 1].iloc[0]
+    assert pd.isna(alumno["b3_matematica"]) and pd.isna(alumno["b3_comunicacion"]) and pd.isna(alumno["b3_conducta"])
+    assert alumno["b1_matematica"] == 15.0 and alumno["b2_comunicacion"] == 15.0
+    assert alumno["promedio_materias"] == pytest.approx(15.0)       # los ceros no bajan el promedio
+    assert alumno["conducta_promedio"] == pytest.approx(15.0)
+    assert (df.filter(regex=r"^(pp|b[1-4])_") == 0).sum().sum() == 0  # no queda ningún 0 como nota
+    assert any("«sin nota»" in a for a in df.attrs["advertencias"])
+
+
+def test_sin_ceros_no_hay_aviso_de_ceros(tmp_path):
+    carpeta = tmp_path / "colegio_999001_upload"
+    carpeta.mkdir()
+    nombres = [f"ALUMNO A{i:02d}, PRUEBA" for i in range(8)]
+    _escribir_excel(carpeta, "SECUNDARIA - 2° - A", 1, np.full((8, len(CURSOS)), 14.0), nombres)
+    df = pe.procesar_colegio(carpeta, "999001")
+    assert not any("«sin nota»" in a for a in df.attrs["advertencias"])
+
+
 @pytest.fixture
 def entrenar(tmp_path, monkeypatch):
     # train() guarda en <parents[1]>/model del archivo del módulo: se redirige a tmp_path

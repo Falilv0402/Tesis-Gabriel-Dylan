@@ -16,7 +16,7 @@ import { riskClass } from "@/lib/format";
 import {
   MATERIAS_COLEGIO, anioFromSalon, aniosDeSalones,
   seccionFromSalon, seccionesDeSalones,
-  notaInfo, notaCelda, gradeCell, colegioStudentId, type Bimestre,
+  notaInfo, notaCelda, gradeCell, comoNota, colegioStudentId, type Bimestre,
 } from "@/lib/colegio";
 
 interface ColegioReportesViewProps {
@@ -89,7 +89,10 @@ export function ColegioReportesView({
     const headers = ["n_alumno", "nombre", "salon", "nivel_riesgo", "prob_riesgo",
       ...MATERIAS_COLEGIO.map((m) => `b${bimestre}_${m.key}`), "conducta_promedio"];
     const lines = [headers.join(",")];
-    const aUnDecimal = (n: number | null | undefined) => (n == null ? "" : Number(n.toFixed(1)));   // promedios de sub-áreas salían con 15 decimales
+    const aUnDecimal = (n: number | null | undefined) => {   // promedios de sub-áreas salían con 15 decimales; un 0 es «sin nota»
+      const nota = comoNota(n);
+      return nota == null ? "" : Number(nota.toFixed(1));
+    };
     for (const a of filtrados) {
       const row = [
         a.n_alumno, `"${a.nombre.replace(/"/g, '""')}"`, a.salon, a.nivel_riesgo,
@@ -226,7 +229,7 @@ export function ColegioReportesView({
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
           <Panel title="Distribución por nivel de riesgo">
             <ResponsiveContainer width="100%" height={210}>
-              <PieChart>
+              <PieChart margin={{ top: 22, right: 30, bottom: 22, left: 30 }}>
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" nameKey="name"
                   label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
                   {pieData.map((e) => <Cell key={e.name} fill={e.color} />)}

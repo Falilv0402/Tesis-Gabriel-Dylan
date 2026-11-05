@@ -11,9 +11,10 @@ import type { AlumnoColegio, ColegioResumen, Tab } from "@/types";
 import { Panel, EmptyState } from "@/components/ui/Primitives";
 import type { PlanEstadoRow } from "@/hooks/usePlanRevision";
 import { pct, riskClass } from "@/lib/format";
+import { reglasPlan } from "@/lib/plan";
 import {
   MATERIAS_COLEGIO, anioFromSalon, aniosDeSalones, seccionFromSalon, seccionesDeSalones,
-  notaInfo, notaCelda, gradeCell, colegioStudentId, mejorBimestreConDatos, factoresRiesgoColegio, type Bimestre,
+  notaInfo, notaCelda, gradeCell, comoNota, colegioStudentId, mejorBimestreConDatos, factoresRiesgoColegio, type Bimestre,
   describirResultado, lecturaAlumno, historialRiesgo,
 } from "@/lib/colegio";
 
@@ -22,6 +23,8 @@ interface Milestone  { id: string; texto: string; fecha: string; completado: boo
 
 interface ColegioEstudianteViewProps {
   role: string;
+  /** Id de la persona con sesión iniciada: sirve para no dejar que apruebe un plan que ella misma envió (CP053). */
+  miId?: string | null;
   alumno: AlumnoColegio | undefined;
   /** Resumen del modelo del colegio: de ahí sale si los porcentajes son un pronóstico, cierre de año o descriptivo. */
   resumen?: ColegioResumen | null;
@@ -75,7 +78,7 @@ export function ColegioEstudianteView({
   studentTab, setStudentTab, setTab,
   exportStudentPdf, isGeneratingStudentPdf,
   saveAnnotation, loadAnnotations, addMilestone, isAddingMilestone, toggleMilestone, loadMilestones, isLoadingMilestones,
-  planEstado, isLoadingPlanEstado, loadPlanEstado, onEnviarARevision, isEnviandoRevision,
+  planEstado, isLoadingPlanEstado, loadPlanEstado, onEnviarARevision, isEnviandoRevision, miId,
   onDecidirPlan, isDecidiendoPlan,
 }: ColegioEstudianteViewProps) {
   const canEditAll = role === "director";
@@ -270,8 +273,8 @@ export function ColegioEstudianteView({
                     : "#16a34a";
   const gradeColor  = (n: number | null | undefined) =>
     n == null ? "var(--text-muted)" : n >= 15 ? "#16a34a" : n >= 13 ? "#d97706" : "#dc2626";
-  const promedioNum = alumno.promedio_materias  != null ? Number(alumno.promedio_materias)  : null;
-  const conductaNum = alumno.conducta_promedio  != null ? Number(alumno.conducta_promedio)  : null;
+  const promedioNum = comoNota(alumno.promedio_materias);
+  const conductaNum = comoNota(alumno.conducta_promedio);
   const cursosC     = alumno.n_materias_c ?? 0;
   const resultado   = describirResultado(resumen?.metricas);
   const lectura     = lecturaAlumno(alumno, resumen?.metricas);
@@ -634,6 +637,7 @@ export function ColegioEstudianteView({
                   <PlanEstadoBanner
                     planEstado={planEstado}
                     role={role}
+                    miId={miId}
                     tieneHitos={planMilestones.length > 0}
                     isEnviandoRevision={isEnviandoRevision}
                     isDecidiendoPlan={isDecidiendoPlan}
@@ -705,12 +709,13 @@ const ESTADO_LABEL: Record<string, string> = {
 };
 
 function PlanEstadoBanner({
-  planEstado, role, tieneHitos, isEnviandoRevision, isDecidiendoPlan,
+  planEstado, role, miId, tieneHitos, isEnviandoRevision, isDecidiendoPlan,
   showRechazoForm, setShowRechazoForm, comentarioRechazo, setComentarioRechazo,
   onEnviar, onAprobar, onRechazar,
 }: {
   planEstado: PlanEstadoRow | null;
   role: string;
+  miId?: string | null;
   tieneHitos: boolean;
   isEnviandoRevision: boolean;
   isDecidiendoPlan: boolean;
@@ -723,9 +728,9 @@ function PlanEstadoBanner({
   onRechazar: () => void;
 }) {
   const estado = planEstado?.estado ?? "borrador";
-  const esDirector = role === "director";
-  const puedeEnviar = (estado === "borrador" || estado === "rechazado") && tieneHitos;
-  const puedeDecidir = esDirector && estado === "en_revision";
+  const { puedeEnviar, puedeDecidir, esMiEnvio, directorNoEnvia } = reglasPlan({
+    estado, rol: role, tieneHitos, enviadoPor: planEstado?.enviado_por, miId,
+  });
 
   return (
     <div className={`plan-estado-banner is-${estado}`}>
@@ -762,6 +767,17 @@ function PlanEstadoBanner({
       {estado === "rechazado" && planEstado?.comentario && (
         <div className="plan-estado-meta">
           <strong>Cambios pedidos por {planEstado.revisado_por_nombre ?? "el Director"}:</strong> {planEstado.comentario}
+        </div>
+      )}
+
+      {directorNoEnvia && (
+        <div className="plan-estado-meta">
+          Como Director, tú revisas los planes: no hace falta enviarlo. Los que envíe tu equipo te llegan en Equipo › Planes a revisión.
+        </div>
+      )}
+      {esMiEnvio && (
+        <div className="plan-estado-meta">
+          Este plan lo enviaste tú: lo debe revisar otro Director.
         </div>
       )}
 

@@ -748,6 +748,7 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str, seudonimizador=None) -
     # difieren (varios cortes reales) da una estimación anual más robusta que
     # quedarse con la primera al azar y perder las demás.
     df_notas = pd.concat(dfs_notas, ignore_index=True)
+    df_notas, ceros_notas = _ceros_como_sin_nota(df_notas)   # antes de promediar y de elegir la versión más reciente
     df_notas = _quedarse_con_version_mas_reciente(df_notas, advertencias)
     df_notas = _unificar_numeracion_por_nombre(df_notas, advertencias)
     df_notas = df_notas.drop(columns=[c for c in ("_archivo", "_mtime", "_bim") if c in df_notas.columns])
@@ -773,6 +774,8 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str, seudonimizador=None) -
     tiene_conducta_propia = "conducta_promedio" in df_notas.columns
     if dfs_conducta:
         df_cond = pd.concat(dfs_conducta, ignore_index=True)
+        df_cond, ceros_conducta = _ceros_como_sin_nota(df_cond)
+        ceros_notas += ceros_conducta
         if tiene_conducta_propia:
             df = df_notas.merge(
                 df_cond[["n_alumno", "salon", "conducta_promedio"]].rename(
@@ -789,6 +792,12 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str, seudonimizador=None) -
         df = df_notas.copy()
         if not tiene_conducta_propia:
             df["conducta_promedio"] = None
+
+    if ceros_notas:
+        advertencias.append(
+            f"{ceros_notas} nota(s) con valor 0 se tomaron como «sin nota»: el reporte del colegio las registra así "
+            "cuando el alumno se retiró o no fue evaluado, y un 0 falso hundiría sus promedios."
+        )
 
     # ── Features derivadas ────────────────────────────────────────────────────
     # Número de materias clave con PP = C (≤13)
@@ -849,6 +858,24 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str, seudonimizador=None) -
 
 
 # ─── Utilidades internas ──────────────────────────────────────────────────────
+
+_COLUMNAS_DE_NOTA = ("pp_", "b1_", "b2_", "b3_", "b4_")
+
+
+def _ceros_como_sin_nota(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """El «Reporte consolidado» guarda 0 donde el alumno no tiene nota (se retiró, no fue evaluado...). Un 0 no
+    es una nota real: tomado como tal hunde los promedios, los factores de riesgo y el PDF del alumno. Se vuelve
+    NaN («sin nota») en las notas y en la conducta. Devuelve el DataFrame y cuántas celdas cambió."""
+    total = 0
+    for c in [c for c in df.columns if c.startswith(_COLUMNAS_DE_NOTA) or c == "conducta_promedio"]:
+        numerica = pd.to_numeric(df[c], errors="coerce")
+        ceros = numerica == 0
+        if ceros.any():
+            total += int(ceros.sum())
+            df[c] = numerica.mask(ceros)
+    return df, total
+
+
 
 def _quedarse_con_version_mas_reciente(df: pd.DataFrame, advertencias: list[str]) -> pd.DataFrame:
     """La carpeta de carga de un colegio es acumulativa (así se pueden ir sumando

@@ -5,7 +5,7 @@
  */
 import {
   describirNombreColegio, describirResultado, formatearFechaModelo, historialRiesgo, lecturaAlumno,
-  libroClavesCsv, nombreArchivoLibroClaves,
+  libroClavesCsv, nombreArchivoLibroClaves, comoNota, notaBimestre, notaInfo, factoresRiesgoColegio,
 } from "@/lib/colegio";
 import type { AlumnoColegio } from "@/types";
 
@@ -207,5 +207,44 @@ describe("libro de claves", () => {
   test("el nombre del archivo lleva el colegio (sin ceros) y la fecha", () => {
     expect(nombreArchivoLibroClaves("0831305", new Date("2026-10-18T10:00:00Z"))).toBe("libro_de_claves_IE831305_2026-10-18.csv");
     expect(nombreArchivoLibroClaves("9001", new Date("2026-01-02T00:00:00Z"))).toBe("libro_de_claves_IE9001_2026-01-02.csv");
+  });
+});
+
+describe("un 0 es «sin nota», no una nota (CP062)", () => {
+  // Alumno real de La Victoria (P6A): el reporte del colegio guardó 0 donde no tenía nota
+  const retirado = alumno({
+    b1_comunicacion: 15, b2_comunicacion: 14, b3_comunicacion: 0,
+    b1_personal_social: 18, b2_personal_social: 15, b3_personal_social: 0,
+    b3_arte: 15, b4_arte: 0, conducta_promedio: 0,
+  });
+
+  test("comoNota: vacío, no numérico, 0 y negativos son null; una nota real se conserva", () => {
+    expect(comoNota(null)).toBeNull();
+    expect(comoNota("")).toBeNull();
+    expect(comoNota("abc")).toBeNull();
+    expect(comoNota(0)).toBeNull();
+    expect(comoNota("0")).toBeNull();
+    expect(comoNota(-1)).toBeNull();
+    expect(comoNota(11)).toBe(11);
+    expect(comoNota("12.5")).toBe(12.5);
+  });
+
+  test("notaBimestre ignora los ceros", () => {
+    expect(notaBimestre(retirado, "comunicacion", "3")).toBeNull();
+    expect(notaBimestre(retirado, "comunicacion", "2")).toBe(14);
+  });
+
+  test("los factores de riesgo no cuentan los ceros: promedio de B1-B3 solo con las notas que hay", () => {
+    const f = factoresRiesgoColegio(retirado);
+    const com = f.find((x) => x.label === "Comunicación");
+    const social = f.find((x) => x.label === "Personal Social");
+    expect(com?.promedio).toBeCloseTo(14.5);        // (15 + 14) / 2, no (15 + 14 + 0) / 3 = 9.7
+    expect(social?.promedio).toBeCloseTo(16.5);     // (18 + 15) / 2, no 11.0
+    expect(f.find((x) => x.label === "Conducta")).toBeUndefined();   // conducta 0 = sin nota: no aparece como factor
+  });
+
+  test("notaInfo muestra «—» para 0, no «C · 0»", () => {
+    expect(notaInfo(0).label).toBe("—");
+    expect(notaInfo(10).label).toBe("C · 10");
   });
 });

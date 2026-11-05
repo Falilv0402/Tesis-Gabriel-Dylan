@@ -271,7 +271,7 @@ export function ColegioDashboardView({
           {totalFiltrado > 0 ? (
             <>
               <ResponsiveContainer width="100%" height={210}>
-                <PieChart>
+                <PieChart margin={{ top: 22, right: 30, bottom: 22, left: 30 }}>
                   <Pie
                     data={DONUT_NIVELES
                       .map(({ nivel, name, color }) => ({ name, color, value: counts[nivel] }))

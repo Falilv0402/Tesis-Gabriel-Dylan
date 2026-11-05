@@ -53,23 +53,32 @@ export function seccionesDeSalones(alumnos: AlumnoColegio[]): string[] {
 export function notaInfo(v: number | string | null | undefined): { label: string; letra: string; color: string } {
   if (v == null || v === "") return { label: "—", letra: "—", color: "var(--text-muted)" };
   const n = Number(v);
-  if (Number.isNaN(n)) return { label: "—", letra: "—", color: "var(--text-muted)" };
+  if (Number.isNaN(n) || n <= 0) return { label: "—", letra: "—", color: "var(--text-muted)" };   // 0 = sin nota (ver comoNota)
   if (n >= 18) return { label: `AD · ${n.toFixed(0)}`, letra: "AD", color: "#16a34a" };
   if (n >= 14) return { label: `A · ${n.toFixed(0)}`,  letra: "A",  color: "#2563eb" };
   if (n >= 11) return { label: `B · ${n.toFixed(0)}`,  letra: "B",  color: "#d97706" };
   return { label: `C · ${n.toFixed(0)}`, letra: "C", color: "#dc2626" };
 }
 
+/**
+ * Valor de una celda de nota como número, o null si no hay nota. Un 0 tampoco es una nota: el «Reporte consolidado»
+ * del colegio lo escribe donde el alumno se retiró o no fue evaluado, y contado como nota hundía los promedios, los
+ * factores de riesgo y el PDF (CP062). Los datos nuevos ya llegan sin esos ceros; esto protege los modelos viejos.
+ */
+export function comoNota(v: number | string | null | undefined): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isNaN(n) || n <= 0 ? null : n;
+}
+
 /** Lee la nota de una materia en un bimestre dado (b{N}_{materia}). */
 export function notaBimestre(a: AlumnoColegio, materia: string, bimestre: Bimestre): number | null {
-  const v = (a as Record<string, number | string | null | undefined>)[`b${bimestre}_${materia}`];
-  return v == null || v === "" || Number.isNaN(Number(v)) ? null : Number(v);
+  return comoNota((a as Record<string, number | string | null | undefined>)[`b${bimestre}_${materia}`]);
 }
 
 /** Lee el promedio anual de una materia (pp_{materia}). */
 export function notaAnual(a: AlumnoColegio, materia: string): number | null {
-  const v = (a as Record<string, number | string | null | undefined>)[`pp_${materia}`];
-  return v == null || v === "" || Number.isNaN(Number(v)) ? null : Number(v);
+  return comoNota((a as Record<string, number | string | null | undefined>)[`pp_${materia}`]);
 }
 
 /**
@@ -356,7 +365,7 @@ export function factoresRiesgoColegio(
       : notaAnual(a, m.key);
     return { label: m.label, promedio, enRiesgo: promedio != null && promedio <= 13 };
   });
-  const conducta = a.conducta_promedio != null ? Number(a.conducta_promedio) : null;
+  const conducta = comoNota(a.conducta_promedio);
   factores.push({ label: "Conducta", promedio: conducta, enRiesgo: conducta != null && conducta <= 13 });
 
   return factores

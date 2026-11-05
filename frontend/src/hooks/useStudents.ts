@@ -336,6 +336,17 @@ export function useStudents(
           prev.map((m) => m.id === id ? { ...m, completado: !nuevoEstado } : m)
         );
         toast("Error al actualizar el hito.", "error");
+      } else if (nuevoEstado && selected) {
+        // Al completar un hito también se avisa al equipo (CP046); al desmarcarlo no.
+        const nombre = selected.nombre ?? `Estudiante ${selected.id.slice(-4).padStart(4, "0")}`;
+        void crearNotificacion?.({
+          codigoIe: selected.id_ie,
+          tipo: "hito",
+          estudianteId: selected.id,
+          estudianteNombre: nombre,
+          mensaje: `${autorNombre ?? "Alguien"} completó un hito de ${nombre}: "${milestone.texto}".`,
+          autorNombre: autorNombre ?? "Alguien",
+        });
       }
     }
   }

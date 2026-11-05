@@ -35,23 +35,11 @@ interface CrearNotificacionFn {
   }): Promise<void>;
 }
 
-interface NotificarDirigidaFn {
-  (params: {
-    codigoIe: string | null | undefined;
-    destinatarioId: string;
-    estudianteId: string;
-    estudianteNombre: string;
-    mensaje: string;
-    autorNombre: string;
-  }): Promise<void>;
-}
-
 export function usePlanRevision(
   session: User | null,
   toast: (msg: string, type?: "success" | "error" | "info") => void,
   insertAudit: (accion: string, tabla?: string, detalle?: object) => Promise<void>,
   crearNotificacion: CrearNotificacionFn,
-  notificarDirigida: NotificarDirigidaFn,
 ) {
   const [planEstado, setPlanEstado] = useState<PlanEstadoRow | null>(null);
   const [isLoadingPlanEstado, setIsLoadingPlanEstado] = useState(false);
@@ -134,20 +122,17 @@ export function usePlanRevision(
     setPlanesPendientes((prev) => prev.filter((p) => p.estudiante_id !== row.estudiante_id));
     await insertAudit(decision === "aprobado" ? "Aprobar plan" : "Rechazar plan", "plan_estado", { estudiante_id: row.estudiante_id });
     toast(decision === "aprobado" ? "Plan aprobado." : "Se pidieron cambios al plan.", "success");
-    // Best-effort: si el plan lo envió el propio Director, no hay a quién avisar.
-    if (row.enviado_por && row.enviado_por !== session.id) {
-      const nombreAlumno = row.estudiante_nombre ?? "el alumno";
-      void notificarDirigida({
-        codigoIe: row.codigo_ie,
-        destinatarioId: row.enviado_por,
-        estudianteId: row.estudiante_id,
-        estudianteNombre: nombreAlumno,
-        mensaje: decision === "aprobado"
-          ? `${miNombre} aprobó el plan de ${nombreAlumno}.`
-          : `${miNombre} pidió cambios al plan de ${nombreAlumno}${comentario.trim() ? `: "${comentario.trim()}"` : "."}`,
-        autorNombre: miNombre,
-      });
-    }
+    // Aviso a todo el equipo del colegio (menos a quien decide), no solo a quien envió el plan: así también se
+    // enteran los demás Directores y Coordinadores (CP046). Best-effort: si falla, la decisión ya quedó guardada.
+    const nombreAlumno = row.estudiante_nombre ?? "el alumno";
+    void crearNotificacion({
+      codigoIe: row.codigo_ie, tipo: "plan",
+      estudianteId: row.estudiante_id, estudianteNombre: nombreAlumno,
+      mensaje: decision === "aprobado"
+        ? `${miNombre} aprobó el plan de ${nombreAlumno}.`
+        : `${miNombre} pidió cambios al plan de ${nombreAlumno}${comentario.trim() ? `: "${comentario.trim()}"` : "."}`,
+      autorNombre: miNombre,
+    });
     setIsDecidiendoPlan(false);
   }
 
@@ -163,7 +148,9 @@ export function usePlanRevision(
       .select("*")
       .eq("estado", "en_revision")
       .order("enviado_at", { ascending: true });
-    setPlanesPendientes(error ? [] : (data as PlanEstadoRow[]));
+    // Los planes que envió esta misma persona los debe revisar otro Director (CP053): no se le ofrecen para aprobar.
+    const propios = (p: PlanEstadoRow) => !!p.enviado_por && p.enviado_por === session?.id;
+    setPlanesPendientes(error ? [] : (data as PlanEstadoRow[]).filter((p) => !propios(p)));
   }
 
   return {

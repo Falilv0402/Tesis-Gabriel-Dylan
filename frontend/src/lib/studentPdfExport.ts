@@ -10,7 +10,7 @@ import autoTable from "jspdf-autotable";
 import type { AlumnoColegio, ShapData, Student } from "@/types";
 import { shortId, pct } from "@/lib/format";
 import { featureLabels } from "@/lib/constants";
-import { MATERIAS_COLEGIO, anioFromSalon, factoresRiesgoColegio, notaCelda } from "@/lib/colegio";
+import { MATERIAS_COLEGIO, anioFromSalon, comoNota, factoresRiesgoColegio, notaCelda } from "@/lib/colegio";
 
 export async function generateStudentPdf(
   selected:         Student,
@@ -193,8 +193,10 @@ async function generateStudentPdfColegio(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  const promedio = alumno.promedio_materias != null ? Number(alumno.promedio_materias).toFixed(1) : "—";
-  const conducta = alumno.conducta_promedio != null ? Number(alumno.conducta_promedio).toFixed(1) : "—";
+  const promedioNota = comoNota(alumno.promedio_materias);
+  const conductaNota = comoNota(alumno.conducta_promedio);
+  const promedio = promedioNota != null ? promedioNota.toFixed(1) : "—";
+  const conducta = conductaNota != null ? conductaNota.toFixed(1) : "—";
   const datos: [string, string][] = [
     ["Salón",                 alumno.salon],
     ["Grado",                 anioFromSalon(alumno.salon).label],

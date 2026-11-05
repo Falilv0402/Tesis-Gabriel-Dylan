@@ -24,15 +24,6 @@ interface CrearNotificacionParams {
   autorNombre: string;
 }
 
-interface NotificarDirigidaParams {
-  codigoIe: string | null | undefined;
-  destinatarioId: string;
-  estudianteId: string;
-  estudianteNombre: string;
-  mensaje: string;
-  autorNombre: string;
-}
-
 /**
  * Notificaciones entre directores/coordinadores del mismo colegio: cuando
  * uno agrega una anotación o agenda un hito, los demás lo ven aquí (no solo
@@ -117,24 +108,5 @@ export function useNotificaciones(session: User | null) {
     await supabase.from("notificaciones").insert(filas);
   }
 
-  /** Notifica a UN destinatario puntual (ej. avisar al Coordinador que
-   * envió un plan a revisión cuál fue la decisión del Director) -- a
-   * diferencia de crearNotificacion, que siempre le avisa a todo el equipo. */
-  async function notificarDirigida({
-    codigoIe, destinatarioId, estudianteId, estudianteNombre, mensaje, autorNombre,
-  }: NotificarDirigidaParams) {
-    if (!session || !codigoIe || !destinatarioId || destinatarioId === session.id) return;
-    await supabase.from("notificaciones").insert({
-      codigo_ie: codigoIe,
-      tipo: "plan",
-      estudiante_id: estudianteId,
-      estudiante_nombre: estudianteNombre,
-      mensaje,
-      autor_id: session.id,
-      autor_nombre: autorNombre,
-      destinatario_id: destinatarioId,
-    });
-  }
-
-  return { notificaciones, unreadCount, loadNotificaciones: load, marcarLeida, marcarTodasLeidas, crearNotificacion, notificarDirigida };
+  return { notificaciones, unreadCount, loadNotificaciones: load, marcarLeida, marcarTodasLeidas, crearNotificacion };
 }

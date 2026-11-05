@@ -129,6 +129,25 @@ export function DatosView({
   const [nombreColegio, setNombreColegio] = useState("");
   const nombreLimpio = nombreColegio.replace(/\s+/g, " ").trim();
   const nombreActual = !isSuperadmin && colegioModelStats && !isEM2022 ? colegioModelStats.nombre_colegio : null;
+
+  function exportarHistorial() {
+    const header = "fecha,version,alumnos,ALTO,MEDIO,BAJO,accuracy,auc_roc";
+    const celda = (x: unknown) => {
+      const s = x == null ? "" : String(x);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = modelosVersiones.map((v) =>
+      [v.created_at, v.version, v.n_alumnos, v.n_alto, v.n_medio, v.n_bajo, v.accuracy, v.auc_roc].map(celda).join(",")
+    );
+    const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `historial_reentrenamientos_IE${String(parseInt(ieEfectiva, 10) || ieEfectiva)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const nombreObligatorio = isColegioRole && !esperandoModelo && (!colegioModelStats || isEM2022);
   const nombreFaltante = nombreObligatorio && !nombreLimpio;
   const nombreMuyCorto = !!nombreLimpio && nombreLimpio.length < 3;
@@ -514,37 +533,30 @@ export function DatosView({
                 </table>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  const header = "fecha,version,alumnos,ALTO,MEDIO,BAJO,accuracy,auc_roc";
-                  const celda = (x: unknown) => {
-                    const s = x == null ? "" : String(x);
-                    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-                  };
-                  const rows = modelosVersiones.map((v) =>
-                    [v.created_at, v.version, v.n_alumnos, v.n_alto, v.n_medio, v.n_bajo, v.accuracy, v.auc_roc].map(celda).join(",")
-                  );
-                  const csv = [header, ...rows].join("\n");
-                  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `historial_reentrenamientos_IE${String(parseInt(ieEfectiva, 10) || ieEfectiva)}.csv`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6, alignSelf: "flex-start",
-                  padding: "6px 12px", fontSize: 12, fontWeight: 600, color: "var(--navy)",
-                  background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8,
-                  cursor: "pointer",
-                }}
-              >
-                <Download size={14} /> Exportar CSV
-              </button>
             </div>
           )}
+
+          {/* Siempre visible (CP057): sin versiones registradas se muestra desactivado y se explica por qué. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              disabled={modelosVersiones.length === 0}
+              title={modelosVersiones.length === 0 ? "Aún no hay versiones registradas para exportar" : "Descargar el histórico en CSV"}
+              onClick={exportarHistorial}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "6px 12px", fontSize: 12, fontWeight: 600, color: "var(--navy)",
+                background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8,
+                cursor: modelosVersiones.length === 0 ? "not-allowed" : "pointer",
+                opacity: modelosVersiones.length === 0 ? 0.55 : 1,
+              }}
+            >
+              <Download size={14} /> Exportar CSV
+            </button>
+            {modelosVersiones.length === 0 && (
+              <span className="model-note" style={{ fontSize: 11 }}>Se habilita en cuanto haya una versión registrada.</span>
+            )}
+          </div>
         </Panel>
       )}
 

@@ -65,7 +65,7 @@ export default function Page() {
   const notificaciones = useNotificaciones(auth.session);
   const planRevision = usePlanRevision(
     auth.session, toast, auth.insertAudit,
-    notificaciones.crearNotificacion, notificaciones.notificarDirigida,
+    notificaciones.crearNotificacion,
   );
   const autorNombreActual = auth.profileNombre
     ? `${auth.profileNombre}${auth.profileApellidos ? " " + auth.profileApellidos : ""}`
@@ -374,7 +374,7 @@ export default function Page() {
               </div>
               {notificaciones.notificaciones.length === 0 ? (
                 <div className="notif-inbox-empty">
-                  Sin notificaciones — te avisamos aquí cuando alguien de tu colegio agregue una anotación o agende un hito.
+                  Sin notificaciones — te avisamos aquí cuando alguien de tu colegio agregue una anotación, agende o complete un hito, o envíe, apruebe o pida cambios a un plan.
                 </div>
               ) : (
                 <ul className="notif-inbox-list">
@@ -465,6 +465,7 @@ export default function Page() {
           {isDirectorRole && tab === "estudiante" && colegio.hasModel && (
             <ColegioEstudianteView
               role={auth.role}
+              miId={auth.session?.id}
               alumno={colegioSelectedAlumno}
               resumen={colegio.resumen}
               alumnos={colegio.alumnos}
