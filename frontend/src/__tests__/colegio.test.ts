@@ -5,7 +5,7 @@
  */
 import {
   describirNombreColegio, describirResultado, formatearFechaModelo, historialRiesgo, lecturaAlumno,
-  libroClavesCsv, nombreArchivoLibroClaves, comoNota, notaBimestre, notaInfo, factoresRiesgoColegio,
+  libroClavesCsv, nombreArchivoLibroClaves, comoNota, notaBimestre, notaInfo, factoresRiesgoColegio, tipoRiesgoColegio,
 } from "@/lib/colegio";
 import type { AlumnoColegio } from "@/types";
 
@@ -246,5 +246,36 @@ describe("un 0 es «sin nota», no una nota (CP062)", () => {
   test("notaInfo muestra «—» para 0, no «C · 0»", () => {
     expect(notaInfo(0).label).toBe("—");
     expect(notaInfo(10).label).toBe("C · 10");
+  });
+});
+
+
+describe("tipo de riesgo del alumno de colegio (CP042)", () => {
+  // El «Reporte consolidado» no trae promedio anual (pp_): el tipo debe salir de las notas de los bimestres B1-B3
+  const sinAnual = (extra: Record<string, unknown>) => alumno({ nivel_riesgo: "ALTO", ...extra });
+
+  test("sin promedio anual: Matemática baja y Comunicación alta → «Bajo en Matemática»", () => {
+    const a = sinAnual({ b1_matematica: 11, b2_matematica: 12, b3_matematica: 12, b1_comunicacion: 15, b2_comunicacion: 14, b3_comunicacion: 16 });
+    expect(tipoRiesgoColegio(a)).toBe("Bajo en Matemática");
+  });
+
+  test("sin promedio anual: Comunicación baja → «Bajo en Comunicación»; ambas bajas → «Bajo en varias áreas»", () => {
+    expect(tipoRiesgoColegio(sinAnual({ b1_matematica: 16, b2_matematica: 15, b1_comunicacion: 10, b2_comunicacion: 12 }))).toBe("Bajo en Comunicación");
+    expect(tipoRiesgoColegio(sinAnual({ b1_matematica: 11, b1_comunicacion: 12 }))).toBe("Bajo en varias áreas");
+  });
+
+  test("sin notas bajas: ALTO → «Seguimiento académico» y BAJO → «Sin alerta»", () => {
+    const buenas = { b1_matematica: 16, b1_comunicacion: 15 };
+    expect(tipoRiesgoColegio(sinAnual(buenas))).toBe("Seguimiento académico");
+    expect(tipoRiesgoColegio(alumno({ nivel_riesgo: "BAJO", ...buenas }))).toBe("Sin alerta");
+  });
+
+  test("un 0 no cuenta como nota baja, ni en los bimestres ni en el promedio anual", () => {
+    expect(tipoRiesgoColegio(sinAnual({ b1_matematica: 0, b2_matematica: 0, pp_comunicacion: 0 }))).toBe("Seguimiento académico");
+  });
+
+  test("con promedio anual del reporte, ese promedio manda sobre los bimestres", () => {
+    expect(tipoRiesgoColegio(sinAnual({ pp_matematica: 17, b1_matematica: 8, b2_matematica: 9 }))).toBe("Seguimiento académico");
+    expect(tipoRiesgoColegio(sinAnual({ pp_matematica: 10 }))).toBe("Bajo en Matemática");
   });
 });

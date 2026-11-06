@@ -41,7 +41,7 @@ import { ColegioEstudianteView } from "@/views/ColegioEstudianteView";
 import { ColegioIntervencionesView } from "@/views/ColegioIntervencionesView";
 import { useColegio } from "@/hooks/useColegio";
 import { useColegioModels } from "@/hooks/useColegioModels";
-import { colegioStudentId, colegioToStudent } from "@/lib/colegio";
+import { SIN_ALUMNO, colegioStudentId, colegioToStudent, resolverAlumnoSeleccionado } from "@/lib/colegio";
 
 import type { Tab, UserRole } from "@/types";
 
@@ -77,10 +77,8 @@ export default function Page() {
   // Alumno de colegio seleccionado (por defecto, el de mayor riesgo) y su
   // adaptación a la forma `Student` para reutilizar los hooks compartidos.
   const colegioSelectedAlumno = useMemo(() => {
-    if (!colegio.hasModel || colegio.alumnos.length === 0) return undefined;
-    const found = colegio.alumnos.find((a) => colegioStudentId(a) === selectedColegioId);
-    if (found) return found;
-    return [...colegio.alumnos].sort((a, b) => b.prob_riesgo - a.prob_riesgo)[0];
+    if (!colegio.hasModel) return undefined;
+    return resolverAlumnoSeleccionado(colegio.alumnos, selectedColegioId);
   }, [colegio.hasModel, colegio.alumnos, selectedColegioId]);
 
   const colegioSelectedStudent = useMemo(
@@ -536,7 +534,7 @@ export default function Page() {
               role={auth.role}
               alumnos={colegio.alumnos}
               selectedAlumno={colegioSelectedAlumno}
-              onSelectAlumno={(id) => setSelectedColegioId(id)}
+              onSelectAlumno={(id) => setSelectedColegioId(id === "" ? SIN_ALUMNO : id)}
               tipoIntervencion={interventions.tipoIntervencion} setTipoIntervencion={interventions.setTipoIntervencion}
               descIntervencion={interventions.descIntervencion} setDescIntervencion={interventions.setDescIntervencion}
               notifScope={interventions.notifScope} setNotifScope={interventions.setNotifScope}

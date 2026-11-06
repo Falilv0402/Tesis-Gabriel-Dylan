@@ -70,6 +70,13 @@ export function ColegioIntervencionesView({
 
   const selectedId = selectedAlumno ? colegioStudentId(selectedAlumno) : "";
 
+  // Los 30 de mayor riesgo, más el alumno elegido si no está entre ellos (p. ej. llega desde «Intervenir» en otra
+  // pestaña): sin esto el selector parecía vacío aunque «Registrar» guardaría para ese alumno.
+  const opciones = useMemo(() => {
+    const top = ordenados.slice(0, 30);
+    return selectedAlumno && !top.some((a) => colegioStudentId(a) === selectedId) ? [selectedAlumno, ...top] : top;
+  }, [ordenados, selectedAlumno, selectedId]);
+
   return (
     <>
       <section className="two-col">
@@ -77,7 +84,7 @@ export function ColegioIntervencionesView({
           <label>Alumno
             <select value={selectedId} onChange={(e) => onSelectAlumno(e.target.value)}>
               <option value="">{ordenados.length > 0 ? "Seleccionar alumno..." : "Sin alumnos cargados"}</option>
-              {ordenados.slice(0, 30).map((a) => (
+              {opciones.map((a) => (
                 <option key={colegioStudentId(a)} value={colegioStudentId(a)}>
                   {a.nombre} — {a.salon} · {a.nivel_riesgo} ({pct(a.prob_riesgo)})
                 </option>

@@ -346,6 +346,23 @@ export function colegioStudentId(a: AlumnoColegio): string {
 }
 
 /**
+ * Valor del selector de alumno que significa «ninguno». Antes, elegir «Seleccionar alumno…» (valor vacío) volvía al
+ * alumno de mayor riesgo, así que «Registrar» nunca quedaba deshabilitado y guardaba la intervención de otro alumno (CP045).
+ */
+export const SIN_ALUMNO = "__ninguno__";
+
+/**
+ * Alumno seleccionado en las pestañas del colegio: el elegido por id; sin elección todavía (id vacío o que ya no existe),
+ * el de mayor riesgo; y ninguno si la persona eligió explícitamente «sin alumno» (SIN_ALUMNO).
+ */
+export function resolverAlumnoSeleccionado(alumnos: AlumnoColegio[], id: string): AlumnoColegio | undefined {
+  if (alumnos.length === 0 || id === SIN_ALUMNO) return undefined;
+  const elegido = alumnos.find((a) => colegioStudentId(a) === id);
+  if (elegido) return elegido;
+  return [...alumnos].sort((a, b) => b.prob_riesgo - a.prob_riesgo)[0];
+}
+
+/**
  * HU012: factores de riesgo de un alumno del modelo propio del colegio.
  * No hay SHAP por instancia aquí (la muestra por colegio es muy chica para
  * que una explicación por instancia sea confiable) -- en su lugar, se usa
@@ -353,16 +370,18 @@ export function colegioStudentId(a: AlumnoColegio): string {
  * que usa el modelo real) y se muestran las más bajas, que es justamente lo
  * que más eleva la probabilidad de riesgo.
  */
+function promedioB1B3(a: AlumnoColegio, materia: string): number | null {
+  const notas = (["1", "2", "3"] as const)
+    .map((b) => notaBimestre(a, materia, b))
+    .filter((n): n is number => n != null);
+  return notas.length > 0 ? notas.reduce((s, n) => s + n, 0) / notas.length : null;
+}
+
 export function factoresRiesgoColegio(
   a: AlumnoColegio,
 ): { label: string; promedio: number | null; enRiesgo: boolean }[] {
   const factores: { label: string; promedio: number | null; enRiesgo: boolean }[] = MATERIAS_COLEGIO.map((m) => {
-    const notas = (["1", "2", "3"] as const)
-      .map((b) => notaBimestre(a, m.key, b))
-      .filter((n): n is number => n != null);
-    const promedio = notas.length > 0
-      ? notas.reduce((s, n) => s + n, 0) / notas.length
-      : notaAnual(a, m.key);
+    const promedio = promedioB1B3(a, m.key) ?? notaAnual(a, m.key);
     return { label: m.label, promedio, enRiesgo: promedio != null && promedio <= 13 };
   });
   const conducta = comoNota(a.conducta_promedio);
@@ -375,8 +394,11 @@ export function factoresRiesgoColegio(
 
 /** Clasifica el tipo de riesgo del alumno de colegio según sus promedios. */
 export function tipoRiesgoColegio(a: AlumnoColegio): string {
-  const mat = comoNota(a.pp_matematica);   // un 0 no es una nota (ver comoNota)
-  const com = comoNota(a.pp_comunicacion);
+  // Promedio anual (pp_) si el reporte lo trae; si no, el de los bimestres B1-B3, igual que los factores de riesgo.
+  // El «Reporte consolidado» no trae promedio anual: sin esta caída ningún alumno salía «Bajo en Matemática» ni
+  // «Bajo en Comunicación», todos quedaban en «Seguimiento académico» y la descripción de respaldo era siempre la genérica (CP042).
+  const mat = notaAnual(a, "matematica") ?? promedioB1B3(a, "matematica");   // un 0 no es una nota (ver comoNota)
+  const com = notaAnual(a, "comunicacion") ?? promedioB1B3(a, "comunicacion");
   const bajoMat = mat != null && mat <= 13;
   const bajoCom = com != null && com <= 13;
   if (bajoMat && bajoCom) return "Bajo en varias áreas";

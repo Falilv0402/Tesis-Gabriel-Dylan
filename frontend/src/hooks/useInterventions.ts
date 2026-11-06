@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { AlumnoColegio, ShapData, Student } from "@/types";
 import { supabase } from "@/lib/supabase";
@@ -36,6 +36,7 @@ export function useInterventions(
     estudianteId: string; estudianteNombre: string; mensaje: string; autorNombre: string;
   }) => Promise<void>,
 ) {
+  const registrando = useRef(false);   // true mientras se guarda una intervención: ignora clics repetidos (CP045)
   const [interventions,      setInterventions]      = useState<Intervention[]>([]);
   const [tipoIntervencion,   setTipoIntervencion]   = useState<"tutoria" | "reunion" | "derivacion" | "seguimiento">("tutoria");
   const [descIntervencion,   setDescIntervencion]   = useState("");
@@ -96,32 +97,38 @@ export function useInterventions(
   }
 
   async function handleRegistrarIntervencion(authBusy: boolean, setAuthBusy: (v: boolean) => void) {
-    if (!selected || !session) return;
+    // Sin alumno elegido no se guarda nada, y un segundo clic mientras el primero sigue en curso se ignora (CP045).
+    if (!selected || !session || authBusy || registrando.current) return;
+    registrando.current = true;
     setAuthBusy(true);
-    const desc = descIntervencion.trim() || recommendation(selected);
-    // codigo_ie/distrito scopean la intervención a un colegio o distrito
-    // (migración 0014) para que un director de un colegio no vea la bitácora
-    // de otro. "Colegio" es el periodo que colegioToStudent() les pone a los
-    // alumnos de un colegio propio (ver lib/colegio.ts) — para EM2022 solo
-    // hay distrito, no codigo_ie de colegio propio.
-    const { error } = await supabase.from("intervenciones").insert({
-      codigo_estudiante: selected.id,
-      tipo:             tipoIntervencion,
-      descripcion:      desc,
-      estado:           "pendiente",
-      registrado_por:   session.id,
-      codigo_ie: selected.periodo === "Colegio" ? (selected.id_ie ?? null) : null,
-      distrito:  selected.distrito ?? null,
-    });
-    if (!error) {
-      await insertAudit("Registrar intervencion", "intervenciones", { estudiante: selected.id, tipo: tipoIntervencion });
-      toast("Intervencion registrada en la base de datos.");
-      setDescIntervencion("");
-      void loadInterventions();
-    } else {
-      toast("Error al guardar la intervencion.", "error");
+    try {
+      const desc = descIntervencion.trim() || recommendation(selected);
+      // codigo_ie/distrito scopean la intervención a un colegio o distrito
+      // (migración 0014) para que un director de un colegio no vea la bitácora
+      // de otro. "Colegio" es el periodo que colegioToStudent() les pone a los
+      // alumnos de un colegio propio (ver lib/colegio.ts) — para EM2022 solo
+      // hay distrito, no codigo_ie de colegio propio.
+      const { error } = await supabase.from("intervenciones").insert({
+        codigo_estudiante: selected.id,
+        tipo:             tipoIntervencion,
+        descripcion:      desc,
+        estado:           "pendiente",
+        registrado_por:   session.id,
+        codigo_ie: selected.periodo === "Colegio" ? (selected.id_ie ?? null) : null,
+        distrito:  selected.distrito ?? null,
+      });
+      if (!error) {
+        await insertAudit("Registrar intervencion", "intervenciones", { estudiante: selected.id, tipo: tipoIntervencion });
+        toast("Intervencion registrada en la base de datos.");
+        setDescIntervencion("");
+        void loadInterventions();
+      } else {
+        toast("Error al guardar la intervencion.", "error");
+      }
+    } finally {
+      registrando.current = false;
+      setAuthBusy(false);
     }
-    setAuthBusy(false);
   }
 
   // ── Team alert ───────────────────────────────────────────────────────────
