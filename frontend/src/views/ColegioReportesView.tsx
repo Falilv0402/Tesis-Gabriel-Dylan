@@ -148,7 +148,7 @@ export function ColegioReportesView({
         <button
           onClick={() => exportColegioPdf(nombreColegio, filtrados, alumnos, bimestre, userEmail ?? "usuario")}
           style={{ background: "var(--navy)", color: "#fff", border: "none" }}
-          title="Exportar reporte PDF (landscape A4, hasta 120 alumnos)"
+          title="Exportar reporte PDF con los alumnos filtrados (A4 horizontal)"
         >
           <FileText size={17} /> Reporte PDF
         </button>

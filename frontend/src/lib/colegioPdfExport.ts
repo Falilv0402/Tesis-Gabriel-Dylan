@@ -91,7 +91,9 @@ export function exportColegioPdf(
     "Conducta",
   ];
 
-  const body: (string | number)[][] = filtrados.slice(0, 120).map((a, i) => [
+  // Todos los alumnos filtrados (CP059): antes se cortaba en 120 y, con riesgo ALTO en IE 831305 (182 alumnos), el PDF salía
+  // incompleto; la nota que lo avisaba ni siquiera se dibujaba si la tabla terminaba cerca del borde de la página.
+  const body: (string | number)[][] = filtrados.map((a, i) => [
     i + 1,
     a.nombre,
     a.salon,
@@ -143,20 +145,6 @@ export function exportColegioPdf(
     margin: { left: 10, right: 10 },
     tableWidth: "auto",
   });
-
-  // ── Nota de truncado si hay más de 120 alumnos ────────────────────────────
-  if (filtrados.length > 120) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const afterTable = ((doc as any).lastAutoTable?.finalY ?? pageH - 18) + 3;
-    if (afterTable < pageH - 15) {
-      doc.setFontSize(7);
-      doc.setTextColor(...GRAY);
-      doc.text(
-        `Mostrando los primeros 120 de ${filtrados.length} alumnos. Exporta en CSV para el listado completo.`,
-        pageW / 2, afterTable, { align: "center" },
-      );
-    }
-  }
 
   // ── Footer ────────────────────────────────────────────────────────────────
   doc.setFontSize(7);
