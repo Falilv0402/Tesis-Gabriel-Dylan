@@ -32,7 +32,7 @@ interface CrearNotificacionFn {
     estudianteNombre: string;
     mensaje: string;
     autorNombre: string;
-  }): Promise<void>;
+  }): Promise<number | null>;
 }
 
 export function usePlanRevision(

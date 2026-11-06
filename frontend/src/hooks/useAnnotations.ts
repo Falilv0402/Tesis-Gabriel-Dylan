@@ -31,7 +31,7 @@ export function useAnnotations(
   insertAudit: (accion: string, tabla?: string, detalle?: object) => Promise<void>,
   toast:       (msg: string, type?: "success" | "error" | "info") => void,
   autorNombre: string,
-  crearNotificacion?: (params: CrearNotificacionParams) => Promise<void>,
+  crearNotificacion?: (params: CrearNotificacionParams) => Promise<number | null>,
 ) {
   const [annotations,       setAnnotations]       = useState<Annotation[]>([]);
   const [annotationText,    setAnnotationText]    = useState("");

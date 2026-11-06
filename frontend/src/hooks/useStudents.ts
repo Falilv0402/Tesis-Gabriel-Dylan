@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import type { DatasetSummary, Diagnostico, RiskLevel, ShapData, Student } from "@/types";
 import { supabase } from "@/lib/supabase";
 import { apiUrl, EM2022_HABILITADO } from "@/lib/constants";
+import { avisoEquipo } from "@/lib/avisos";
 import type { DistrictRiskEntry } from "@/components/maps/LimaHeatmap";
 
 export function useStudents(
@@ -27,7 +28,7 @@ export function useStudents(
   crearNotificacion?: (params: {
     codigoIe: string | null | undefined; tipo: "anotacion" | "hito";
     estudianteId: string; estudianteNombre: string; mensaje: string; autorNombre: string;
-  }) => Promise<void>,
+  }) => Promise<number | null>,
 ) {
   const [students,          setStudents]          = useState<Student[]>([]);
   const [totalStudents,     setTotalStudents]      = useState(0);
@@ -291,8 +292,9 @@ export function useStudents(
         setPlanMilestones((prev) =>
           prev.map((m) => m.id === tempId ? { ...m, id: data.id as string } : m)
         );
+        setIsAddingMilestone(false);   // el botón queda libre sin esperar el aviso al equipo
         const nombre = selected.nombre ?? `Estudiante ${selected.id.slice(-4).padStart(4, "0")}`;
-        void crearNotificacion?.({
+        const avisados = await crearNotificacion?.({
           codigoIe: selected.id_ie,
           tipo: "hito",
           estudianteId: selected.id,
@@ -300,6 +302,9 @@ export function useStudents(
           mensaje: `${autorNombre ?? "Alguien"} agendó un hito para ${nombre}: "${texto}" (${fecha}).`,
           autorNombre: autorNombre ?? "Alguien",
         });
+        // Confirmación visible (CP050): antes el hito aparecía en la lista sin ningún mensaje, a diferencia de las anotaciones.
+        const aviso = avisoEquipo("Hito guardado", avisados);
+        toast(aviso.text, aviso.type);
       } else {
         // Roll back if insert failed
         setPlanMilestones((prev) => prev.filter((m) => m.id !== tempId));
@@ -339,7 +344,7 @@ export function useStudents(
       } else if (nuevoEstado && selected) {
         // Al completar un hito también se avisa al equipo (CP046); al desmarcarlo no.
         const nombre = selected.nombre ?? `Estudiante ${selected.id.slice(-4).padStart(4, "0")}`;
-        void crearNotificacion?.({
+        const avisados = await crearNotificacion?.({
           codigoIe: selected.id_ie,
           tipo: "hito",
           estudianteId: selected.id,
@@ -347,6 +352,8 @@ export function useStudents(
           mensaje: `${autorNombre ?? "Alguien"} completó un hito de ${nombre}: "${milestone.texto}".`,
           autorNombre: autorNombre ?? "Alguien",
         });
+        const aviso = avisoEquipo("Hito completado", avisados);
+        toast(aviso.text, aviso.type);
       }
     }
   }

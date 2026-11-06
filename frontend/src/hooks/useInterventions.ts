@@ -34,7 +34,7 @@ export function useInterventions(
   crearNotificacion?: (params: {
     codigoIe: string | null | undefined; tipo: "anotacion" | "hito";
     estudianteId: string; estudianteNombre: string; mensaje: string; autorNombre: string;
-  }) => Promise<void>,
+  }) => Promise<number | null>,
 ) {
   const registrando = useRef(false);   // true mientras se guarda una intervención: ignora clics repetidos (CP045)
   const [interventions,      setInterventions]      = useState<Intervention[]>([]);

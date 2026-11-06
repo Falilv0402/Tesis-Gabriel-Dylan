@@ -78,20 +78,24 @@ export function useNotificaciones(session: User | null) {
     await supabase.from("notificaciones").update({ leido: true }).in("id", pendientes);
   }
 
-  /** Crea una fila por cada director/coordinador activo del mismo colegio (menos el autor). */
+  /**
+   * Crea una fila por cada director/coordinador activo del mismo colegio (menos el autor).
+   * Devuelve a cuántos compañeros avisó (0 si no hay otros miembros activos) o `null` si no se pudo guardar el aviso.
+   */
   async function crearNotificacion({
     codigoIe, tipo, estudianteId, estudianteNombre, mensaje, autorNombre,
-  }: CrearNotificacionParams) {
-    if (!session || !codigoIe) return;
+  }: CrearNotificacionParams): Promise<number | null> {
+    if (!session || !codigoIe) return null;
     const ieNorm = String(parseInt(codigoIe, 10));
-    const { data: destinatarios } = await supabase
+    const { data: destinatarios, error: errorDestinatarios } = await supabase
       .from("profiles")
       .select("id")
       .eq("activo", true)
       .in("rol", ["director", "coordinador"])
       .neq("id", session.id)
       .or(`codigo_ie.eq.${codigoIe},codigo_ie.eq.${ieNorm}`);
-    if (!destinatarios || destinatarios.length === 0) return;
+    if (errorDestinatarios) return null;
+    if (!destinatarios || destinatarios.length === 0) return 0;
 
     const filas = destinatarios.map((d) => ({
       codigo_ie: codigoIe,
@@ -105,7 +109,8 @@ export function useNotificaciones(session: User | null) {
     }));
     // Best-effort: si la migracion 0013 no se aplico, esto falla en
     // silencio y no debe romper el flujo de guardar la anotacion/hito.
-    await supabase.from("notificaciones").insert(filas);
+    const { error } = await supabase.from("notificaciones").insert(filas);
+    return error ? null : filas.length;
   }
 
   return { notificaciones, unreadCount, loadNotificaciones: load, marcarLeida, marcarTodasLeidas, crearNotificacion };
