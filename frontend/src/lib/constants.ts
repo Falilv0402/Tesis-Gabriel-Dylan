@@ -26,7 +26,9 @@ export const navItems: { id: Tab; label: string; icon: typeof Activity; roles: U
   { id: "reportes",       label: "Reportes",      icon: FileText,      roles: ["director", "coordinador"] },
   { id: "usuarios",       label: "Usuarios",      icon: Users,         roles: ["superadmin", "admin", "director"] },
   { id: "datos",          label: "Datos",          icon: Database,      roles: ["superadmin", "admin", "director", "coordinador"] },
-  ...(EM2022_HABILITADO ? [{ id: "modelo" as Tab, label: "Modelo ML", icon: Activity, roles: ["superadmin"] as UserRole[] }] : []),
+  // El superadmin siempre ve esta pestaña: supervisa los modelos de los colegios.
+  // Con EM2022 apagado solo muestra esos modelos (sin el modelo nacional).
+  { id: "modelo",         label: EM2022_HABILITADO ? "Modelo ML" : "Modelos", icon: Activity, roles: ["superadmin"] },
 ];
 
 export const featureLabels: Record<string, string> = {

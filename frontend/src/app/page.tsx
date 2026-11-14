@@ -33,6 +33,7 @@ import { EstudianteView } from "@/views/EstudianteView";
 import { IntervencionesView } from "@/views/IntervencionesView";
 import { DatosView } from "@/views/DatosView";
 import { ModeloView } from "@/views/ModeloView";
+import { ModelosColegios } from "@/views/modelo/ModelosColegios";
 import { ReportesView } from "@/views/ReportesView";
 import { UsuariosView } from "@/views/UsuariosView";
 import { ColegioDashboardView } from "@/views/ColegioDashboardView";
@@ -116,7 +117,7 @@ export default function Page() {
 
   const directorTabs   = ["dashboard", "estudiante", "reportes", "intervenciones", "datos"]; // también coordinador
   const adminTabs      = ["usuarios", "datos"];
-  const superadminTabs = EM2022_HABILITADO ? ["usuarios", "datos", "modelo"] : ["usuarios", "datos"];
+  const superadminTabs = ["usuarios", "datos", "modelo"];
 
   const isAdmin      = auth.role === "admin" || auth.role === "superadmin";
   const isSuperadmin = auth.role === "superadmin";
@@ -634,9 +635,23 @@ export default function Page() {
             />
           )}
 
-          {isSuperadmin && tab === "modelo" && (
+          {isSuperadmin && tab === "modelo" && !EM2022_HABILITADO && (
+            <ModelosColegios
+              models={colegioModels.models}
+              isLoading={colegioModels.isLoading}
+              failed={colegioModels.failed}
+              loadError={colegioModels.loadError}
+              onReload={() => void colegioModels.reload()}
+            />
+          )}
+
+          {isSuperadmin && tab === "modelo" && EM2022_HABILITADO && (
             <ModeloView
               colegioModels={colegioModels.models}
+              colegiosLoading={colegioModels.isLoading}
+              colegiosFailed={colegioModels.failed}
+              colegiosLoadError={colegioModels.loadError}
+              onReloadColegios={() => void colegioModels.reload()}
               metrics={modelData.metrics} evaluation={modelData.evaluation}
               diagnostico={modelData.diagnostico} globalSummary={modelData.globalSummary}
               topFactors={modelData.topFactors} maxImportance={modelData.maxImportance}
