@@ -20,9 +20,18 @@ export type ColegioModelSummary = {
   recall_train: number | null;
   accuracy_train: number | null;
   n_splits_cv: number | null;
+  precision_cv: number | null;
+  recall_cv: number | null;
+  f1_cv: number | null;
   modo_prediccion: string;
   tipo_resultado: string | null;
   trained_at: string | null;
+  // Para los gráficos del detalle por colegio.
+  confusion_matrix: number[][] | null;
+  roc_fpr: number[] | null;
+  roc_tpr: number[] | null;
+  importancia_variables: { variable: string; importancia: number }[] | null;
+  por_salon: Record<string, { ALTO: number; MEDIO: number; BAJO: number; total: number }>;
 };
 
 /**
@@ -80,9 +89,17 @@ export function useColegioModels(enabled: boolean) {
             recall_train:    m.recall_train ?? null,
             accuracy_train:  m.accuracy_train ?? null,
             n_splits_cv:     m.n_splits_cv ?? null,
+            precision_cv:    m.precision_cv ?? null,
+            recall_cv:       m.recall_cv ?? null,
+            f1_cv:           m.f1_cv ?? null,
             modo_prediccion: m.modo_prediccion ?? "—",
             tipo_resultado:  m.tipo_resultado ?? null,
             trained_at:      d.trained_at ?? null,
+            confusion_matrix:      m.confusion_matrix ?? null,
+            roc_fpr:               m.roc_fpr ?? null,
+            roc_tpr:               m.roc_tpr ?? null,
+            importancia_variables: m.importancia_variables ?? null,
+            por_salon:             d.por_salon ?? {},
           };
         } catch {
           return null;

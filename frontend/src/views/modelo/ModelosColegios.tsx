@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { Panel, Kpi, EmptyState } from "@/components/ui/Primitives";
 import { pct } from "@/lib/format";
 import { formatearFechaModelo } from "@/lib/colegio";
 import type { ColegioModelSummary } from "@/hooks/useColegioModels";
+import { DetalleColegio } from "@/views/modelo/DetalleColegio";
 
 interface ModelosColegiosProps {
   models: ColegioModelSummary[];
@@ -38,6 +40,10 @@ const TIPO_RESULTADO: Record<string, string> = {
  */
 export function ModelosColegios({ models, isLoading, failed, loadError, onReload }: ModelosColegiosProps) {
   const ppm = (v: number | null) => (v != null ? pct(v) : "—");
+
+  // Colegio del que se muestran los gráficos; si el elegido ya no está en la lista, el primero.
+  const [elegido, setElegido] = useState<string | null>(null);
+  const actual = models.find((m) => m.codigo_ie === elegido) ?? models[0];
 
   const totalAlumnos = models.reduce((s, m) => s + m.n_alumnos, 0);
   const totalRiesgo  = models.reduce((s, m) => s + m.n_riesgo, 0);
@@ -191,6 +197,40 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
           )}
         </Panel>
       </section>
+
+      {!isLoading && actual && (
+        <section className="full-col" aria-label="Detalle por colegio">
+          <Panel title="Detalle por colegio">
+            <div role="group" aria-label="Elegir colegio" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {models.map((m) => {
+                const activo = m.codigo_ie === actual.codigo_ie;
+                return (
+                  <button
+                    key={m.codigo_ie}
+                    type="button"
+                    aria-pressed={activo}
+                    onClick={() => setElegido(m.codigo_ie)}
+                    style={{
+                      padding: "7px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                      border: `1px solid ${activo ? "var(--navy)" : "var(--border)"}`,
+                      background: activo ? "var(--navy)" : "var(--surface)",
+                      color: activo ? "#fff" : "var(--navy)",
+                      transition: "background 160ms ease, color 160ms ease, border-color 160ms ease",
+                    }}
+                  >
+                    {m.nombre_colegio} <span style={{ opacity: 0.7, fontWeight: 500 }}>· IE {m.codigo_ie}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="model-note">
+              {actual.nombre_colegio} · {actual.modo_prediccion !== "—" ? `${actual.modo_prediccion} · ` : ""}
+              entrenado: {formatearFechaModelo(actual.trained_at)}
+            </div>
+            <DetalleColegio c={actual} />
+          </Panel>
+        </section>
+      )}
     </>
   );
 }

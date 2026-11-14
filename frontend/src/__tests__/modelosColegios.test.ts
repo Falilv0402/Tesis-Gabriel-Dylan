@@ -8,6 +8,7 @@ import * as React from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ModelosColegios } from "@/views/modelo/ModelosColegios";
+import { DetalleColegio, ordenarSalones } from "@/views/modelo/DetalleColegio";
 import { navItems } from "@/lib/constants";
 import type { ColegioModelSummary } from "@/hooks/useColegioModels";
 
@@ -18,7 +19,17 @@ function modelo(over: Partial<ColegioModelSummary>): ColegioModelSummary {
     codigo_ie: "249", nombre_colegio: "Joseph And Mery",
     n_alumnos: 103, n_riesgo: 30, pct_riesgo: 29.1, n_alto: 10, n_medio: 20, n_bajo: 73,
     auc_cv: 0.91, auc_train: 0.97, f1_train: 0.8, precision_train: 0.78, recall_train: 0.82, accuracy_train: 0.88,
-    n_splits_cv: 5, modo_prediccion: "pronostico", tipo_resultado: "pronostico", trained_at: "2026-11-04T10:00:00Z",
+    n_splits_cv: 5, precision_cv: 0.53, recall_cv: 0.64, f1_cv: 0.58,
+    modo_prediccion: "pronostico", tipo_resultado: "pronostico", trained_at: "2026-11-04T10:00:00Z",
+    confusion_matrix: [[21, 2], [1, 34]], roc_fpr: [0, 0.1, 0.4, 1], roc_tpr: [0, 0.6, 0.9, 1],
+    importancia_variables: [
+      { variable: "Matemática (dos bimestres atrás)", importancia: 0.19 },
+      { variable: "Matemática (bimestre anterior)", importancia: 0.164 },
+    ],
+    por_salon: {
+      "10° A": { ALTO: 1, MEDIO: 2, BAJO: 3, total: 6 },
+      "2° A": { ALTO: 0, MEDIO: 1, BAJO: 5, total: 6 },
+    },
     ...over,
   };
 }
@@ -95,5 +106,47 @@ describe("Superadmin: pestaña de modelos de colegio", () => {
     expect(html).toContain("No se pudo leer 1 colegio");
     expect(html).toContain("incompleta");
     expect(html).toContain("Cole Andres Avelino Trapiche"); // los demás se siguen mostrando
+  });
+});
+
+describe("Superadmin: gráficos del detalle por colegio", () => {
+  test("bajo la tabla hay un selector con los 4 colegios y se muestra el primero", () => {
+    const html = render();
+    expect(html).toContain("Detalle por colegio");
+    expect(html).toContain('aria-label="Elegir colegio"');
+    // el primero (orden de la lista) queda seleccionado
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Joseph And Mery/);
+    expect(html).toMatch(/aria-pressed="false"[^>]*>Cole Andres Avelino Trapiche/);
+  });
+
+  test("el detalle trae las métricas por validación cruzada y las explica en palabras", () => {
+    const html = renderToStaticMarkup(createElement(DetalleColegio, { c: COLEGIOS[1] }));
+    for (const t of ["AUC CV", "F1 CV", "Precisión CV", "Recall CV", "Accuracy*"]) expect(html).toContain(t);
+    expect(html).toContain("96.4%");
+    expect(html).toContain("de los que están en riesgo, cuántos detecta");
+  });
+
+  test("muestra la matriz de confusión, la curva ROC y las variables que más pesan", () => {
+    const html = renderToStaticMarkup(createElement(DetalleColegio, { c: COLEGIOS[0] }));
+    expect(html).toContain("21 VN");
+    expect(html).toContain("34 VP");
+    expect(html).toContain("Curva ROC del modelo"); // el SVG de la curva
+    expect(html).toContain("Matemática (dos bimestres atrás)");
+    expect(html).toContain("19.0%");
+    expect(html).toContain("Reparto de alumnos por nivel de riesgo");
+    expect(html).toContain("Riesgo por salón");
+  });
+
+  test("un modelo sin matriz, curva, salones ni importancia lo dice en vez de romper", () => {
+    const c = modelo({ confusion_matrix: null, roc_fpr: null, roc_tpr: null, importancia_variables: null, por_salon: {} });
+    const html = renderToStaticMarkup(createElement(DetalleColegio, { c }));
+    expect(html).toContain("No hay matriz de confusion disponible");
+    expect(html).toContain("No hay curva ROC disponible");
+    expect(html).toContain("no trae el detalle por salón");
+    expect(html).toContain("no trae la importancia de variables");
+  });
+
+  test("los salones se ordenan por número, no como texto («2° A» antes que «10° A»)", () => {
+    expect(["10° A", "2° B", "2° A", "1° C"].sort(ordenarSalones)).toEqual(["1° C", "2° A", "2° B", "10° A"]);
   });
 });
