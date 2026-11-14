@@ -93,7 +93,24 @@ _ETIQUETAS_AREA = {
 }
 
 
+# Variables propias del pronóstico por transición que no siguen el patrón «prefijo + área».
+_ETIQUETAS_FIJAS = {
+    "prev1_min_mc": "Nota más baja en Matemática o Comunicación (bimestre anterior)",
+    "prev2_min_mc": "Nota más baja en Matemática o Comunicación (dos bimestres atrás)",
+    "prev3_min_mc": "Nota más baja en Matemática o Comunicación (tres bimestres atrás)",
+    "delta_min_mc": "Variación de la nota más baja en Matemática o Comunicación",
+    "media_min_mc": "Promedio de la nota más baja en Matemática o Comunicación",
+    "otras_prom": "Promedio de las demás áreas (bimestre anterior)",
+    "otras_bajas": "N.º de demás áreas con nota baja (bimestre anterior)",
+    "riesgo_prev3": "En riesgo tres bimestres atrás",
+    "grado": "Grado",
+    "primaria": "Es de primaria",
+}
+
+
 def _etiqueta_feature(nombre: str) -> str:
+    if nombre in _ETIQUETAS_FIJAS:
+        return _ETIQUETAS_FIJAS[nombre]
     if nombre == "conducta_promedio":
         return "Conducta (promedio)"
     # Features del pronóstico por transición (ver _features_transicion): se
@@ -106,7 +123,8 @@ def _etiqueta_feature(nombre: str) -> str:
         return "En riesgo en el bimestre anterior"
     if nombre == "riesgo_prev2":
         return "En riesgo dos bimestres atrás"
-    for prefijo, texto in (("prev1_", "{} (bimestre anterior)"), ("prev2_", "{} (dos bimestres atrás)"), ("delta_", "Variación en {}")):
+    for prefijo, texto in (("prev1_", "{} (bimestre anterior)"), ("prev2_", "{} (dos bimestres atrás)"),
+                           ("prev3_", "{} (tres bimestres atrás)"), ("delta_", "Variación en {}")):
         if nombre.startswith(prefijo):
             area = nombre.removeprefix(prefijo)
             return texto.format(_ETIQUETAS_AREA.get(area, area.title()))
@@ -195,26 +213,80 @@ def _bimestres_cargados(df) -> int:
     return k
 
 
-def _features_transicion(df, prev1: int, prev2: int | None, usar_conducta_prom: bool) -> pd.DataFrame:
+def _serie_area(df, n: int, *nombres: str):
+    """Notas de un área en el bimestre n como UNA sola columna, aunque el colegio la llame distinto según el nivel
+    (Comunicación en secundaria, Lenguaje en primaria; Matemática o Mat. primaria). None si ninguna existe."""
+    serie = None
+    for nombre in nombres:
+        col = f"b{n}_{nombre}"
+        if col in df.columns:
+            serie = df[col] if serie is None else serie.fillna(df[col])
+    return serie
+
+
+def _variables_de_grado(df) -> pd.DataFrame | None:
+    """Grado (1-6) y si es primaria, sacados del nombre del salón ('3A' → 3; 'P6A' → 6 de primaria).
+    El riesgo no se reparte igual entre grados (en un colegio, ningún alumno de 5.° terminó el año en riesgo).
+    None si algún salón no trae número de grado o si todos son del mismo grado: sin variación no aporta."""
+    if "salon" not in df.columns:
+        return None
+    texto = df["salon"].astype(str)
+    grado = pd.to_numeric(texto.str.extract(r"(\d+)", expand=False), errors="coerce")
+    if grado.isna().any() or grado.nunique() < 2:
+        return None
+    primaria = texto.str.contains(r"^\s*P\d|prim", case=False, regex=True).astype(float)
+    return pd.DataFrame({"grado": grado, "primaria": primaria})
+
+
+def _features_transicion(df, prev1: int, prev2: int | None, usar_conducta_prom: bool,
+                         prev3: int | None = None) -> pd.DataFrame:
+    """Variables de un alumno para pronosticar el bimestre siguiente, nombradas por posición relativa
+    (prev1 = el último bimestre conocido, prev2 = el anterior, prev3 = el anterior a ese), de modo que el modelo
+    entrenado con (B2, B3 → B4) sirva igual con (B3, B4 → B5)."""
     X = pd.DataFrame(index=df.index)
-    for area in AREAS_ACADEMICAS + ["lenguaje", "mat_prim"]:
-        c1 = f"b{prev1}_{area}"
-        if c1 not in df.columns or df[c1].notna().sum() < 5:
+
+    # Matemática y Comunicación: lo que el riesgo mide. Una sola columna por área para todo el colegio, la nota más
+    # baja de las dos (con un 13 o menos en cualquiera de las dos el alumno cuenta como en riesgo) y si lo estuvo.
+    minimos = {}
+    for i, n in ((1, prev1), (2, prev2), (3, prev3)):
+        if not n:
             continue
-        X[f"prev1_{area}"] = df[c1]
-        if prev2:
-            c2 = f"b{prev2}_{area}"
-            if c2 in df.columns and df[c2].notna().sum() >= 5:
-                X[f"prev2_{area}"] = df[c2]
-                X[f"delta_{area}"] = df[c1] - df[c2]
+        partes = []
+        for area, nombres in (("matematica", ("matematica", "mat_prim")), ("comunicacion", ("comunicacion", "lenguaje"))):
+            serie = _serie_area(df, n, *nombres)
+            if serie is not None and serie.notna().sum() >= 5:
+                X[f"prev{i}_{area}"] = serie
+                partes.append(serie)
+        if partes:
+            minimo = pd.concat(partes, axis=1).min(axis=1)
+            minimos[i] = minimo
+            X[f"prev{i}_min_mc"] = minimo
+            X[f"riesgo_prev{i}"] = (minimo <= NOTA_RIESGO).astype(float)
+    if 1 in minimos and 2 in minimos:
+        X["delta_min_mc"] = minimos[1] - minimos[2]
+        for area in ("matematica", "comunicacion"):
+            if f"prev1_{area}" in X.columns and f"prev2_{area}" in X.columns:
+                X[f"delta_{area}"] = X[f"prev1_{area}"] - X[f"prev2_{area}"]
+    if len(minimos) >= 2:
+        X["media_min_mc"] = pd.concat(list(minimos.values()), axis=1).mean(axis=1)
+
+    # Las demás áreas, resumidas (promedio y cuántas están en nota baja) en el último bimestre conocido.
+    otras = [f"b{prev1}_{a}" for a in AREAS_ACADEMICAS
+             if a not in ("matematica", "comunicacion") and f"b{prev1}_{a}" in df.columns
+             and df[f"b{prev1}_{a}"].notna().sum() >= 5]
+    if otras:
+        X["otras_prom"] = df[otras].mean(axis=1)
+        X["otras_bajas"] = (df[otras] <= NOTA_RIESGO).sum(axis=1).astype(float)
+
     cc = f"b{prev1}_conducta"
     if cc in df.columns and df[cc].notna().sum() >= 5:
         X["prev1_conducta"] = df[cc]
     elif usar_conducta_prom and "conducta_promedio" in df.columns and df["conducta_promedio"].notna().sum() >= 5:
         X["conducta_prom"] = df["conducta_promedio"]
-    X["riesgo_prev1"] = _riesgo_bimestre(df, prev1).fillna(0)
-    if prev2:
-        X["riesgo_prev2"] = _riesgo_bimestre(df, prev2).fillna(0)
+
+    grado = _variables_de_grado(df)
+    if grado is not None:
+        X["grado"], X["primaria"] = grado["grado"], grado["primaria"]
     return X
 
 
@@ -349,16 +421,18 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None, nombre_manu
         # Transición con etiqueta conocida: B(k-2), B(k-1) → Bk
         prev1 = k - 1
         prev2 = k - 2 if k - 2 >= 1 else None
+        prev3 = k - 3 if k - 3 >= 1 else None
         y_serie = _riesgo_bimestre(df, k)
         mask_todos = y_serie.notna().values
-        X_all = _features_transicion(df, prev1, prev2, usar_conducta_prom=(k < 4))
+        X_all = _features_transicion(df, prev1, prev2, usar_conducta_prom=(k < 4), prev3=prev3)
         X = X_all[mask_todos].copy()
         y = y_serie[mask_todos].astype(int).values
         medianas = X.median().fillna(0)
         X = X.fillna(medianas)
         available = list(X.columns)
         if k < 4:
-            X_apply = _features_transicion(df, k, k - 1 if k - 1 >= 1 and prev2 else None, usar_conducta_prom=True)
+            X_apply = _features_transicion(df, k, k - 1 if k - 1 >= 1 and prev2 else None, usar_conducta_prom=True,
+                                           prev3=k - 2 if prev3 else None)
             X_apply = X_apply.reindex(columns=available).fillna(medianas)
         modo = (f"predictivo · pronóstico del {bimestre_pron}.° bimestre (a partir de B1-B{k})"
                 if k < 4 else "cierre de año · validación retrospectiva (B1-B4 cargados)")
@@ -476,7 +550,8 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None, nombre_manu
             # Sin futuro que pronosticar (cierre de año, o modo descriptivo):
             # probabilidades de validación cruzada, no del modelo viendo la respuesta
             if k >= 2:
-                X_todos = _features_transicion(df, k - 1, k - 2 if k - 2 >= 1 else None, usar_conducta_prom=False)
+                X_todos = _features_transicion(df, k - 1, k - 2 if k - 2 >= 1 else None, usar_conducta_prom=False,
+                                               prev3=k - 3 if k - 3 >= 1 else None)
                 X_todos = X_todos.reindex(columns=available).fillna(medianas)
             else:
                 X_todos = df[available].copy()

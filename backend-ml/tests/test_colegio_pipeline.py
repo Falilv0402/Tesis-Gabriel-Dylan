@@ -159,6 +159,67 @@ def test_riesgo_bimestre_umbral_13_en_matematica_o_comunicacion():
     assert r[:3] == [1.0, 1.0, 0.0] and np.isnan(r[3])
 
 
+# ─── Variables del pronóstico (_features_transicion) ─────────────────────────
+
+def _df_variables(n=12):
+    """12 alumnos, 4 bimestres: los 6 primeros de secundaria (Comunicación) y los 6 últimos de primaria (Lenguaje)."""
+    rng = np.random.default_rng(1)
+    es_prim = np.arange(n) >= n // 2
+    d = {"salon": np.where(es_prim, "P6A", "3A"), "conducta_promedio": [15.0] * n}
+    for b in (1, 2, 3, 4):
+        d[f"b{b}_matematica"] = rng.integers(10, 19, n).astype(float)
+        com = rng.integers(10, 19, n).astype(float)
+        d[f"b{b}_comunicacion"] = np.where(es_prim, np.nan, com)
+        d[f"b{b}_lenguaje"] = np.where(es_prim, com, np.nan)
+        for area in ("cta", "personal_social", "english", "arte", "ed_fisica"):
+            d[f"b{b}_{area}"] = rng.integers(10, 19, n).astype(float)
+    return pd.DataFrame(d)
+
+
+def test_lenguaje_de_primaria_cuenta_como_comunicacion():
+    df = _df_variables()
+    X = tm._features_transicion(df, 3, 2, False, prev3=1)
+    assert X["prev1_comunicacion"].notna().all()                       # primaria ya no queda con huecos
+    prim = df["salon"] == "P6A"
+    esperado = np.minimum(df.loc[prim, "b3_matematica"], df.loc[prim, "b3_lenguaje"])
+    assert (X.loc[prim, "prev1_min_mc"] == esperado).all()
+    assert (X["riesgo_prev1"] == (X["prev1_min_mc"] <= 13).astype(float)).all()
+
+
+def test_variables_nombradas_por_posicion_relativa_sirven_en_entrenamiento_y_pronostico():
+    df = _df_variables()
+    # entrenamiento (B1, B2, B3 → B4) y pronóstico un paso adelante: mismas columnas, aunque cambien los bimestres
+    assert set(tm._features_transicion(df, 3, 2, False, prev3=None).columns) == \
+        set(tm._features_transicion(df, 2, 1, False, prev3=None).columns)
+    con_tres = set(tm._features_transicion(df, 3, 2, False, prev3=1).columns)
+    sin_tres = set(tm._features_transicion(df, 3, 2, False, prev3=None).columns)
+    assert con_tres - sin_tres == {"prev3_matematica", "prev3_comunicacion", "prev3_min_mc", "riesgo_prev3"}
+    assert sin_tres - con_tres == set()
+
+
+def test_con_cuatro_bimestres_no_se_usa_la_conducta_promedio_que_incluye_el_bimestre_a_pronosticar():
+    df = _df_variables()
+    assert "conducta_prom" not in tm._features_transicion(df, 3, 2, False, prev3=1).columns
+    assert "conducta_prom" in tm._features_transicion(df, 3, 2, True, prev3=1).columns
+
+
+def test_grado_y_primaria_se_leen_del_nombre_del_salon():
+    g = tm._variables_de_grado(pd.DataFrame({"salon": ["1A", "5B", "P6A"]}))
+    assert g["grado"].tolist() == [1, 5, 6] and g["primaria"].tolist() == [0.0, 0.0, 1.0]
+    assert tm._variables_de_grado(pd.DataFrame({"salon": ["3A", "3B"]})) is None          # un solo grado: no aporta
+    assert tm._variables_de_grado(pd.DataFrame({"salon": ["CONSOLIDADO DE NOTAS"] * 3})) is None  # sin número
+    assert tm._variables_de_grado(pd.DataFrame({"salon": ["1A", "Taller"]})) is None       # un salón sin número
+    assert tm._variables_de_grado(pd.DataFrame({"x": [1, 2]})) is None                     # sin columna salón
+
+
+def test_toda_variable_del_pronostico_tiene_etiqueta_legible():
+    df = _df_variables()
+    for usar_conducta in (False, True):
+        for col in tm._features_transicion(df, 3, 2, usar_conducta, prev3=1).columns:
+            etiqueta = tm._etiqueta_feature(col)
+            assert etiqueta != col and "_" not in etiqueta, f"{col} → {etiqueta}"
+
+
 # ─── Entrenamiento de punta a punta con Excel sintéticos ─────────────────────
 
 CURSOS = ["ÁLGEBRA", "COMUNICACIÓN", "CIENCIA Y TECNOLOGÍA", "CIENCIAS SOCIALES", "INGLÉS", "DANZA",
@@ -262,6 +323,12 @@ def test_cuatro_bimestres_son_cierre_de_anio_sin_bimestre_que_pronosticar(entren
     assert m["tipo_resultado"] == "cierre_anual" and m["bimestre_pronosticado"] is None
     assert m["modo_prediccion"].startswith("cierre de año")
     assert all(p["bimestres_evaluados"] == 4 for p in art["predicciones"])
+
+
+def test_la_importancia_de_variables_sale_con_nombres_legibles(entrenar):
+    for bimestres in ([1, 2, 3], [1, 2, 3, 4]):
+        nombres = [d["variable"] for d in entrenar(bimestres)["metricas"]["importancia_variables"]]
+        assert nombres and all("_" not in n for n in nombres), nombres
 
 
 def test_un_solo_bimestre_es_descriptivo_y_lo_dice(entrenar):
