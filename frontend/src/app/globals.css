@@ -1011,6 +1011,10 @@ tr:hover td { background: #f7f9fd; }
   font-weight: 800;
 }
 
+/* ── Donut de riesgo ────────────────────────────────────────────────────── */
+/* En una tarjeta muy angosta una etiqueta puede sobresalir un poco en vez de quedar cortada por el borde del gráfico. */
+.donut-riesgo .recharts-surface { overflow: visible; }
+
 /* ── ROC ────────────────────────────────────────────────────────────────── */
 .roc-card { display: grid; gap: 8px; }
 

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Filter, RefreshCcw, GraduationCap, AlertTriangle, Users, ArrowRight, Info } from "lucide-react";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { DonutRiesgo } from "@/components/charts/DonutRiesgo";
 import type { AlumnoColegio, ColegioResumen } from "@/types";
 import { Kpi, Panel, EmptyState } from "@/components/ui/Primitives";
 import { AttentionBanner, type AttentionItem } from "@/components/ui/AttentionBanner";
@@ -270,27 +270,15 @@ export function ColegioDashboardView({
         <Panel title="Distribución de riesgo (filtro actual)">
           {totalFiltrado > 0 ? (
             <>
-              <ResponsiveContainer width="100%" height={210}>
-                <PieChart margin={{ top: 22, right: 30, bottom: 22, left: 30 }}>
-                  <Pie
-                    data={DONUT_NIVELES
-                      .map(({ nivel, name, color }) => ({ name, color, value: counts[nivel] }))
-                      .filter((d) => d.value > 0)}
-                    cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value"
-                    label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-                    labelLine={false}
-                  >
-                    {/* Color ligado al nivel real de cada porción (no a su posición
-                        en el arreglo): así, cuando ALTO=0 se omite del donut, MEDIO
-                        y BAJO conservan su color correcto (ámbar / verde) en vez de
-                        heredar el rojo y el ámbar de las posiciones que dejó vacías. */}
-                    {DONUT_NIVELES
-                      .filter(({ nivel }) => counts[nivel] > 0)
-                      .map(({ name, color }) => <Cell key={name} fill={color} />)}
-                  </Pie>
-                  <Tooltip formatter={(v) => [`${v} alumnos`]} />
-                </PieChart>
-              </ResponsiveContainer>
+              {/* Color ligado al nivel real de cada porción (no a su posición en el
+                  arreglo): así, cuando ALTO=0 se omite del donut, MEDIO y BAJO
+                  conservan su color correcto (ámbar / verde) en vez de heredar el
+                  rojo y el ámbar de las posiciones que dejó vacías. */}
+              <DonutRiesgo
+                datos={DONUT_NIVELES
+                  .map(({ nivel, name, color }) => ({ name, color, value: counts[nivel] }))
+                  .filter((d) => d.value > 0)}
+              />
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
                 {[
                   { label: "Riesgo ALTO",  n: counts.ALTO,  color: "#dc2626", icon: <AlertTriangle size={14} /> },

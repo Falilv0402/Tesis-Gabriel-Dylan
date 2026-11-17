@@ -8,8 +8,9 @@ import {
 import { exportColegioPdf } from "@/lib/colegioPdfExport";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, PieChart, Pie, Cell,
+  ResponsiveContainer,
 } from "recharts";
+import { DonutRiesgo } from "@/components/charts/DonutRiesgo";
 import type { AlumnoColegio, ColegioResumen } from "@/types";
 import { Panel } from "@/components/ui/Primitives";
 import { riskClass } from "@/lib/format";
@@ -228,15 +229,7 @@ export function ColegioReportesView({
       {total > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
           <Panel title="Distribución por nivel de riesgo">
-            <ResponsiveContainer width="100%" height={210}>
-              <PieChart margin={{ top: 22, right: 30, bottom: 22, left: 30 }}>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" nameKey="name"
-                  label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
-                  {pieData.map((e) => <Cell key={e.name} fill={e.color} />)}
-                </Pie>
-                <Tooltip formatter={(v) => [`${v} alumnos`]} />
-              </PieChart>
-            </ResponsiveContainer>
+            <DonutRiesgo datos={pieData} />
           </Panel>
 
           <Panel title="Riesgo por salón">
