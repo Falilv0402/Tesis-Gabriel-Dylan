@@ -1,0 +1,248 @@
+{
+  "criterio": "Cinco métricas >= 0.75 en predicciones externas de validación anidada",
+  "n_alumnos": 341,
+  "n_riesgo": 75,
+  "entrada": "B1-B3",
+  "objetivo": "Matemática o Comunicación <=13 en B4",
+  "metricas": {
+    "auc": 0.9170426065162907,
+    "accuracy": 0.8533724340175953,
+    "precision": 0.6666666666666666,
+    "recall": 0.6666666666666666,
+    "f1": 0.6666666666666666,
+    "matriz": [
+      [
+        241,
+        25
+      ],
+      [
+        25,
+        50
+      ]
+    ]
+  },
+  "cumple": false,
+  "folds": [
+    {
+      "fold": 1,
+      "n_train": 272,
+      "n_test": 69,
+      "modelo": "HGB_hoja_10",
+      "corte": 0.4999999999999999,
+      "metricas_internas": {
+        "auc": 0.8998034591194968,
+        "accuracy": 0.8566176470588235,
+        "precision": 0.6779661016949152,
+        "recall": 0.6666666666666666,
+        "f1": 0.6722689075630253,
+        "corte": 0.4999999999999999,
+        "matriz": [
+          [
+            193,
+            19
+          ],
+          [
+            20,
+            40
+          ]
+        ]
+      },
+      "metricas_externas": {
+        "auc": 0.9185185185185185,
+        "accuracy": 0.8405797101449275,
+        "precision": 0.625,
+        "recall": 0.6666666666666666,
+        "f1": 0.6451612903225806,
+        "corte": 0.4999999999999999,
+        "matriz": [
+          [
+            48,
+            6
+          ],
+          [
+            5,
+            10
+          ]
+        ]
+      },
+      "segundos": 16.7
+    },
+    {
+      "fold": 2,
+      "n_train": 273,
+      "n_test": 68,
+      "modelo": "GradientBoosting_3",
+      "corte": 0.42499999999999993,
+      "metricas_internas": {
+        "auc": 0.9135367762128326,
+        "accuracy": 0.8754578754578755,
+        "precision": 0.7096774193548387,
+        "recall": 0.7333333333333333,
+        "f1": 0.7213114754098361,
+        "corte": 0.42499999999999993,
+        "matriz": [
+          [
+            195,
+            18
+          ],
+          [
+            16,
+            44
+          ]
+        ]
+      },
+      "metricas_externas": {
+        "auc": 0.9069182389937107,
+        "accuracy": 0.8382352941176471,
+        "precision": 0.6428571428571429,
+        "recall": 0.6,
+        "f1": 0.6206896551724138,
+        "corte": 0.42499999999999993,
+        "matriz": [
+          [
+            48,
+            5
+          ],
+          [
+            6,
+            9
+          ]
+        ]
+      },
+      "segundos": 38.0
+    },
+    {
+      "fold": 3,
+      "n_train": 273,
+      "n_test": 68,
+      "modelo": "GradientBoosting_3",
+      "corte": 0.475,
+      "metricas_internas": {
+        "auc": 0.9296948356807512,
+        "accuracy": 0.8864468864468864,
+        "precision": 0.7377049180327869,
+        "recall": 0.75,
+        "f1": 0.743801652892562,
+        "corte": 0.475,
+        "matriz": [
+          [
+            197,
+            16
+          ],
+          [
+            15,
+            45
+          ]
+        ]
+      },
+      "metricas_externas": {
+        "auc": 0.8779874213836478,
+        "accuracy": 0.8088235294117647,
+        "precision": 0.6,
+        "recall": 0.4,
+        "f1": 0.48,
+        "corte": 0.475,
+        "matriz": [
+          [
+            49,
+            4
+          ],
+          [
+            9,
+            6
+          ]
+        ]
+      },
+      "segundos": 60.6
+    },
+    {
+      "fold": 4,
+      "n_train": 273,
+      "n_test": 68,
+      "modelo": "HGB_hoja_5",
+      "corte": 0.4999999999999999,
+      "metricas_internas": {
+        "auc": 0.9122848200312988,
+        "accuracy": 0.8498168498168498,
+        "precision": 0.6507936507936508,
+        "recall": 0.6833333333333333,
+        "f1": 0.6666666666666666,
+        "corte": 0.4999999999999999,
+        "matriz": [
+          [
+            191,
+            22
+          ],
+          [
+            19,
+            41
+          ]
+        ]
+      },
+      "metricas_externas": {
+        "auc": 0.939622641509434,
+        "accuracy": 0.9117647058823529,
+        "precision": 0.7142857142857143,
+        "recall": 1.0,
+        "f1": 0.8333333333333334,
+        "corte": 0.4999999999999999,
+        "matriz": [
+          [
+            47,
+            6
+          ],
+          [
+            0,
+            15
+          ]
+        ]
+      },
+      "segundos": 71.6
+    },
+    {
+      "fold": 5,
+      "n_train": 273,
+      "n_test": 68,
+      "modelo": "HGB_hoja_20",
+      "corte": 0.44999999999999996,
+      "metricas_internas": {
+        "auc": 0.9027777777777778,
+        "accuracy": 0.8717948717948718,
+        "precision": 0.6984126984126984,
+        "recall": 0.7333333333333333,
+        "f1": 0.7154471544715447,
+        "corte": 0.44999999999999996,
+        "matriz": [
+          [
+            194,
+            19
+          ],
+          [
+            16,
+            44
+          ]
+        ]
+      },
+      "metricas_externas": {
+        "auc": 0.9471698113207547,
+        "accuracy": 0.8676470588235294,
+        "precision": 0.7142857142857143,
+        "recall": 0.6666666666666666,
+        "f1": 0.6896551724137931,
+        "corte": 0.44999999999999996,
+        "matriz": [
+          [
+            49,
+            4
+          ],
+          [
+            5,
+            10
+          ]
+        ]
+      },
+      "segundos": 81.7
+    }
+  ],
+  "nota": "Ningún alumno externo participa en la selección de modelo ni umbral de su fold. La familia de candidatos procede de una búsqueda exploratoria en esta misma cohorte; confirmar en una cohorte futura."
+}

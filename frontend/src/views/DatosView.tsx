@@ -8,6 +8,8 @@ import {
 import { Panel, Kpi, EmptyState } from "@/components/ui/Primitives";
 import { ConfusionMatrix } from "@/components/charts/ConfusionMatrix";
 import { RocMiniChart } from "@/components/charts/RocMiniChart";
+import { EvaluacionMacroColegio, ReferenciaModeloActivo } from "@/components/ui/EvaluacionMacroColegio";
+import { evaluacionColegio, porcentajeEvaluacion } from "@/lib/evaluacionColegio";
 import type { Metrics, Evaluation } from "@/types";
 import { EM2022_HABILITADO } from "@/lib/constants";
 import { describirNombreColegio, formatearFechaModelo, libroClavesCsv, nombreArchivoLibroClaves } from "@/lib/colegio";
@@ -107,6 +109,7 @@ export function DatosView({
   // admin/director/coordinador quedan fijos a la IE de su propio perfil.
   const isSuperadmin = role === "superadmin";
   const ieEfectiva = isSuperadmin ? colegioUploadIe : (profileCodigoIe ?? "");
+  const experimental = evaluacionColegio(ieEfectiva);
 
   const statusIcon = {
     idle:      <School size={18} style={{ color: "var(--accent)" }} />,
@@ -222,12 +225,17 @@ export function DatosView({
         <Panel title={`Datos del colegio — ${colegioModelStats.nombre_colegio}`}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
+            {!isEM2022 && <EvaluacionMacroColegio codigoIe={ieEfectiva} />}
+
             {/* KPIs del colegio: alumnos + riesgo + distribución */}
+            {(!experimental || isEM2022) && <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
               <Kpi label="Alumnos en el modelo" value={colegioModelStats.n_alumnos} detail={isEM2022 ? "Dataset EM2022" : "Modelo propio"} />
               <Kpi label="En riesgo"    value={colegioModelStats.n_riesgo}  detail={`${colegioModelStats.pct_riesgo}% del total`} tone={colegioModelStats.n_riesgo > 0 ? "high" : undefined} />
               {!isEM2022
-                ? <Kpi label="AUC CV" value={colegioModelStats.auc_cv != null ? `${(colegioModelStats.auc_cv * 100).toFixed(1)}%` : "—"} detail="5-fold estratificado" tone={colegioModelStats.auc_cv != null && colegioModelStats.auc_cv >= 0.80 ? "low" : "medium"} />
+                ? experimental
+                  ? <Kpi label="AUC CV" value={porcentajeEvaluacion(experimental.metricas_macro.auc_cv)} detail="Informe del 18/11/2026" tone="low" />
+                  : <Kpi label="AUC CV" value={colegioModelStats.auc_cv != null ? `${(colegioModelStats.auc_cv * 100).toFixed(1)}%` : "—"} detail="5-fold estratificado" tone={colegioModelStats.auc_cv != null && colegioModelStats.auc_cv >= 0.80 ? "low" : "medium"} />
                 : <Kpi label="AUC-ROC" value={em2022Metrics?.auc_roc != null ? `${((em2022Metrics.auc_roc) * 100).toFixed(1)}%` : "—"} detail="Modelo nacional" tone="low" />
               }
             </div>
@@ -254,8 +262,11 @@ export function DatosView({
               </div>
             )}
 
+            </>}
+
             {/* ── Métricas completas del modelo PROPIO del colegio (híbrido LR+RF calibrado) ── */}
             {!isEM2022 && (colegioModelStats.auc_cv != null || colegioModelStats.f1_train != null) && (
+              <ReferenciaModeloActivo experimental={!!experimental}>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "var(--navy)", borderRadius: 10 }}>
                   <Cpu size={14} style={{ color: "#93c5fd" }} />
@@ -281,7 +292,7 @@ export function DatosView({
                         <em> (train)</em> se calculan sobre los mismos datos de entrenamiento y son solo de referencia
                         (tienden a ser optimistas). Modo: <strong>{cs.modo_prediccion}</strong>.
                       </p>
-                      {(cs.confusion_matrix || cs.roc_fpr) && (
+                      {!experimental && (cs.confusion_matrix || cs.roc_fpr) && (
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                           <div>
                             <p style={{ fontSize: 10.5, fontWeight: 700, color: "var(--navy)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.5px" }}>Matriz de confusión</p>
@@ -297,6 +308,7 @@ export function DatosView({
                   );
                 })()}
               </div>
+              </ReferenciaModeloActivo>
             )}
 
             {/* ── Métricas del modelo EM2022 (para colegios sin modelo CUBICOL) ── */}

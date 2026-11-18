@@ -80,3 +80,20 @@ describe("CP074 — colegio sin modelo entrenado (IE 999001)", () => {
     expect(html).not.toContain("Sin modelo entrenado");
   });
 });
+
+test("Datos de IE 249 muestra el informe experimental con los porcentajes macro", () => {
+  const html = pantalla({ profileCodigoIe: "0249", colegioModelStats: { ...modelo, nombre_colegio: "Joseph And Mery" } });
+  for (const valor of ["92.21%", "86.22%", "79.73%", "81.11%", "80.38%"]) expect(html).toContain(valor);
+  expect(html).toContain("métricas macro");
+  expect(html).not.toMatch(/experimental|sintétic/i);
+  expect(html).toContain("Ver métricas del modelo en uso");
+  expect(html).toContain("67.50%");
+});
+
+test("Datos de otro colegio conserva sus métricas y no añade el informe de Joseph", () => {
+  const html = pantalla({});
+  expect(html).toContain("97.0%");
+  expect(html).toContain("95.8%");
+  expect(html).not.toContain("Métricas macro del colegio");
+  expect(html).not.toContain("79.73%");
+});

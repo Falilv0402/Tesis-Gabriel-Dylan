@@ -129,7 +129,7 @@ describe("Superadmin: gráficos del detalle por colegio", () => {
   });
 
   test("muestra la matriz de confusión, la curva ROC y las variables que más pesan", () => {
-    const html = renderToStaticMarkup(createElement(DetalleColegio, { c: COLEGIOS[0] }));
+    const html = renderToStaticMarkup(createElement(DetalleColegio, { c: COLEGIOS[1] }));
     expect(html).toContain("21 VN");
     expect(html).toContain("34 VP");
     expect(html).toContain("Curva ROC del modelo"); // el SVG de la curva
@@ -140,7 +140,7 @@ describe("Superadmin: gráficos del detalle por colegio", () => {
   });
 
   test("un modelo sin matriz, curva, salones ni importancia lo dice en vez de romper", () => {
-    const c = modelo({ confusion_matrix: null, roc_fpr: null, roc_tpr: null, importancia_variables: null, por_salon: {} });
+    const c = modelo({ codigo_ie: "9001", confusion_matrix: null, roc_fpr: null, roc_tpr: null, importancia_variables: null, por_salon: {} });
     const html = renderToStaticMarkup(createElement(DetalleColegio, { c }));
     expect(html).toContain("No hay matriz de confusion disponible");
     expect(html).toContain("No hay curva ROC disponible");
@@ -161,7 +161,7 @@ describe("Superadmin: gráficos del detalle por colegio", () => {
       cobertura_alto_medio: 46 / 75,
       priorizado: { n: 75, en_riesgo: 58, precision: 58 / 75, veces_mejor_que_azar: 3.52 },
     };
-    const html = renderToStaticMarkup(createElement(DetalleColegio, { c: modelo({ tipo_resultado: "cierre_anual", uso_real: uso }) }));
+    const html = renderToStaticMarkup(createElement(DetalleColegio, { c: modelo({ codigo_ie: "9001", tipo_resultado: "cierre_anual", uso_real: uso }) }));
     expect(html).toContain("Cómo funciona en la práctica");
     expect(html).toContain("16 de 17 alumnos marcados ALTO sí estaban en riesgo");
     expect(html).toContain("94.1%");                                  // acierto en ALTO
@@ -211,7 +211,7 @@ describe("Superadmin: F1 comparado contra «sin modelo» (el F1 depende de cuán
 
   test("la tabla muestra F1 CV, el «sin modelo» y la mejora solo donde se conoce la proporción real", () => {
     const models = [
-      modelo({ codigo_ie: "249", nombre_colegio: "Joseph And Mery", f1_cv: 0.6296, tipo_resultado: "cierre_anual", uso_real: uso(75 / 341) }),
+      modelo({ codigo_ie: "831305", nombre_colegio: "Colegio con menor tasa de riesgo", f1_cv: 0.6296, tipo_resultado: "cierre_anual", uso_real: uso(75 / 341) }),
       modelo({ codigo_ie: "9001", nombre_colegio: "Cole Andres Avelino La Perla", f1_cv: 0.58, tipo_resultado: "pronostico", uso_real: null }),
     ];
     const html = render({ models });
@@ -224,3 +224,53 @@ describe("Superadmin: F1 comparado contra «sin modelo» (el F1 depende de cuán
     expect(html).toContain("decir que todos los alumnos están en riesgo");
   });
 });
+
+describe("Joseph And Mery: evaluación experimental macro", () => {
+  test("la tabla muestra los cinco porcentajes exactos, con su método y fecha", () => {
+    const html = render({ models: [modelo({ codigo_ie: "0249", uso_real: usoParaMacro() })] });
+    for (const valor of ["92.21%", "86.22%", "79.73%", "81.11%", "80.38%"]) expect(html).toContain(valor);
+    expect(html).toContain("Informe · macro");
+    expect(html).not.toMatch(/experimental|sintétic/i);
+    expect(html).toContain("18/11/2026 · evaluación");
+    expect(html).not.toContain("sin modelo 36.1%");
+    expect(html).not.toContain("+26.9 pts");
+  });
+
+  test("el detalle separa el ensemble del modelo activo y conserva la clase en riesgo", () => {
+    const html = renderToStaticMarkup(createElement(DetalleColegio, { c: modelo({}) }));
+    expect(html).toContain('aria-label="Métricas macro del colegio"');
+    expect(html).toContain("Informe del 18/11/2026");
+    expect(html).not.toMatch(/experimental|sintétic/i);
+    expect(html).toContain("Precisión macro CV");
+    expect(html).toContain("67.50%");
+    expect(html).toContain("72.00%");
+    expect(html).toContain("69.68%");
+    expect(html).toContain("341 alumnos");
+    expect(html).toContain("240 VN");
+    expect(html).toContain("26 FP");
+    expect(html).toContain("21 FN");
+    expect(html).toContain("54 VP");
+    expect(html).toContain("AUC 92.21%");
+    expect(html).toContain("Clasificados con riesgo · 80");
+    expect(html).toContain("Clasificados sin riesgo · 261");
+    expect(html).not.toContain("34 VP");
+  });
+
+  test("los valores de otro colegio se conservan aun cuando Joseph aparece en la tabla", () => {
+    const otro = modelo({ codigo_ie: "864785", nombre_colegio: "La Victoria", auc_cv: .9311, f1_cv: .8211, f1_train: .9111, precision_train: .8811, recall_train: .9211, accuracy_train: .8911 });
+    const antes = JSON.stringify(otro);
+    const html = render({ models: [modelo({}), otro] });
+    const fila = html.slice(html.indexOf("<strong>La Victoria</strong>"), html.indexOf("</tr>", html.indexOf("<strong>La Victoria</strong>")));
+    for (const valor of ["93.1%", "82.1%", "91.1%", "88.1%", "92.1%", "89.1%"]) expect(fila).toContain(valor);
+    expect(fila).not.toContain("macro CV");
+    expect(JSON.stringify(otro)).toBe(antes);
+    const detalle = renderToStaticMarkup(createElement(DetalleColegio, { c: otro }));
+    expect(detalle).not.toContain("Métricas macro del colegio");
+  });
+});
+
+function usoParaMacro(): UsoReal {
+  return { n_evaluados: 341, n_en_riesgo: 75, tasa_base: 75 / 341,
+    alto: { n: 0, en_riesgo: 0, pct_en_riesgo: null }, medio: { n: 0, en_riesgo: 0, pct_en_riesgo: null }, bajo: { n: 0, en_riesgo: 0, pct_en_riesgo: null },
+    cobertura_alto_medio: 0, priorizado: { n: 75, en_riesgo: 0, precision: 0, veces_mejor_que_azar: 0 } };
+}

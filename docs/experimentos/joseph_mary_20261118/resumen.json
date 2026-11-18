@@ -1,0 +1,101 @@
+{
+  "fecha": "2026-11-18",
+  "colegio": "Joseph And Mery",
+  "codigo_ie": "249",
+  "commit_base": "6a961b5",
+  "artefacto_sha256": "ca6c07ac181df8cd111e12d49d20a5e2943d3358d619ab81c2afc59fad346457",
+  "alumnos_artefacto": 345,
+  "alumnos_evaluables": 341,
+  "alumnos_sin_resultado_b4": 4,
+  "positivos": 75,
+  "criterio": "AUC, accuracy, precision, recall y F1 >=0.75; B4 usando solamente B1-B3",
+  "configuraciones": 175,
+  "mezclas": 1656,
+  "candidatos_que_cumplen": 0,
+  "baseline_oof": {
+    "auc": 0.8698245614035088,
+    "accuracy": 0.8005865102639296,
+    "precision": 0.5421686746987951,
+    "recall": 0.6,
+    "f1": 0.569620253164557,
+    "corte": 0.5,
+    "matriz": [
+      [
+        228,
+        38
+      ],
+      [
+        30,
+        45
+      ]
+    ]
+  },
+  "mejor_mezcla_exploratoria": {
+    "auc": 0.9187468671679198,
+    "accuracy": 0.8797653958944281,
+    "precision": 0.7236842105263158,
+    "recall": 0.7333333333333333,
+    "f1": 0.7284768211920529,
+    "corte": 0.49480185510658,
+    "minimo": 0.7236842105263158,
+    "modelo_a": "por_area/KNN_15/union",
+    "modelo_b": "transiciones/HGB/peso_0.25",
+    "peso_a": 0.5,
+    "modo": "probabilidades",
+    "evaluacion": "exploratoria; selección y umbral usan OOF"
+  },
+  "validacion_anidada": {
+    "auc": 0.9170426065162907,
+    "accuracy": 0.8533724340175953,
+    "precision": 0.6666666666666666,
+    "recall": 0.6666666666666666,
+    "f1": 0.6666666666666666,
+    "matriz": [
+      [
+        241,
+        25
+      ],
+      [
+        25,
+        50
+      ]
+    ]
+  },
+  "cumple": false,
+  "modelo_activo_reemplazado": false,
+  "advertencia": "Las búsquedas y mezclas eligen umbrales viendo OOF y son exploratorias. La evaluación anidada separa esa elección de los alumnos externos; las familias se diseñaron usando esta cohorte y se requiere confirmar en otra futura.",
+  "validacion_ensemble_anidado": {
+    "auc": 0.9220551378446116,
+    "accuracy": 0.8621700879765396,
+    "precision": 0.675,
+    "recall": 0.72,
+    "f1": 0.6967741935483871,
+    "matriz": [
+      [
+        240,
+        26
+      ],
+      [
+        21,
+        54
+      ]
+    ]
+  },
+  "mejor_validacion_realizada": {
+    "auc": 0.9220551378446116,
+    "accuracy": 0.8621700879765396,
+    "precision": 0.675,
+    "recall": 0.72,
+    "f1": 0.6967741935483871,
+    "matriz": [
+      [
+        240,
+        26
+      ],
+      [
+        21,
+        54
+      ]
+    ]
+  }
+}

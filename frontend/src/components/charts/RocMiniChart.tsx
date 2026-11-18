@@ -7,10 +7,12 @@ export function RocMiniChart({
   fpr,
   tpr,
   auc,
+  decimals = 1,
 }: {
   fpr?: number[];
   tpr?: number[];
   auc?: number;
+  decimals?: number;
 }) {
   if (!fpr || !tpr || fpr.length !== tpr.length || fpr.length <= 1) {
     return (
@@ -26,7 +28,7 @@ export function RocMiniChart({
         <line x1="0" y1="100" x2="100" y2="0" />
         <polyline points={points} />
       </svg>
-      <strong>AUC {pct(auc)}</strong>
+      <strong>AUC {decimals === 1 ? pct(auc) : `${((auc ?? 0) * 100).toFixed(decimals)}%`}</strong>
     </div>
   );
 }

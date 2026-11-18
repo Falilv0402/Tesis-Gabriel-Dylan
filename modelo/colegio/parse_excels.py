@@ -679,10 +679,12 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str, seudonimizador=None) -
 
     for nf in notas_files:
         try:
-            xl = pd.ExcelFile(nf)
+            # Cerrar el libro al leer sus hojas permite reemplazarlo en otra carga (Windows).
+            with pd.ExcelFile(nf) as xl:
+                hojas_del_archivo = xl.sheet_names
             # Leer TODAS las hojas con datos (ignorar hojas vacías o "Worksheet")
             hojas_validas = [
-                s for s in xl.sheet_names
+                s for s in hojas_del_archivo
                 if "worksheet" not in s.lower()
                 and len(pd.read_excel(nf, sheet_name=s, header=None, nrows=3)) > 0
             ]
@@ -716,9 +718,10 @@ def procesar_colegio(carpeta: str | Path, codigo_ie: str, seudonimizador=None) -
 
     for cf in conducta_files:
         try:
-            xl = pd.ExcelFile(cf)
+            with pd.ExcelFile(cf) as xl:
+                hojas_del_archivo = xl.sheet_names
             hojas_validas = [
-                s for s in xl.sheet_names
+                s for s in hojas_del_archivo
                 if "worksheet" not in s.lower()
                 and len(pd.read_excel(cf, sheet_name=s, header=None, nrows=3)) > 0
             ]

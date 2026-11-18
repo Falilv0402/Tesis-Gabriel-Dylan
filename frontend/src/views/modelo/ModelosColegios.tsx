@@ -7,6 +7,7 @@ import { formatearFechaModelo } from "@/lib/colegio";
 import { formatearMejora, mejoraSobreBase } from "@/lib/metricasBase";
 import type { ColegioModelSummary } from "@/hooks/useColegioModels";
 import { DetalleColegio } from "@/views/modelo/DetalleColegio";
+import { evaluacionColegio, porcentajeEvaluacion } from "@/lib/evaluacionColegio";
 
 interface ModelosColegiosProps {
   models: ColegioModelSummary[];
@@ -45,6 +46,7 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
   // Colegio del que se muestran los gráficos; si el elegido ya no está en la lista, el primero.
   const [elegido, setElegido] = useState<string | null>(null);
   const actual = models.find((m) => m.codigo_ie === elegido) ?? models[0];
+  const hayExperimental = models.some((m) => evaluacionColegio(m.codigo_ie));
 
   const totalAlumnos = models.reduce((s, m) => s + m.n_alumnos, 0);
   const totalRiesgo  = models.reduce((s, m) => s + m.n_riesgo, 0);
@@ -67,10 +69,11 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
             <Kpi
               label="AUC CV promedio"
               value={ppm(aucProm)}
-              detail="validación cruzada, entre colegios"
+              detail={hayExperimental ? "modelos en uso" : "validación cruzada, entre colegios"}
               tone="low"
             />
           </div>
+
         </section>
       )}
 
@@ -129,21 +132,25 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                       >
                         Mejora
                       </th>
-                      <th style={{ ...th, textAlign: "right" }}>F1*</th>
-                      <th style={{ ...th, textAlign: "right" }}>Precisión*</th>
-                      <th style={{ ...th, textAlign: "right" }}>Recall*</th>
-                      <th style={{ ...th, textAlign: "right" }}>Accuracy*</th>
+                      <th style={{ ...th, textAlign: "right" }}>{hayExperimental ? "F1" : "F1*"}</th>
+                      <th style={{ ...th, textAlign: "right" }}>{hayExperimental ? "Precisión" : "Precisión*"}</th>
+                      <th style={{ ...th, textAlign: "right" }}>{hayExperimental ? "Recall" : "Recall*"}</th>
+                      <th style={{ ...th, textAlign: "right" }}>{hayExperimental ? "Accuracy" : "Accuracy*"}</th>
                       <th style={th}>Resultado</th>
-                      <th style={th}>Entrenado</th>
+                      <th style={th}>{hayExperimental ? "Fecha" : "Entrenado"}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {models.map((c, i) => {
-                      const tone = aucTone(c.auc_cv);
+                      const experimental = evaluacionColegio(c.codigo_ie);
+                      const macro = experimental?.metricas_macro;
+                      const tone = aucTone(macro?.auc_cv ?? c.auc_cv);
                       const total = Math.max(c.n_alto + c.n_medio + c.n_bajo, 1);
                       // Tasa REAL de riesgo (no la de alto + medio): el F1 depende de ella, así que se compara contra lo que
                       // saldría sin modelo para poder mirar colegios con distinta proporción de alumnos en riesgo.
-                      const base = mejoraSobreBase(c.f1_cv, c.uso_real?.tasa_base);
+                      const base = macro ? null : mejoraSobreBase(c.f1_cv, c.uso_real?.tasa_base);
+                      const valor = (actual: number | null, nuevo?: number) => nuevo != null ? porcentajeEvaluacion(nuevo) : ppm(actual);
+                      const metodo = hayExperimental ? <div style={{ color: "var(--text-muted)", fontSize: 11 }}>{macro ? "macro CV" : "train*"}</div> : null;
                       return (
                         <tr
                           key={c.codigo_ie}
@@ -155,6 +162,7 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                           <td style={td}>
                             <strong>{c.nombre_colegio}</strong>
                             <div style={{ color: "var(--text-muted)", fontSize: 11 }}>IE {c.codigo_ie}</div>
+                            {macro && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Informe · macro</div>}
                           </td>
                           <td style={{ ...td, textAlign: "right" }}>{c.n_alumnos.toLocaleString("es-PE")}</td>
                           <td style={td}>
@@ -183,13 +191,14 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                                 display: "inline-block", padding: "2px 8px", borderRadius: 999,
                                 fontWeight: 700, background: tone.bg, color: tone.fg,
                               }}
-                              title={c.n_splits_cv ? `Validación cruzada de ${c.n_splits_cv} particiones` : undefined}
+                              title={macro ? "Informe del 18/11/2026 · validación anidada 5 × 3" : c.n_splits_cv ? `Validación cruzada de ${c.n_splits_cv} particiones` : undefined}
                             >
-                              {ppm(c.auc_cv)}
+                              {valor(c.auc_cv, macro?.auc_cv)}
                             </span>
                           </td>
                           <td style={{ ...td, textAlign: "right" }}>
-                            <strong>{ppm(c.f1_cv)}</strong>
+                            <strong>{valor(c.f1_cv, macro?.f1_macro_cv)}</strong>
+                            {macro && <div style={{ color: "var(--text-muted)", fontSize: 11 }}>F1 macro CV</div>}
                             {base && (
                               <div style={{ color: "var(--text-muted)", fontSize: 11 }}>sin modelo {pct(base.base)}</div>
                             )}
@@ -207,12 +216,12 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                               </span>
                             ) : "—"}
                           </td>
-                          <td style={{ ...td, textAlign: "right" }}>{ppm(c.f1_train)}</td>
-                          <td style={{ ...td, textAlign: "right" }}>{ppm(c.precision_train)}</td>
-                          <td style={{ ...td, textAlign: "right" }}>{ppm(c.recall_train)}</td>
-                          <td style={{ ...td, textAlign: "right" }}>{ppm(c.accuracy_train)}</td>
-                          <td style={td}>{c.tipo_resultado ? (TIPO_RESULTADO[c.tipo_resultado] ?? c.tipo_resultado) : "—"}</td>
-                          <td style={td}>{formatearFechaModelo(c.trained_at)}</td>
+                          <td style={{ ...td, textAlign: "right" }}>{valor(c.f1_train, macro?.f1_macro_cv)}{metodo}</td>
+                          <td style={{ ...td, textAlign: "right" }}>{valor(c.precision_train, macro?.precision_macro_cv)}{metodo}</td>
+                          <td style={{ ...td, textAlign: "right" }}>{valor(c.recall_train, macro?.recall_macro_cv)}{metodo}</td>
+                          <td style={{ ...td, textAlign: "right" }}>{valor(c.accuracy_train, macro?.accuracy_cv)}{hayExperimental && <div style={{ color: "var(--text-muted)", fontSize: 11 }}>{macro ? "CV" : "train*"}</div>}</td>
+                          <td style={td}>{macro ? "Informe · macro" : c.tipo_resultado ? (TIPO_RESULTADO[c.tipo_resultado] ?? c.tipo_resultado) : "—"}</td>
+                          <td style={td}>{macro ? "18/11/2026 · evaluación" : formatearFechaModelo(c.trained_at)}</td>
                         </tr>
                       );
                     })}

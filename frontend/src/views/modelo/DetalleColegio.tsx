@@ -10,6 +10,8 @@ import { RocMiniChart } from "@/components/charts/RocMiniChart";
 import { pct } from "@/lib/format";
 import type { ColegioModelSummary } from "@/hooks/useColegioModels";
 import { UsoRealPanel } from "./UsoRealPanel";
+import { EvaluacionMacroColegio } from "@/components/ui/EvaluacionMacroColegio";
+import { evaluacionColegio } from "@/lib/evaluacionColegio";
 
 const ROJO = "#dc2626";
 const AMBAR = "#d97706";
@@ -31,6 +33,8 @@ export function ordenarSalones(a: string, b: string): number {
  * (SHAP, umbrales, calibración): no se puede explicar en una pantalla.
  */
 export function DetalleColegio({ c }: { c: ColegioModelSummary }) {
+  const experimental = evaluacionColegio(c.codigo_ie);
+  if (experimental) return <EvaluacionMacroColegio codigoIe={c.codigo_ie} />;
   const ppm = (v: number | null) => (v != null ? pct(v) : "—");
   const total = c.n_alto + c.n_medio + c.n_bajo;
 
