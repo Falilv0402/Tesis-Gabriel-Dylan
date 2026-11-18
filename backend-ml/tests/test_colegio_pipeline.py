@@ -325,6 +325,59 @@ def test_cuatro_bimestres_son_cierre_de_anio_sin_bimestre_que_pronosticar(entren
     assert all(p["bimestres_evaluados"] == 4 for p in art["predicciones"])
 
 
+def test_cortes_generales_por_defecto_y_propios_por_colegio(monkeypatch):
+    assert tm._cortes_del_colegio("777001") == (0.50, {"alto": 0.70, "medio": 0.45})
+    monkeypatch.setitem(tm.CORTES_POR_COLEGIO, "777001", {"alto": 0.60, "medio": 0.35, "clasificacion": 0.40})
+    assert tm._cortes_del_colegio("0777001") == (0.40, {"alto": 0.60, "medio": 0.35})   # el cero inicial no importa
+    assert tm._cortes_del_colegio("831305") == (0.50, {"alto": 0.70, "medio": 0.45})    # los demás colegios no cambian
+    monkeypatch.setitem(tm.CORTES_POR_COLEGIO, "777001", {"alto": 0.60})                # solo lo que difiere
+    assert tm._cortes_del_colegio("777001") == (0.50, {"alto": 0.60, "medio": 0.45})
+
+
+def test_joseph_and_mery_tiene_sus_cortes_de_nivel_y_los_otros_colegios_los_generales():
+    assert tm._cortes_del_colegio("0249") == (0.50, {"alto": 0.60, "medio": 0.35})
+    for otro in ("831305", "864785", "9001", "999001"):
+        assert tm._cortes_del_colegio(otro) == (0.50, {"alto": 0.70, "medio": 0.45})
+
+
+@pytest.mark.parametrize("propios", [
+    {"alto": 0.30, "medio": 0.50},        # ALTO por debajo de MEDIO
+    {"alto": 0.50, "medio": 0.50},
+    {"alto": 1.20},
+    {"medio": 0.0},
+    {"clasificacion": 0.0},
+    {"clasificacion": 1.0},
+])
+def test_cortes_incoherentes_se_rechazan(monkeypatch, propios):
+    monkeypatch.setitem(tm.CORTES_POR_COLEGIO, "777001", propios)
+    with pytest.raises(ValueError):
+        tm._cortes_del_colegio("777001")
+
+
+def test_sin_ajustes_propios_el_modelo_guarda_los_cortes_de_siempre(entrenar):
+    m = entrenar([1, 2, 3])["metricas"]
+    assert m["corte_clasificacion"] == 0.50 and m["cortes_nivel"] == {"alto": 0.70, "medio": 0.45}
+
+
+def test_los_cortes_del_colegio_definen_los_niveles_y_quedan_guardados(entrenar, monkeypatch):
+    monkeypatch.setitem(tm.CORTES_POR_COLEGIO, "999001", {"alto": 0.60, "medio": 0.35, "clasificacion": 0.40})
+    art = entrenar([1, 2, 3, 4])
+    m = art["metricas"]
+    assert m["corte_clasificacion"] == 0.40 and m["cortes_nivel"] == {"alto": 0.60, "medio": 0.35}
+    for p in art["predicciones"]:
+        esperado = "ALTO" if p["prob_riesgo"] >= 0.60 else "MEDIO" if p["prob_riesgo"] >= 0.35 else "BAJO"
+        assert p["nivel_riesgo"] == esperado
+
+
+def test_bajar_el_corte_de_clasificacion_no_cambia_el_auc_y_solo_mueve_precision_y_recall(entrenar, monkeypatch):
+    base = entrenar([1, 2, 3, 4])["metricas"]
+    monkeypatch.setitem(tm.CORTES_POR_COLEGIO, "999001", {"clasificacion": 0.30})
+    bajo = entrenar([1, 2, 3, 4])["metricas"]
+    assert bajo["auc_cv"] == base["auc_cv"]                       # la capacidad de ordenar a los alumnos es la misma
+    assert bajo["recall_cv"] >= base["recall_cv"]                 # se detecta a igual o más alumnos en riesgo…
+    assert bajo["precision_cv"] <= base["precision_cv"] + 1e-9    # …a costa de igual o más falsas alarmas
+
+
 def test_la_importancia_de_variables_sale_con_nombres_legibles(entrenar):
     for bimestres in ([1, 2, 3], [1, 2, 3, 4]):
         nombres = [d["variable"] for d in entrenar(bimestres)["metricas"]["importancia_variables"]]

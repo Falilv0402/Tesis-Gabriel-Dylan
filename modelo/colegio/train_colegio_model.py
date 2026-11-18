@@ -182,6 +182,36 @@ FEATURES_PP = [
 NOTA_RIESGO = 13.0   # nota <= 13 (por debajo del logro esperado) en Matemática o Comunicación
 MIN_CLASE = 5        # alumnos mínimos de cada clase (en riesgo / no) para entrenar un modelo
 
+# Cortes, sobre la probabilidad calibrada del modelo:
+#  · CORTE_CLASIFICACION: desde qué probabilidad se da a un alumno por «en riesgo» al calcular precisión, recall,
+#    F1 y la matriz de confusión. Bajarlo detecta a más alumnos en riesgo (más recall) a costa de más falsas alarmas
+#    (menos precisión); NO hace al modelo más preciso (el AUC no cambia), solo mueve ese equilibrio.
+#  · CORTES_NIVEL: desde qué probabilidad un alumno es ALTO o MEDIO. Tampoco cambia ninguna métrica: reparte a los
+#    alumnos entre los niveles que ve el colegio.
+CORTE_CLASIFICACION = 0.50
+CORTES_NIVEL = {"alto": 0.70, "medio": 0.45}
+# Ajustes propios de un colegio (código IE sin ceros), con solo lo que difiere de los valores generales. Se justifican
+# midiendo con alumnos que el modelo no vio (validación cruzada) y quedan guardados y visibles en las métricas del
+# modelo (`corte_clasificacion`, `cortes_nivel`) para que nadie compare cifras de cortes distintos sin saberlo.
+CORTES_POR_COLEGIO: dict[str, dict[str, float]] = {
+    # Joseph And Mery (345 alumnos, 22 % en riesgo): con 70/45 solo 17 alumnos llegaban a ALTO y el grupo MEDIO (84) era
+    # casi una moneda al aire (48 % en riesgo de verdad). Con 60/35, medido con alumnos que el modelo no vio:
+    # ALTO 59 (71 % en riesgo de verdad), MEDIO 62 (32 %), BAJO 220 (6 %); ALTO+MEDIO cubren al 83 % de los alumnos
+    # que terminaron en riesgo (antes 75 %). No cambia el AUC ni el F1: solo reparte mejor a los alumnos.
+    "249": {"alto": 0.60, "medio": 0.35},
+}
+
+
+def _cortes_del_colegio(codigo_ie: str) -> tuple[float, dict[str, float]]:
+    """(corte de «en riesgo», {alto, medio}) de este colegio: los suyos si los tiene, si no los generales."""
+    propios = CORTES_POR_COLEGIO.get(str(codigo_ie).lstrip("0") or str(codigo_ie), {})
+    corte = float(propios.get("clasificacion", CORTE_CLASIFICACION))
+    niveles = {"alto": float(propios.get("alto", CORTES_NIVEL["alto"])),
+               "medio": float(propios.get("medio", CORTES_NIVEL["medio"]))}
+    if not (0.0 < niveles["medio"] < niveles["alto"] < 1.0 and 0.0 < corte < 1.0):
+        raise ValueError(f"Cortes inválidos para el colegio {codigo_ie}: clasificación={corte}, niveles={niveles}")
+    return corte, niveles
+
 
 def _cols_mc(df, n: int):
     mat = next((c for c in (f"b{n}_matematica", f"b{n}_mat_prim") if c in df.columns), None)
@@ -395,6 +425,7 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None, nombre_manu
     output_path = model_dir / f"colegio_{codigo_ie_archivo}.pkl"
     # Mapa de seudónimos del colegio (solo hashes, nunca nombres): el mismo que usa el API al anonimizar los Excel.
     seudonimos = Seudonimizador(model_dir / f"colegio_{codigo_ie_archivo}_seudonimos.json")
+    corte_clasificacion, cortes_nivel = _cortes_del_colegio(codigo_ie_archivo)
 
     print(f"\n{'='*60}")
     print(f"  MODELO DE RIESGO — IE {codigo_ie}")
@@ -486,14 +517,14 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None, nombre_manu
         modelo, oof, n_splits_used = res["modelo"], res["oof"], res["n_splits"]
         class_weight = res["class_weight"]
         y_prob = modelo.predict_proba(X)[:, 1]
-        y_pred = (y_prob >= 0.5).astype(int)
+        y_pred = (y_prob >= corte_clasificacion).astype(int)
         auc_train       = float(roc_auc_score(y, y_prob))
         f1_train        = float(f1_score(y, y_pred, zero_division=0))
         precision_train = float(precision_score(y, y_pred, zero_division=0))
         recall_train    = float(recall_score(y, y_pred, zero_division=0))
         accuracy_train  = float(accuracy_score(y, y_pred))
         if oof is not None:
-            y_pred_cv    = (oof >= 0.5).astype(int)
+            y_pred_cv    = (oof >= corte_clasificacion).astype(int)
             auc_cv       = float(roc_auc_score(y, oof))
             precision_cv = float(precision_score(y, y_pred_cv, zero_division=0))
             recall_cv    = float(recall_score(y, y_pred_cv, zero_division=0))
@@ -566,18 +597,19 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None, nombre_manu
 
     # ── Nivel de riesgo coherente con el modelo ───────────────────────────────
     # El badge ALTO/MEDIO/BAJO se deriva de la probabilidad CALIBRADA (umbral
-    # 70%/45%, igual que el modelo nacional EM 2022), no del índice de notas.
+    # 70%/45% por defecto, igual que el modelo nacional EM 2022; un colegio puede tener los suyos en
+    # CORTES_POR_COLEGIO), no del índice de notas.
     # El índice ponderado de notas (riesgo_score) se conserva como métrica
     # explicable secundaria (transparente: Mate 25%, Com 20%, ...).
     if modelo is not None:
         def _nivel_de_prob(p: float) -> str:
-            if p >= 0.70: return "ALTO"
-            if p >= 0.45: return "MEDIO"
+            if p >= cortes_nivel["alto"]: return "ALTO"
+            if p >= cortes_nivel["medio"]: return "MEDIO"
             return "BAJO"
         df["nivel_riesgo"] = df["prob_riesgo"].apply(_nivel_de_prob)
         # Reordenar por probabilidad (la señal predictiva) en vez del índice.
         df = df.sort_values("prob_riesgo", ascending=False).reset_index(drop=True)
-        print(f"      Nivel final (desde prob calibrada 70/45%): "
+        print(f"      Nivel final (desde prob calibrada {cortes_nivel['alto']:.0%}/{cortes_nivel['medio']:.0%}): "
               f"ALTO={int((df.nivel_riesgo == 'ALTO').sum())} "
               f"MEDIO={int((df.nivel_riesgo == 'MEDIO').sum())} "
               f"BAJO={int((df.nivel_riesgo == 'BAJO').sum())}")
@@ -664,6 +696,9 @@ def train(carpeta: str, codigo_ie: str, distrito: str | None = None, nombre_manu
             "bimestres_cargados": list(range(1, k + 1)),
             "bimestre_pronosticado": bimestre_pron if (modelo is not None and 2 <= k < 4) else None,
             "umbral_riesgo_nota": NOTA_RIESGO,
+            # Cortes con los que se calcularon F1/precisión/recall/matriz y se repartieron ALTO/MEDIO (ver arriba).
+            "corte_clasificacion": corte_clasificacion,
+            "cortes_nivel": cortes_nivel,
             "n_alumnos":      len(df),
             "n_alumnos_modelo": len(X),
             "n_riesgo":       int(y.sum()),
