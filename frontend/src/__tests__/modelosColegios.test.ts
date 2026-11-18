@@ -10,6 +10,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ModelosColegios } from "@/views/modelo/ModelosColegios";
 import { DetalleColegio, ordenarSalones } from "@/views/modelo/DetalleColegio";
 import { navItems } from "@/lib/constants";
+import { f1SinModelo, formatearMejora, mejoraSobreBase } from "@/lib/metricasBase";
 import type { ColegioModelSummary, UsoReal } from "@/hooks/useColegioModels";
 
 (globalThis as unknown as { React: unknown }).React = React;
@@ -173,5 +174,53 @@ describe("Superadmin: gráficos del detalle por colegio", () => {
   test("sin cierre de año (uso_real vacío) no inventa el panel de uso real", () => {
     const html = renderToStaticMarkup(createElement(DetalleColegio, { c: modelo({ uso_real: null }) }));
     expect(html).not.toContain("Cómo funciona en la práctica");
+  });
+});
+
+describe("Superadmin: F1 comparado contra «sin modelo» (el F1 depende de cuántos alumnos están en riesgo)", () => {
+  const uso = (tasa: number): UsoReal => ({
+    n_evaluados: 341, n_en_riesgo: Math.round(341 * tasa), tasa_base: tasa,
+    alto: { n: 17, en_riesgo: 16, pct_en_riesgo: 16 / 17 }, medio: { n: 84, en_riesgo: 40, pct_en_riesgo: 40 / 84 },
+    bajo: { n: 240, en_riesgo: 19, pct_en_riesgo: 19 / 240 }, cobertura_alto_medio: 0.75,
+    priorizado: { n: 75, en_riesgo: 46, precision: 46 / 75, veces_mejor_que_azar: 2.79 },
+  });
+
+  test("F1 sin modelo = 2p / (1 + p): decir que todos están en riesgo da más F1 cuanto más común es el riesgo", () => {
+    expect(f1SinModelo(0.5)).toBeCloseTo(2 / 3, 10);
+    expect(f1SinModelo(0.22)).toBeCloseTo(0.3607, 3);
+    expect(f1SinModelo(0.6)).toBeCloseTo(0.75, 10);
+    expect(f1SinModelo(0.6)).toBeGreaterThan(f1SinModelo(0.22));
+  });
+
+  test("con los datos reales: el colegio con menos riesgo es donde el modelo más aporta sobre no usarlo", () => {
+    // [tasa real de riesgo, F1 CV] de La Perla, Trapiche, La Victoria y Joseph And Mery
+    const datos: [number, number][] = [[35 / 58, 0.9296], [202 / 346, 0.92], [37 / 82, 0.8056], [75 / 341, 0.6296]];
+    const mejoras = datos.map(([p, f1]) => mejoraSobreBase(f1, p)!.mejora);
+    expect(mejoras.map(formatearMejora)).toEqual(["+17.7 pts", "+18.3 pts", "+18.4 pts", "+26.9 pts"]);
+    expect(Math.max(...mejoras)).toBe(mejoras[3]);
+  });
+
+  test("sin F1 o sin proporción real de riesgo no se calcula nada", () => {
+    expect(mejoraSobreBase(null, 0.22)).toBeNull();
+    expect(mejoraSobreBase(0.63, null)).toBeNull();
+    expect(mejoraSobreBase(0.63, undefined)).toBeNull();
+    expect(mejoraSobreBase(0.63, 0)).toBeNull();
+    expect(mejoraSobreBase(0.63, 1)).toBeNull();
+    expect(formatearMejora(-0.03)).toBe("-3.0 pts");
+  });
+
+  test("la tabla muestra F1 CV, el «sin modelo» y la mejora solo donde se conoce la proporción real", () => {
+    const models = [
+      modelo({ codigo_ie: "249", nombre_colegio: "Joseph And Mery", f1_cv: 0.6296, tipo_resultado: "cierre_anual", uso_real: uso(75 / 341) }),
+      modelo({ codigo_ie: "9001", nombre_colegio: "Cole Andres Avelino La Perla", f1_cv: 0.58, tipo_resultado: "pronostico", uso_real: null }),
+    ];
+    const html = render({ models });
+    expect(html).toContain("F1 CV");
+    expect(html).toContain("Mejora");
+    expect(html).toContain("63.0%");               // F1 CV
+    expect(html).toContain("sin modelo 36.1%");
+    expect(html).toContain("+26.9 pts");
+    expect(html.match(/ pts/g)?.length).toBe(1);   // el colegio en pronóstico no inventa una mejora
+    expect(html).toContain("decir que todos los alumnos están en riesgo");
   });
 });

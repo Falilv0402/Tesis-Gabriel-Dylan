@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Panel, Kpi, EmptyState } from "@/components/ui/Primitives";
 import { pct } from "@/lib/format";
 import { formatearFechaModelo } from "@/lib/colegio";
+import { formatearMejora, mejoraSobreBase } from "@/lib/metricasBase";
 import type { ColegioModelSummary } from "@/hooks/useColegioModels";
 import { DetalleColegio } from "@/views/modelo/DetalleColegio";
 
@@ -121,6 +122,13 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                       <th style={{ ...th, minWidth: 190 }}>Reparto por nivel de riesgo</th>
                       <th style={{ ...th, textAlign: "right" }}>En riesgo</th>
                       <th style={{ ...th, textAlign: "right" }}>AUC CV</th>
+                      <th style={{ ...th, textAlign: "right" }}>F1 CV</th>
+                      <th
+                        style={{ ...th, textAlign: "right" }}
+                        title="Puntos de F1 CV que el modelo añade sobre decir que todos los alumnos están en riesgo"
+                      >
+                        Mejora
+                      </th>
                       <th style={{ ...th, textAlign: "right" }}>F1*</th>
                       <th style={{ ...th, textAlign: "right" }}>Precisión*</th>
                       <th style={{ ...th, textAlign: "right" }}>Recall*</th>
@@ -133,6 +141,9 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                     {models.map((c, i) => {
                       const tone = aucTone(c.auc_cv);
                       const total = Math.max(c.n_alto + c.n_medio + c.n_bajo, 1);
+                      // Tasa REAL de riesgo (no la de alto + medio): el F1 depende de ella, así que se compara contra lo que
+                      // saldría sin modelo para poder mirar colegios con distinta proporción de alumnos en riesgo.
+                      const base = mejoraSobreBase(c.f1_cv, c.uso_real?.tasa_base);
                       return (
                         <tr
                           key={c.codigo_ie}
@@ -177,6 +188,25 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                               {ppm(c.auc_cv)}
                             </span>
                           </td>
+                          <td style={{ ...td, textAlign: "right" }}>
+                            <strong>{ppm(c.f1_cv)}</strong>
+                            {base && (
+                              <div style={{ color: "var(--text-muted)", fontSize: 11 }}>sin modelo {pct(base.base)}</div>
+                            )}
+                          </td>
+                          <td style={{ ...td, textAlign: "right" }}>
+                            {base ? (
+                              <span
+                                style={{
+                                  display: "inline-block", padding: "2px 8px", borderRadius: 999, fontWeight: 700,
+                                  background: base.mejora > 0 ? "#dcfce7" : "#fee2e2",
+                                  color: base.mejora > 0 ? "#166534" : "#991b1b",
+                                }}
+                              >
+                                {formatearMejora(base.mejora)}
+                              </span>
+                            ) : "—"}
+                          </td>
                           <td style={{ ...td, textAlign: "right" }}>{ppm(c.f1_train)}</td>
                           <td style={{ ...td, textAlign: "right" }}>{ppm(c.precision_train)}</td>
                           <td style={{ ...td, textAlign: "right" }}>{ppm(c.recall_train)}</td>
@@ -191,7 +221,10 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
               </div>
               <div className="model-note" style={{ marginTop: 8, fontSize: 11 }}>
                 <strong>*</strong> métricas de entrenamiento (en muestra, optimistas). El <strong>AUC CV</strong> es el indicador válido:
-                verde desde 85 %, ámbar desde 70 %.
+                verde desde 85 %, ámbar desde 70 %. El F1 depende de cuántos alumnos están en riesgo, así que no se compara
+                directo entre colegios: <strong>Mejora</strong> son los puntos de <strong>F1 CV</strong> que el modelo añade sobre
+                decir que todos los alumnos están en riesgo (el «sin modelo» bajo el F1 CV), calculado con la proporción real de
+                riesgo de cada colegio (solo en cierre de año).
               </div>
             </>
           )}
