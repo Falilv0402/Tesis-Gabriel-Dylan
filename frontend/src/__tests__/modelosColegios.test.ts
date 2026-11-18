@@ -62,7 +62,7 @@ describe("Superadmin: pestaña de modelos de colegio", () => {
       expect(html).toContain(c.nombre_colegio);
       expect(html).toContain(`IE ${c.codigo_ie}`);
     }
-    expect(html).toContain("29.1%");
+    expect(html).toContain("23.46%");
     expect(html).toContain("49.5%");
     expect(html).toContain("96.4%"); // AUC CV 0.9637 con el formato del resto de la app (pct)
     expect(html).toContain("Cierre anual");
@@ -71,10 +71,10 @@ describe("Superadmin: pestaña de modelos de colegio", () => {
   test("resumen de arriba: nº de colegios, alumnos y % en riesgo del total", () => {
     const html = render();
     expect(html).toContain("Colegios con modelo");
-    // 103 + 182 + 83 + 58 = 426 alumnos; 30 + 90 + 20 + 12 = 152 en riesgo → 35,7 %
-    expect(html).toContain("426");
-    expect(html).toContain("35.7%");
-    expect(html).toContain("152 de 426 alumnos");
+    // Informe IE249: 341 alumnos/80 clasificados; los otros tres conservan sus valores.
+    expect(html).toContain("664");
+    expect(html).toContain("30.4%");
+    expect(html).toContain("202 de 664 alumnos");
   });
 
   test("el AUC bajo se pinta en rojo y el alto en verde", () => {
@@ -226,6 +226,22 @@ describe("Superadmin: F1 comparado contra «sin modelo» (el F1 depende de cuán
 });
 
 describe("Joseph And Mery: evaluación experimental macro", () => {
+  test("toda la fila y el resumen usan la misma cohorte que las métricas y la matriz", () => {
+    const html = render({ models: [modelo({ n_alumnos: 345, n_riesgo: 122, pct_riesgo: 35.4, n_alto: 59, n_medio: 63, n_bajo: 223 })] });
+    const inicio = html.indexOf("<strong>Joseph And Mery</strong>");
+    const fila = html.slice(inicio, html.indexOf("</tr>", inicio));
+    expect(fila).toContain(">341</td>");
+    expect(fila).toContain("80 con riesgo");
+    expect(fila).toContain("261 sin riesgo");
+    expect(fila).toContain("23.46%");
+    expect(fila).toContain("80 alumnos clasificados");
+    expect(fila).toContain("sin modelo macro 43.8%");
+    expect(fila).toContain("+36.6 pts");
+    for (const anterior of [">345</td>","59 alto","63 medio","223 bajo","35.4%","122 alumnos"]) expect(fila).not.toContain(anterior);
+    expect(html).toContain("80 de 341 alumnos");
+    expect(html).toContain("23.5%");
+    expect(html).toContain("92.2%");
+  });
   test("la tabla muestra los cinco porcentajes exactos, con su método y fecha", () => {
     const html = render({ models: [modelo({ codigo_ie: "0249", uso_real: usoParaMacro() })] });
     for (const valor of ["92.21%", "86.22%", "79.73%", "81.11%", "80.38%"]) expect(html).toContain(valor);

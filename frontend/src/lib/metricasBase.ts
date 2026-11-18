@@ -23,6 +23,14 @@ export function mejoraSobreBase(f1: number | null | undefined, tasaBase: number 
   return { base, mejora: f1 - base };
 }
 
+/** F1 macro contra el clasificador constante de la clase mayoritaria, con ambas clases presentes. */
+export function mejoraMacroSobreBase(f1Macro: number | null | undefined, tasaBase: number | null | undefined): MejoraSobreBase | null {
+  if (f1Macro == null || tasaBase == null || !(tasaBase > 0 && tasaBase < 1)) return null;
+  const mayoritaria = Math.max(tasaBase, 1 - tasaBase);
+  const base = mayoritaria / (1 + mayoritaria);
+  return { base, mejora: f1Macro - base };
+}
+
 /** «+26.9 pts» / «-3.0 pts». */
 export function formatearMejora(mejora: number): string {
   const puntos = 100 * mejora;

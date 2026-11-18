@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Panel, Kpi, EmptyState } from "@/components/ui/Primitives";
 import { pct } from "@/lib/format";
 import { formatearFechaModelo } from "@/lib/colegio";
-import { formatearMejora, mejoraSobreBase } from "@/lib/metricasBase";
+import { formatearMejora, mejoraSobreBase, mejoraMacroSobreBase } from "@/lib/metricasBase";
 import type { ColegioModelSummary } from "@/hooks/useColegioModels";
 import { DetalleColegio } from "@/views/modelo/DetalleColegio";
 import { evaluacionColegio, porcentajeEvaluacion } from "@/lib/evaluacionColegio";
@@ -47,11 +47,20 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
   const [elegido, setElegido] = useState<string | null>(null);
   const actual = models.find((m) => m.codigo_ie === elegido) ?? models[0];
   const hayExperimental = models.some((m) => evaluacionColegio(m.codigo_ie));
+  const filas = models.map((colegio) => {
+    const informe = evaluacionColegio(colegio.codigo_ie);
+    return {
+      colegio, informe,
+      alumnos: informe?.graficos.clasificacion.total ?? colegio.n_alumnos,
+      riesgo: informe?.graficos.clasificacion.en_riesgo ?? colegio.n_riesgo,
+      auc: informe?.metricas_macro.auc_cv ?? colegio.auc_cv,
+    };
+  });
 
-  const totalAlumnos = models.reduce((s, m) => s + m.n_alumnos, 0);
-  const totalRiesgo  = models.reduce((s, m) => s + m.n_riesgo, 0);
-  const conAuc       = models.filter((m) => m.auc_cv != null);
-  const aucProm      = conAuc.length ? conAuc.reduce((s, m) => s + (m.auc_cv as number), 0) / conAuc.length : null;
+  const totalAlumnos = filas.reduce((s, m) => s + m.alumnos, 0);
+  const totalRiesgo  = filas.reduce((s, m) => s + m.riesgo, 0);
+  const conAuc       = filas.filter((m) => m.auc != null);
+  const aucProm      = conAuc.length ? conAuc.reduce((s, m) => s + (m.auc as number), 0) / conAuc.length : null;
 
   return (
     <>
@@ -59,9 +68,9 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
         <section className="full-col">
           <div className="metric-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
             <Kpi label="Colegios con modelo" value={models.length} detail="modelo propio entrenado" />
-            <Kpi label="Alumnos modelados" value={totalAlumnos} detail="suma de todos los colegios" />
+            <Kpi label={hayExperimental ? "Alumnos mostrados" : "Alumnos modelados"} value={totalAlumnos} detail="suma de todos los colegios" />
             <Kpi
-              label="En riesgo (alto + medio)"
+              label={hayExperimental ? "Clasificados en riesgo" : "En riesgo (alto + medio)"}
               value={totalAlumnos ? `${((100 * totalRiesgo) / totalAlumnos).toFixed(1)}%` : "—"}
               detail={`${totalRiesgo.toLocaleString("es-PE")} de ${totalAlumnos.toLocaleString("es-PE")} alumnos`}
               tone={totalAlumnos && totalRiesgo / totalAlumnos > 0.4 ? "high" : "medium"}
@@ -69,7 +78,7 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
             <Kpi
               label="AUC CV promedio"
               value={ppm(aucProm)}
-              detail={hayExperimental ? "modelos en uso" : "validación cruzada, entre colegios"}
+              detail={hayExperimental ? "promedio de las filas mostradas" : "validación cruzada, entre colegios"}
               tone="low"
             />
           </div>
@@ -122,13 +131,13 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                     <tr style={{ background: "var(--navy)", color: "#fff" }}>
                       <th style={th}>Colegio</th>
                       <th style={{ ...th, textAlign: "right" }}>Alumnos</th>
-                      <th style={{ ...th, minWidth: 190 }}>Reparto por nivel de riesgo</th>
+                      <th style={{ ...th, minWidth: 190 }}>{hayExperimental ? "Clasificación" : "Reparto por nivel de riesgo"}</th>
                       <th style={{ ...th, textAlign: "right" }}>En riesgo</th>
                       <th style={{ ...th, textAlign: "right" }}>AUC CV</th>
                       <th style={{ ...th, textAlign: "right" }}>F1 CV</th>
                       <th
                         style={{ ...th, textAlign: "right" }}
-                        title="Puntos de F1 CV que el modelo añade sobre decir que todos los alumnos están en riesgo"
+                        title={hayExperimental ? "Puntos de F1 sobre la base del mismo criterio: clase en riesgo o macro" : "Puntos de F1 CV que el modelo añade sobre decir que todos los alumnos están en riesgo"}
                       >
                         Mejora
                       </th>
@@ -141,14 +150,16 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                     </tr>
                   </thead>
                   <tbody>
-                    {models.map((c, i) => {
-                      const experimental = evaluacionColegio(c.codigo_ie);
+                    {filas.map(({ colegio: c, informe: experimental, alumnos, riesgo }, i) => {
                       const macro = experimental?.metricas_macro;
+                      const clasificacion = experimental?.graficos.clasificacion;
                       const tone = aucTone(macro?.auc_cv ?? c.auc_cv);
                       const total = Math.max(c.n_alto + c.n_medio + c.n_bajo, 1);
                       // Tasa REAL de riesgo (no la de alto + medio): el F1 depende de ella, así que se compara contra lo que
                       // saldría sin modelo para poder mirar colegios con distinta proporción de alumnos en riesgo.
-                      const base = macro ? null : mejoraSobreBase(c.f1_cv, c.uso_real?.tasa_base);
+                      const base = macro && clasificacion
+                        ? mejoraMacroSobreBase(macro.f1_macro_cv, clasificacion.en_riesgo_real / clasificacion.total)
+                        : mejoraSobreBase(c.f1_cv, c.uso_real?.tasa_base);
                       const valor = (actual: number | null, nuevo?: number) => nuevo != null ? porcentajeEvaluacion(nuevo) : ppm(actual);
                       const metodo = hayExperimental ? <div style={{ color: "var(--text-muted)", fontSize: 11 }}>{macro ? "macro CV" : "train*"}</div> : null;
                       return (
@@ -164,8 +175,17 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                             <div style={{ color: "var(--text-muted)", fontSize: 11 }}>IE {c.codigo_ie}</div>
                             {macro && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Informe · macro</div>}
                           </td>
-                          <td style={{ ...td, textAlign: "right" }}>{c.n_alumnos.toLocaleString("es-PE")}</td>
+                          <td style={{ ...td, textAlign: "right" }}>{alumnos.toLocaleString("es-PE")}</td>
                           <td style={td}>
+                            {clasificacion ? <>
+                              <div role="img" aria-label={`Con riesgo ${clasificacion.en_riesgo}, sin riesgo ${clasificacion.sin_riesgo}`} style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", background: "var(--border)" }}>
+                                <span style={{ width: `${100 * clasificacion.en_riesgo / clasificacion.total}%`, background: "#dc2626" }} />
+                                <span style={{ width: `${100 * clasificacion.sin_riesgo / clasificacion.total}%`, background: "#16a34a" }} />
+                              </div>
+                              <div style={{ marginTop: 3, color: "var(--text-muted)", fontSize: 11 }}>
+                                <span style={{ color: "#dc2626" }}>{clasificacion.en_riesgo} con riesgo</span> · <span style={{ color: "#15803d" }}>{clasificacion.sin_riesgo} sin riesgo</span>
+                              </div>
+                            </> : <>
                             <div
                               role="img"
                               aria-label={`Alto ${c.n_alto}, medio ${c.n_medio}, bajo ${c.n_bajo}`}
@@ -180,10 +200,11 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                               <span style={{ color: "#b45309" }}>{c.n_medio} medio</span> ·{" "}
                               <span style={{ color: "#15803d" }}>{c.n_bajo} bajo</span>
                             </div>
+                            </>}
                           </td>
                           <td style={{ ...td, textAlign: "right" }}>
-                            <strong>{c.pct_riesgo}%</strong>
-                            <div style={{ color: "var(--text-muted)", fontSize: 11 }}>{c.n_riesgo} alumnos</div>
+                            <strong>{clasificacion ? porcentajeEvaluacion(riesgo / alumnos) : `${c.pct_riesgo}%`}</strong>
+                            <div style={{ color: "var(--text-muted)", fontSize: 11 }}>{riesgo} alumnos{clasificacion ? " clasificados" : ""}</div>
                           </td>
                           <td style={{ ...td, textAlign: "right" }}>
                             <span
@@ -200,7 +221,7 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                             <strong>{valor(c.f1_cv, macro?.f1_macro_cv)}</strong>
                             {macro && <div style={{ color: "var(--text-muted)", fontSize: 11 }}>F1 macro CV</div>}
                             {base && (
-                              <div style={{ color: "var(--text-muted)", fontSize: 11 }}>sin modelo {pct(base.base)}</div>
+                              <div style={{ color: "var(--text-muted)", fontSize: 11 }}>sin modelo{macro ? " macro" : ""} {pct(base.base)}</div>
                             )}
                           </td>
                           <td style={{ ...td, textAlign: "right" }}>
@@ -234,6 +255,7 @@ export function ModelosColegios({ models, isLoading, failed, loadError, onReload
                 directo entre colegios: <strong>Mejora</strong> son los puntos de <strong>F1 CV</strong> que el modelo añade sobre
                 decir que todos los alumnos están en riesgo (el «sin modelo» bajo el F1 CV), calculado con la proporción real de
                 riesgo de cada colegio (solo en cierre de año).
+                {hayExperimental && <> Para F1 macro, «sin modelo macro» corresponde a asignar a todos la clase mayoritaria.</>}
               </div>
             </>
           )}
