@@ -9,6 +9,7 @@ import { ConfusionMatrix } from "@/components/charts/ConfusionMatrix";
 import { RocMiniChart } from "@/components/charts/RocMiniChart";
 import { pct } from "@/lib/format";
 import type { ColegioModelSummary } from "@/hooks/useColegioModels";
+import { UsoRealPanel } from "./UsoRealPanel";
 
 const ROJO = "#dc2626";
 const AMBAR = "#d97706";
@@ -55,6 +56,8 @@ export function DetalleColegio({ c }: { c: ColegioModelSummary }) {
         <Kpi label="Recall CV" value={ppm(c.recall_cv)} detail="de los que están en riesgo, cuántos detecta" />
         <Kpi label="Accuracy*" value={ppm(c.accuracy_train)} detail="entrenamiento (referencia)" />
       </div>
+
+      {c.uso_real && <UsoRealPanel u={c.uso_real} />}
 
       <div style={grid2}>
         {/* Reparto por nivel */}

@@ -10,7 +10,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ModelosColegios } from "@/views/modelo/ModelosColegios";
 import { DetalleColegio, ordenarSalones } from "@/views/modelo/DetalleColegio";
 import { navItems } from "@/lib/constants";
-import type { ColegioModelSummary } from "@/hooks/useColegioModels";
+import type { ColegioModelSummary, UsoReal } from "@/hooks/useColegioModels";
 
 (globalThis as unknown as { React: unknown }).React = React;
 
@@ -30,6 +30,7 @@ function modelo(over: Partial<ColegioModelSummary>): ColegioModelSummary {
       "10° A": { ALTO: 1, MEDIO: 2, BAJO: 3, total: 6 },
       "2° A": { ALTO: 0, MEDIO: 1, BAJO: 5, total: 6 },
     },
+    uso_real: null, corte_clasificacion: null, cortes_nivel: null,
     ...over,
   };
 }
@@ -148,5 +149,29 @@ describe("Superadmin: gráficos del detalle por colegio", () => {
 
   test("los salones se ordenan por número, no como texto («2° A» antes que «10° A»)", () => {
     expect(["10° A", "2° B", "2° A", "1° C"].sort(ordenarSalones)).toEqual(["1° C", "2° A", "2° B", "10° A"]);
+  });
+
+  test("con cierre de año muestra cómo funciona en la práctica, en alumnos y comparado con el azar", () => {
+    const uso: UsoReal = {
+      n_evaluados: 341, n_en_riesgo: 75, tasa_base: 0.22,
+      alto:  { n: 17, en_riesgo: 16, pct_en_riesgo: 16 / 17 },
+      medio: { n: 70, en_riesgo: 30, pct_en_riesgo: 30 / 70 },
+      bajo:  { n: 254, en_riesgo: 29, pct_en_riesgo: 29 / 254 },
+      cobertura_alto_medio: 46 / 75,
+      priorizado: { n: 75, en_riesgo: 58, precision: 58 / 75, veces_mejor_que_azar: 3.52 },
+    };
+    const html = renderToStaticMarkup(createElement(DetalleColegio, { c: modelo({ tipo_resultado: "cierre_anual", uso_real: uso }) }));
+    expect(html).toContain("Cómo funciona en la práctica");
+    expect(html).toContain("16 de 17 alumnos marcados ALTO sí estaban en riesgo");
+    expect(html).toContain("94.1%");                                  // acierto en ALTO
+    expect(html).toContain("58 de los 75 alumnos que el sistema pone primero sí estaban en riesgo");
+    expect(html).toContain("77.3%");                                  // acierto en los primeros 75 de la lista
+    expect(html).toContain("×3.5");                                   // veces mejor que el azar
+    expect(html).toContain("22.0%");                                  // lo que acertaría el azar
+  });
+
+  test("sin cierre de año (uso_real vacío) no inventa el panel de uso real", () => {
+    const html = renderToStaticMarkup(createElement(DetalleColegio, { c: modelo({ uso_real: null }) }));
+    expect(html).not.toContain("Cómo funciona en la práctica");
   });
 });

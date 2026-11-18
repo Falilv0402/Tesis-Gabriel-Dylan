@@ -20,6 +20,7 @@ import sys
 
 from app.core.limiter import limiter
 from app.services.artefactos import cargar_artefacto
+from app.services.uso_real import calcular_uso_real
 
 
 def _validate_ie(codigo_ie: str) -> str:
@@ -302,6 +303,11 @@ def get_resumen(auth_ctx: dict = Depends(require_admin_de_colegio)):
             "n_alumnos_modelo":  m.get("n_alumnos_modelo", m.get("n_alumnos", 0)),
             "advertencias_carga": m.get("advertencias_carga", []),
             "importancia_variables": m.get("importancia_variables"),
+            # Aciertos reales del sistema (ALTO, cobertura al priorizar, comparación con el azar); None si no aplica.
+            "uso_real":          calcular_uso_real(art),
+            # Cortes con los que se marca «en riesgo» y se reparten los niveles (F1/precisión/recall CV y ALTO/MEDIO).
+            "corte_clasificacion": m.get("corte_clasificacion"),
+            "cortes_nivel":        m.get("cortes_nivel"),
         },
     }
 

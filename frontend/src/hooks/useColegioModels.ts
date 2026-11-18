@@ -4,6 +4,19 @@ import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
 
+/** Aciertos reales del sistema en el cierre de año (ver backend-ml/app/services/uso_real.py). */
+export type UsoReal = {
+  n_evaluados: number;
+  n_en_riesgo: number;
+  tasa_base: number;
+  alto:  { n: number; en_riesgo: number; pct_en_riesgo: number | null };
+  medio: { n: number; en_riesgo: number; pct_en_riesgo: number | null };
+  bajo:  { n: number; en_riesgo: number; pct_en_riesgo: number | null };
+  cobertura_alto_medio: number;
+  // Precisión en los primeros K (K = alumnos que terminaron en riesgo): de los K que el sistema pone primero, cuántos lo estaban.
+  priorizado: { n: number; en_riesgo: number; precision: number; veces_mejor_que_azar: number };
+};
+
 export type ColegioModelSummary = {
   codigo_ie: string;
   nombre_colegio: string;
@@ -32,6 +45,10 @@ export type ColegioModelSummary = {
   roc_tpr: number[] | null;
   importancia_variables: { variable: string; importancia: number }[] | null;
   por_salon: Record<string, { ALTO: number; MEDIO: number; BAJO: number; total: number }>;
+  // Cómo le fue al sistema en la práctica (solo en cierre de año) y los cortes con que se calcularon F1 y niveles.
+  uso_real: UsoReal | null;
+  corte_clasificacion: number | null;
+  cortes_nivel: { alto: number; medio: number } | null;
 };
 
 /**
@@ -100,6 +117,9 @@ export function useColegioModels(enabled: boolean) {
             roc_tpr:               m.roc_tpr ?? null,
             importancia_variables: m.importancia_variables ?? null,
             por_salon:             d.por_salon ?? {},
+            uso_real:              m.uso_real ?? null,
+            corte_clasificacion:   m.corte_clasificacion ?? null,
+            cortes_nivel:          m.cortes_nivel ?? null,
           };
         } catch {
           return null;
