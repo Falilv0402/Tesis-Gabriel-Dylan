@@ -266,6 +266,11 @@ describe("Joseph And Mery: evaluación experimental macro", () => {
     expect(html).toContain("26 FP");
     expect(html).toContain("21 FN");
     expect(html).toContain("54 VP");
+    expect(html).toContain("90.23%");
+    expect(html).toContain("9.77%");
+    expect(html).toContain("28.00%");
+    expect(html).toContain('aria-label="Métricas derivadas de la matriz"');
+    expect(html).toContain("cada fila suma 100%");
     expect(html).toContain("AUC 92.21%");
     expect(html).toContain("Clasificados con riesgo · 80");
     expect(html).toContain("Clasificados sin riesgo · 261");
